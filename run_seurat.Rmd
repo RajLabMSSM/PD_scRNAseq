@@ -1,0 +1,138 @@
+---
+title: "run_seurat"
+output: 
+  html_document: 
+    toc: yes
+author: "Brian M. Schilder"
+date: "12/26/2018"
+---
+
+# Parkinson's Disease -Omics: scRNA-seq of Monocytes
+
+## Load Data
+```{r Load Data, message=F, warning=F}  
+dir.create(file.path("Results"), showWarnings = FALSE) 
+
+library(Seurat)
+load("seurat_object_add_HTO_ids.Rdata")
+pbmc <- seurat.obj  
+```
+
+### Clean Metadata
+```{r Clean Metadata, message=F, warning=F, eval=F}
+library(readxl)
+## Update dx and mut fields
+### Import updated  dx, mut info
+subjectInfo <- read_excel("scRNAseq_meta.xlsx") 
+### Import metadata
+meta <- read.table("meta.data3.tsv", header=T )
+### Remove last 2 cols (contain incorrect values) and duplicate HTO col
+sum(meta$HTO != meta$HTO.1) # double check they're identical
+
+meta["barcode"] = row.names(meta)
+unique(meta["HTO"])
+# Map incorrect subject IDs to CORRECT subject IDs (typos occurred at NYGC during processing)
+map = setNames( # Incorrect (from NYGC)
+               c("NYUMD0011", "BIMD0076", "MSMD0067", "BIMD0077", "BIMD0007",
+                 "BIMD0075", "NYUMD0015", "MSMD0035","MSMD0207", "BIMD0010"), 
+               # Correct (from Evan)
+              c("NYUMD0011", "BID0076", "MSMD0067", "BID0077", "BIMD0007",
+                 "BID00075","NYUMD0015", "MSMD0035", "MSMD0207", "BIMD0010")
+              )
+meta["ID"] <- map[unlist(meta["HTO"])]
+meta <- subset(meta, select = -c(dx, mut, HTO, HTO.1)) 
+### Merge new cols
+metadata <- merge(meta, subjectInfo, by="ID", all.x=T) 
+row.names(metadata) <- metadata$barcode
+dim(meta)
+dim(metadata)
+head(metadata)
+### Export updated Metadata
+write.table(metadata, "meta.data4.tsv") 
+
+# Add metadata to seurat object
+pbmc <- AddMetaData(object = pbmc, metadata =  metadata ) 
+
+## % Mitochondrial genes metadata
+#mito.genes <- grep(pattern = "^MT-", x = rownames(x = pbmc@data), value = TRUE)
+#percent.mito <- Matrix::colSums(pbmc@raw.data[mito.genes, ])/Matrix::colSums(pbmc@raw.data)
+#pbmc <- AddMetaData(object = pbmc, metadata = percent.mito, col.name = "percent.mito")
+```
+
+### Subset for Testing
+```{r Subset for Testing, message=F, warning=F}  
+metadata <- read.table("meta.data4.tsv")  
+pbmc <- AddMetaData(object = pbmc, metadata = metadata)  
+# Get rid of any NAs (cells that don't match up with the metadata)
+pbmc <- FilterCells(object = pbmc,  subset.names = "nGene", low.thresholds = 0
+                    # Subset for testing
+                    , cells.use = pbmc@cell.names[0:500] 
+                    )
+head(pbmc@meta.data) 
+```
+
+## Diagnostic Plots
+
+### Violin Plots
+```{r Violin Plots, message=F, warning=F}
+#pdf("Results/Vlnplot.pdf")
+VlnPlot(object = pbmc, features.plot = c("nGene", "nUMI", "percent.mito"), nCol = 3)
+#dev.off()
+```
+
+### Gene Plots
+```{r Gene Plots, message=F, warning=F}
+#pdf("Results/geneplot.pdf")
+#par(mfrow = c(1, 2))
+GenePlot(object = pbmc, gene1 = "nUMI", gene2 = "percent.mito")
+GenePlot(object = pbmc, gene1 = "nUMI", gene2 = "nGene")
+#dev.off()
+```
+
+## Filter & Normalize Data
+```{r Filter & Normalize Data, message=F, warning=F}
+pbmc <- FilterCells(object = pbmc, subset.names = c("nGene", "percent.mito"), 
+    low.thresholds = c(200, -Inf), high.thresholds = c(2500, 0.05))
+
+pbmc <- NormalizeData(object = pbmc, normalization.method = "LogNormalize", 
+    scale.factor = 10000)
+
+pbmc <- FindVariableGenes(object = pbmc, mean.function = ExpMean, dispersion.function = LogVMR, 
+    x.low.cutoff = 0.0125, x.high.cutoff = 3, y.cutoff = 0.5)
+
+pbmc <- ScaleData(object = pbmc, vars.to.regress = c("nUMI", "percent.mito"))
+```
+
+## Dimensionality Reduction
+
+### PCA
+```{r PCA, message=F, warning=F}
+pbmc <- RunPCA(object = pbmc, pc.genes = pbmc@var.genes, do.print = TRUE, pcs.print = 1:5, 
+    genes.print = 5)
+  
+#pdf("Results/pca.pdf") 
+PCAPlot(object = pbmc, dim.1 = 1, dim.2 = 2)
+#dev.off()
+
+pbmc <- ProjectPCA(object = pbmc, do.print = FALSE)
+
+#saveRDS(pbmc, file = "./cd14-processed-v1.rds")
+
+PCHeatmap(object = pbmc, pc.use = 1, cells.use = 500, do.balanced = TRUE, label.columns = FALSE)
+
+pbmc <- FindClusters(object = pbmc, reduction.type = "pca", dims.use = 1:10, 
+    resolution = 0.6, print.output = 0, save.SNN = TRUE)
+```
+
+### t-SNE
+```{r t-SNE, message=F, warning=F} 
+try(pbmc <- RunTSNE(object = pbmc, dims.use = 1:10, do.fast = TRUE))
+
+#pdf("Results/tsne.pdf")
+# note that you can set do.label=T to help label individual clusters
+try(TSNEPlot(object = pbmc))
+#dev.off()
+
+try(saveRDS(pbmc, file = "Results/cd14-processed.rds"))
+```
+
