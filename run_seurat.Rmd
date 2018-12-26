@@ -21,7 +21,7 @@ library(dplyr)
 library(gridExtra)
 
 
-setwd("~/Desktop/PD_scRNAseq/")
+#setwd("~/Desktop/PD_scRNAseq/")
 dir.create(file.path("Data"), showWarnings = FALSE) 
 load("Data/seurat_object_add_HTO_ids.Rdata")
 pbmc <- seurat.obj  
