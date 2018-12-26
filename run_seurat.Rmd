@@ -1,10 +1,10 @@
 ---
 title: "run_seurat"
-output: 
-  html_document: 
-    toc: yes
 author: "Brian M. Schilder"
 date: "12/26/2018"
+output: 
+  html_document:
+    toc: yes
 ---
 
 # Parkinson's Disease -Omics: scRNA-seq of Monocytes
