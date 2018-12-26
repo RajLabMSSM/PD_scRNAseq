@@ -9,9 +9,9 @@ output:
 
 # Parkinson's Disease -Omics: scRNA-seq of Monocytes
 
-```{r setup, include=F}
+```{r setup, include=F, cache=F}
 ## Automatically generates rmarkdown output file
-knitr::opts_chunk$set(echo = T)
+knitr::opts_chunk$set(echo=T, error=T)
 ```
 
 ## Load Data
@@ -106,7 +106,7 @@ pbmc <- AddMetaData(object = pbmc, metadata = metadata)
 # Get rid of any NAs (cells that don't match up with the metadata)
 pbmc <- FilterCells(object = pbmc,  subset.names = "nGene", low.thresholds = 0,
                     # Subset for testing 
-                    cells.use = pbmc@cell.names[0:2000] 
+                    #cells.use = pbmc@cell.names[0:2000] 
                     )
 head(pbmc@meta.data) 
 ```
