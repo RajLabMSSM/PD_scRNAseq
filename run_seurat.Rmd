@@ -178,9 +178,13 @@ PCElbowPlot(object = pbmc)
 ### Cluster cells
 We first construct a KNN graph based on the euclidean distance in PCA space, and refine the edge weights between any two cells based on the shared overlap in their local neighborhoods (Jaccard similarity). To cluster the cells, we apply modularity optimization techniques such as the Louvain algorithm (default) or SLM [SLM, Blondel et al., Journal of Statistical Mechanics], to iteratively group cells together, with the goal of optimizing the standard modularity function.
 ```{r Cluster cells, message=F, warning=F}
-pbmc <- FindClusters(object = pbmc, reduction.type = "pca", dims.use = 1:10, 
-    resolution = 0.6, print.output = 0, save.SNN = TRUE) 
-PrintFindClustersParams(object = pbmc)
+try({
+  
+  pbmc <- FindClusters(object = pbmc, reduction.type = "pca", dims.use = 1:10, 
+      resolution = 0.6, print.output = 0, save.SNN = F) 
+  PrintFindClustersParams(object = pbmc)
+
+})
 ```
 
 
