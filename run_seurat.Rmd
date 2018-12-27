@@ -9,18 +9,26 @@ output:
 
 # Parkinson's Disease -Omics: scRNA-seq of Monocytes
 
-```{r setup, include=F, cache=F}
+<<<<<<< HEAD
+## Setup
+```{r setup, include=F} 
 ## Automatically generates rmarkdown output file
-knitr::opts_chunk$set(echo=T, error=T)
+knitr::opts_chunk$set(echo=T, error=T, cache=T)
 ```
 
-## Load Data
-```{r Load Data, message=F, warning=F}  
+### Load Libraries & Report Versions
+```{r}
 library(Seurat)
 library(dplyr)
-library(gridExtra)
+library(gridExtra)  
+
+sessionInfo()
+print(paste("Seurat ", packageVersion("Seurat")))
+```
 
 
+### Load Data
+```{r Load Data }   
 #setwd("~/Desktop/PD_scRNAseq/")
 dir.create(file.path("Data"), showWarnings = FALSE) 
 load("Data/seurat_object_add_HTO_ids.Rdata")
@@ -29,7 +37,7 @@ str(pbmc@raw.data)
 ```
 
 ### Clean Metadata
-```{r Clean Metadata, message=F, warning=F, eval=F}
+```{r Clean Metadata , eval=F}
 library(readxl)
 
 ## Update dx and mut fields
@@ -75,7 +83,7 @@ pbmc
 
 
 ### Subset for Testing
-```{r Subset for Testing, message=F, warning=F}  
+```{r Subset for Testing }  
 metadata <- read.table("Data/meta.data4.tsv")  
 head(metadata)
 # Make AgeGroups
@@ -114,19 +122,19 @@ head(pbmc@meta.data)
 ## Diagnostic Plots
 
 ### Violin Plots
-```{r Violin Plots, message=F, warning=F} 
+```{r Violin Plots } 
 VlnPlot(object = pbmc, features.plot = c("nGene", "nUMI", "percent.mito"), nCol = 3)
 ```
 
 ### Gene Plots
-```{r Gene Plots, message=F, warning=F} 
+```{r Gene Plots } 
 par(mfrow = c(1, 2))
 GenePlot(object = pbmc, gene1 = "nUMI", gene2 = "percent.mito")
 GenePlot(object = pbmc, gene1 = "nUMI", gene2 = "nGene")
 ```
 
 ## Filter & Normalize Data
-```{r Filter & Normalize Data, message=F, warning=F}
+```{r Filter & Normalize Data }
 pbmc <- FilterCells(object = pbmc, subset.names = c("nGene", "percent.mito"), 
     low.thresholds = c(200, -Inf), high.thresholds = c(2500, 0.05))
 
@@ -148,7 +156,7 @@ Though we don't use this further here, it can be used to identify markers
 that are strongly correlated with cellular heterogeneity, but may not have
 passed through variable gene selection.  The results of the projected PCA
 can be explored by setting use.full=T in the functions above
-```{r PCA, message=F, warning=F}
+```{r PCA }
 # Run PCA with only the top most variables genes
 pbmc <- RunPCA(object = pbmc, pc.genes = pbmc@var.genes, do.print = TRUE, pcs.print = 1:5, 
     genes.print = 5)
@@ -170,41 +178,36 @@ PCHeatmap(object = pbmc, pc.use = 1:12, cells.use = 500, do.balanced = TRUE,
 NOTE: This process can take a long time for big datasets, comment out for
 expediency.  More approximate techniques such as those implemented in
 PCElbowPlot() can be used to reduce computation time
-```{r Determine statistically significant PCs, message=F, warning=F}
+```{r Determine statistically significant PCs }
 #pbmc <- JackStraw(object = pbmc, num.replicate = 100, display.progress = FALSE)
 PCElbowPlot(object = pbmc)
 ```
 
 ### Cluster cells
 We first construct a KNN graph based on the euclidean distance in PCA space, and refine the edge weights between any two cells based on the shared overlap in their local neighborhoods (Jaccard similarity). To cluster the cells, we apply modularity optimization techniques such as the Louvain algorithm (default) or SLM [SLM, Blondel et al., Journal of Statistical Mechanics], to iteratively group cells together, with the goal of optimizing the standard modularity function.
-```{r Cluster cells, message=F, warning=F}
-try({
-  
-  pbmc <- FindClusters(object = pbmc, reduction.type = "pca", dims.use = 1:10, 
-      resolution = 0.6, print.output = 0, save.SNN = F) 
-  PrintFindClustersParams(object = pbmc)
-
-})
+```{r Cluster cells } 
+pbmc <- FindClusters(object = pbmc, reduction.type = "pca", dims.use = 1:10, 
+    resolution = 0.6, print.output = 0, save.SNN = F) 
+PrintFindClustersParams(object = pbmc) 
 ```
 
 
 ### t-SNE
 As input to the tSNE, we suggest using the same PCs as input to the clustering analysis, although computing the tSNE based on scaled gene expression is also supported using the genes.use argument.
-```{r t-SNE, message=F, warning=F} 
+```{r t-SNE } 
 labSize <- 6
 pbmc <- StashIdent(object = pbmc, save.name = "pre_clustering") 
 #pbmc <- SetAllIdent(object = pbmc, id = "pre_clustering") 
 
-try({
-  pbmc <- RunTSNE(object = pbmc, dims.use = 1:10, do.fast = TRUE)
-  # note that you can set do.label=T to help label individual clusters
-  TSNEPlot(object = pbmc, do.label=T, label.size = labSize) 
-})
+
+pbmc <- RunTSNE(object = pbmc, dims.use = 1:10, do.fast = TRUE)
+# note that you can set do.label=T to help label individual clusters
+TSNEPlot(object = pbmc, do.label=T, label.size = labSize) 
 ```
 
 ### t-SNE + Metadata
 
-```{r}
+```{r t-SNE + Metadata}
 metaVars <- c("CellType","dx","mut","Gender","Age")
 
 for (var in metaVars){
@@ -222,7 +225,7 @@ for (var in metaVars){
 ## Finding differentially expressed genes (cluster biomarkers) 
 
 ### Biomarkers: All Clusters vs. All Other Clusters ***
-```{r cluster biomarkers 3, message=F, warning=F}
+```{r cluster biomarkers 3 }
 ### Biomarkers: One Cluster vs. Specific Clusters
 # cluster5.markers <- FindMarkers(object = pbmc, ident.1 = 0, ident.2 = c(2), 
 #     min.pct = 0.25)
@@ -239,12 +242,11 @@ for (var in metaVars){
 # only the positive ones
 pbmc.markers <- FindAllMarkers(object = pbmc, only.pos = TRUE, min.pct = 0.25, thresh.use = 0.25)
 topBiomarkers <- pbmc.markers %>% group_by(cluster) %>% top_n(2, avg_logFC)
-topBiomarkers
 ```
 
 ### Cluster Biomarker Tests
 Seurat has several tests for differential expression which can be set with the test.use parameter (see the DE vignette for details). For example, the ROC test returns the ‘classification power’ for any individual marker (ranging from 0 - random, to 1 - perfect).
-```{r cluster biomarkers 4, message=F, warning=F}
+```{r cluster biomarkers 4 }
 getTopBiomarker <- function(pbmc.markers, clusterID, topN=1){
   df <- subset(pbmc.markers, p_val_adj<0.05 & cluster==as.character(clusterID)) %>% arrange(desc(avg_logFC))
   top_pct_markers <- df[1:topN,"gene"]
@@ -277,13 +279,13 @@ for (clust in unique(pbmc.markers$cluster)){
 ```
 
 ### Top Biomarkers: tSNE
-```{r Top biomarkers: tSNE, message=F, warning=F}
+```{r Top biomarkers: tSNE }
 FeaturePlot(object = pbmc, features.plot = topBiomarkers$gene, cols.use = c("grey", "blue"), 
     reduction.use = "tsne")
 ```
 
 ## Top Biomarkers: Heatmap
-```{r Top biomarkers: Heatmap, message=F, warning=F}
+```{r Top biomarkers: Heatmap }
 top10 <- pbmc.markers %>% group_by(cluster) %>% top_n(10, avg_logFC)
 # setting slim.col.label to TRUE will print just the cluster IDS instead of
 # every cell name
@@ -293,7 +295,7 @@ DoHeatmap(object = pbmc, genes.use = top10$gene, slim.col.label = TRUE, remove.k
 ## Assigning cell type identity to clusters
 
 ### Label Clusters by Biomarker 
-```{r Assign Identity: By Biomarker, message=F, warning=F}
+```{r Assign Identity: By Biomarker }
 current.cluster.ids <- unique(pbmc.markers$cluster) #c(0, 1, 2, 3, 4, 5, 6, 7)
 top1 <- pbmc.markers %>% group_by(cluster) %>% top_n(1, avg_logFC)
 new.cluster.ids <- top1$gene #c("CD4 T cells", "CD14+ Monocytes", "B cells", "CD8 T cells", "FCGR3A+ Monocytes", "NK cells", "Dendritic cells", "Megakaryocytes")
@@ -304,7 +306,7 @@ TSNEPlot(object = pbmc, do.label = TRUE, pt.size = 0.5)
 
 ## Further subdivisions within cell types
 If you perturb some of our parameter choices above (for example, setting resolution=0.8 or changing the number of PCs), you might see the CD4 T cells subdivide into two groups. You can explore this subdivision to find markers separating the two T cell subsets. However, before reclustering (which will overwrite object@ident), we can stash our renamed identities to be easily recovered later.
-```{r Assign Identity: By Sub-cell types, message=F, warning=F}
+```{r Assign Identity: By Sub-cell types }
 # First lets stash our identities for later
 pbmc <- StashIdent(object = pbmc, save.name = "ClusterNames_0.6")
 
@@ -338,7 +340,7 @@ pbmc <- SetAllIdent(object = pbmc, id = "ClusterNames_0.6")
 ```
 
 ## Save Results
-```{r}
+```{r Save Results}
 saveRDS(pbmc, file = "Data/cd14-processed.rds") 
 ```
 
