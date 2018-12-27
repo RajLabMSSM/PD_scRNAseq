@@ -1,2 +1,4 @@
 Data/cd14-processed.rds 
+run_seurat_cache/
+run_seurat_files/
 *.DS_Store

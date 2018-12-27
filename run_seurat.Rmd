@@ -11,9 +11,9 @@ output:
 # Parkinson's Disease -Omics: scRNA-seq of Monocytes
  
 ## Setup
-```{r setup, include=F} 
+```{r setup} 
 ## Automatically generates rmarkdown output file
-knitr::opts_chunk$set(echo=T, error=T, cache=T)
+knitr::opts_chunk$set(echo=T, error=T, cache=T, cache.lazy=F)
 ```
 
 ### Load Libraries & Report Versions
@@ -196,7 +196,7 @@ PrintFindClustersParams(object = pbmc)
 As input to the tSNE, we suggest using the same PCs as input to the clustering analysis, although computing the tSNE based on scaled gene expression is also supported using the genes.use argument.
 ```{r t-SNE } 
 labSize <- 6
-pbmc <- StashIdent(object = pbmc, save.name = "pre_clustering") 
+#pbmc <- StashIdent(object = pbmc, save.name = "pre_clustering") 
 #pbmc <- SetAllIdent(object = pbmc, id = "pre_clustering") 
 
 
@@ -314,7 +314,7 @@ TSNEPlot(object = pbmc, do.label = TRUE, pt.size = 0.5)
 If you perturb some of our parameter choices above (for example, setting resolution=0.8 or changing the number of PCs), you might see the CD4 T cells subdivide into two groups. You can explore this subdivision to find markers separating the two T cell subsets. However, before reclustering (which will overwrite object@ident), we can stash our renamed identities to be easily recovered later.
 ```{r Assign Identity: By Sub-cell types }
 # First lets stash our identities for later
-pbmc <- StashIdent(object = pbmc, save.name = "ClusterNames_0.6")
+#pbmc <- StashIdent(object = pbmc, save.name = "ClusterNames_0.6")
 
 # Note that if you set save.snn=T above, you don't need to recalculate the
 # SNN, and can simply put: pbmc <- FindClusters(pbmc,resolution = 0.8)
@@ -342,7 +342,7 @@ tcell.markers <- FindMarkers(object = pbmc, ident.1 = 0, ident.2 = 1)
 # palette from low to high expression
 FeaturePlot(object = pbmc, features.plot = top1$gene, cols.use = c("green", "blue"))
 
-pbmc <- SetAllIdent(object = pbmc, id = "ClusterNames_0.6") 
+# pbmc <- SetAllIdent(object = pbmc, id = "ClusterNames_0.6") 
 ```
 
 ## Save Results
