@@ -9,10 +9,11 @@ output:
 
 # Parkinson's Disease -Omics: scRNA-seq of Monocytes
 
+<<<<<<< HEAD
 ## Setup
-```{r setup, include=F}
+```{r setup, include=F} 
 ## Automatically generates rmarkdown output file
-knitr::opts_chunk$set(echo = T)
+knitr::opts_chunk$set(echo=T, error=T, cache=T)
 ```
 
 ### Load Libraries & Report Versions
@@ -184,14 +185,10 @@ PCElbowPlot(object = pbmc)
 
 ### Cluster cells
 We first construct a KNN graph based on the euclidean distance in PCA space, and refine the edge weights between any two cells based on the shared overlap in their local neighborhoods (Jaccard similarity). To cluster the cells, we apply modularity optimization techniques such as the Louvain algorithm (default) or SLM [SLM, Blondel et al., Journal of Statistical Mechanics], to iteratively group cells together, with the goal of optimizing the standard modularity function.
-```{r Cluster cells }
-try({
-  
-  pbmc <- FindClusters(object = pbmc, reduction.type = "pca", dims.use = 1:10, 
-      resolution = 0.6, print.output = 0, save.SNN = F) 
-  PrintFindClustersParams(object = pbmc)
-
-})
+```{r Cluster cells } 
+pbmc <- FindClusters(object = pbmc, reduction.type = "pca", dims.use = 1:10, 
+    resolution = 0.6, print.output = 0, save.SNN = F) 
+PrintFindClustersParams(object = pbmc) 
 ```
 
 
@@ -202,11 +199,10 @@ labSize <- 6
 pbmc <- StashIdent(object = pbmc, save.name = "pre_clustering") 
 #pbmc <- SetAllIdent(object = pbmc, id = "pre_clustering") 
 
-try({
-  pbmc <- RunTSNE(object = pbmc, dims.use = 1:10, do.fast = TRUE)
-  # note that you can set do.label=T to help label individual clusters
-  TSNEPlot(object = pbmc, do.label=T, label.size = labSize) 
-})
+
+pbmc <- RunTSNE(object = pbmc, dims.use = 1:10, do.fast = TRUE)
+# note that you can set do.label=T to help label individual clusters
+TSNEPlot(object = pbmc, do.label=T, label.size = labSize) 
 ```
 
 ### t-SNE + Metadata
