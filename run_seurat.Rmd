@@ -5,11 +5,11 @@ date: "12/26/2018"
 output: 
   html_document:
     toc: yes
+    
 ---
 
 # Parkinson's Disease -Omics: scRNA-seq of Monocytes
-
-<<<<<<< HEAD
+ 
 ## Setup
 ```{r setup, include=F} 
 ## Automatically generates rmarkdown output file
@@ -200,9 +200,15 @@ pbmc <- StashIdent(object = pbmc, save.name = "pre_clustering")
 #pbmc <- SetAllIdent(object = pbmc, id = "pre_clustering") 
 
 
-pbmc <- RunTSNE(object = pbmc, dims.use = 1:10, do.fast = TRUE)
+pbmc <- RunTSNE(object=pbmc,  reduction.use = "pca", dims.use = 1:10, do.fast = TRUE, 
+                tsne.method = "Rtsne") # num_threads
 # note that you can set do.label=T to help label individual clusters
 TSNEPlot(object = pbmc, do.label=T, label.size = labSize) 
+```
+
+#### Save Results
+```{r Save Results}
+saveRDS(pbmc, file = "Data/cd14-processed.rds") 
 ```
 
 ### t-SNE + Metadata
