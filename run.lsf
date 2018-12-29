@@ -1,0 +1,17 @@
+#!/bin/bash
+#BSUB -J PD_scRNAseq_job
+#BSUB -P acc_ad-omics
+#BSUB -q alloc
+#BSUB -n 24
+#BSUB -R span[ptile=12]
+#BSUB -R rusage[mem=12000]
+#BSUB -W 2:00
+#BSUB -m bode
+#BSUB -o %J.stdout
+#BSUB -eo %J.stderr
+#BSUB -L /bin/bash
+
+module load R pandoc
+Rscript "rmarkdown::render(input="run_seurat.Rmd",\
+ output_format="html_document", output_file="PD_scRNAseq_full.html")
+
