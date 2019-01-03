@@ -25,7 +25,7 @@ output:
 
 # Subset gene biotypes to be analyzed
 subsetGenes="protein_coding"#NULL
-subsetCells=500 # NULL
+subsetCells=NULL # NULL
 # Specify the resolution of the unsupervised clustering algorithm
 resolution=0.6 
 
