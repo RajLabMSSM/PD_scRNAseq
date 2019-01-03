@@ -1,6 +1,7 @@
-# PD_scRNAseq
+# PD_scRNAseq 
 Seurat analysis pipelines for Parkinson's Disease scRNA-seq data from CD14+ cells.  
----
+
+---  
 
 ## Full Dataset Rmarkdown   
 ['FindClusters' resolution = 0.6](https://rajlabmssm.github.io/PD_scRNAseq/run_seurat.html)  
@@ -8,7 +9,7 @@ Seurat analysis pipelines for Parkinson's Disease scRNA-seq data from CD14+ cell
 ## Test Subset Rmarkdown 
 ['FindClusters' resolution = 0.6](https://rajlabmssm.github.io/PD_scRNAseq/run_seurat_subsetData.html) 
 
----  
+---
 ### Created by:  
 Brian M. Schilder, Bioinformatician II  
 Raj Lab, Department of Neuroscience  

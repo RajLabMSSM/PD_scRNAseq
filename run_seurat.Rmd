@@ -13,6 +13,7 @@ output:
     highlight: null 
     code_folding: show 
     toc: true
+    toc_depth: 4
     toc_float: true
     smooth_scroll: true
     number_sections: false 
@@ -232,7 +233,7 @@ VlnPlot(object = pbmc, features.plot = c("nGene", "nUMI", "percent.mito"),nCol =
 
 ### percent.mito plot
 
-```{r percent.mito - process, results=F} 
+```{r percent.mito - process, echo = T, results = 'hide'} 
 # par(mfrow = c(1, 2))
 gp1 <- GenePlot(object = pbmc, gene1 = "nUMI", gene2 = "percent.mito", pch.use=20, 
          do.hover=T, data.hover = "mut")
@@ -243,7 +244,7 @@ gp1
  
 ### nGene plot
 
-```{r nGene - process, results=F}
+```{r nGene - process, echo = T, results = 'hide'}
 gp2 <- GenePlot(object = pbmc, gene1 = "nUMI", gene2 = "nGene", pch.use=20, 
          do.hover=T, data.hover = "mut")
 ```
@@ -254,7 +255,7 @@ gp2
 ```
 
 
-# Dimensionality Reduction & Clustering
+# Dimensionality Reduction
 
 ## PCA {.tabset .tabset-fade .tabset-pills}
 
@@ -317,7 +318,7 @@ PCElbowPlot() can be used to reduce computation time
 PCElbowPlot(object = pbmc)
 ```
 
-## Cluster cells
+## Find Cell Clusters
 We first construct a KNN graph based on the euclidean distance in PCA space, and refine the edge weights between any two cells based on the shared overlap in their local neighborhoods (Jaccard similarity). To cluster the cells, we apply modularity optimization techniques such as the Louvain algorithm (default) or SLM [SLM, Blondel et al., Journal of Statistical Mechanics], to iteratively group cells together, with the goal of optimizing the standard modularity function.
 ```{r Cluster cells } 
 # TRY DIFFERENT RESOLUTIONS
@@ -403,7 +404,7 @@ tSNE_metadata_plot("Age")
 ```
 
 
-# Identify Cluster Biomarkers
+# Cluster Biomarkers
 
 Seurat has several tests for differential expression which can be set with the test.use parameter (see the DE vignette for details). For example, the ROC test returns the ‘classification power’ for any individual marker (ranging from 0 - random, to 1 - perfect).
 
@@ -430,40 +431,44 @@ kable(topBiomarkers) %>% kable_styling(bootstrap_options = kableStyle)
 
 ```
 
-## Cluster Biomarker Tests
+## Cluster Biomarker Tests {.tabset .tabset-fade .tabset-pills}
 
-```{r cluster biomarkers plots }
+```{r cluster biomarker plots, results='asis'}
 
 getTopBiomarker <- function(pbmc.markers, clusterID, topN=1){
   df <- subset(pbmc.markers, p_val_adj<0.05 & cluster==as.character(clusterID)) %>% arrange(desc(avg_logFC))
   top_pct_markers <- df[1:topN,"gene"]
   return(top_pct_markers)
 }
-clust1_biomarkers <- getTopBiomarker(pbmc.markers, clusterID=1, topN=2)
-clust2_biomarkers <- getTopBiomarker(pbmc.markers, clusterID=2, topN=2)
+# clust1_biomarkers <- getTopBiomarker(pbmc.markers, clusterID=1, topN=2)
+# clust2_biomarkers <- getTopBiomarker(pbmc.markers, clusterID=2, topN=2)
 
 
 ### Plot biomarkers 
 plotBiomarkers <- function(pbmc, biomarkers, cluster){
   biomarkerPlots <- list()
   for (marker in biomarkers){
-    print(marker)
+    #print(marker)
     p <- VlnPlot(object = pbmc, features.plot = c(marker), y.log=T, return.plotlist=T)
     biomarkerPlots[[marker]] <- p + ggplot2::aes(alpha=.7) 
   }
-  combinedPlot <- do.call(grid.arrange, c(biomarkerPlots, 
-                                          list(ncol=2, top=paste("Top DEG Biomarkers for Cluster",cluster))) ) 
+  combinedPlot <- do.call(grid.arrange, c(biomarkerPlots, list(ncol=2, top=paste("Top DEG Biomarkers for Cluster",cluster))) )
   return(combinedPlot) 
-}
+} 
 
 # Plot top 2 biomarker genes for each 
 for (clust in unique(pbmc.markers$cluster)){ 
-  biomarkers <- getTopBiomarker(pbmc.markers, clusterID=clust, topN=2)
-  plotBiomarkers(pbmc, biomarkers, clust)
+   cat('\n')   
+   cat("### Cluster ",clust,"\n") 
+   biomarkers <- getTopBiomarker(pbmc.markers, clusterID=clust, topN=2)
+   plotBiomarkers(pbmc, biomarkers, clust)
+   cat('\n')   
 } 
 ```
+ 
 
-## Top Biomarkers {.tabset .tabset-fade .tabset-pills}
+
+## Top Biomarker Plots {.tabset .tabset-fade .tabset-pills}
 ```{r}
 top1 <- pbmc.markers %>% group_by(cluster) %>% top_n(1, avg_logFC)
 
@@ -472,7 +477,7 @@ figHeight <- nCols*7
 ```
 
 
-###  tSNE
+###  tSNE + Biomarker Expression
 
 ```{r Biomarkers tSNE, fig.height=`figHeight`}
 
@@ -480,7 +485,7 @@ FeaturePlot(object = pbmc, features.plot = top1$gene, cols.use = c("grey", "blue
     reduction.use = "tsne", nCol = nCols)
 ```
 
-### Heatmap
+### Heatmap + Biomarker Expression
 
 ```{r Biomarkers Heatmap }
 top10 <- pbmc.markers %>% group_by(cluster) %>% top_n(10, avg_logFC)
@@ -489,7 +494,7 @@ top10 <- pbmc.markers %>% group_by(cluster) %>% top_n(10, avg_logFC)
 DoHeatmap(object = pbmc, genes.use = top10$gene, slim.col.label=T, remove.key=T)
 ```
 
-## Assigning cell type identity to clusters
+## Map Clusters to Cell Types
 
 ### Label Clusters by Biomarker 
 ```{r Assign Identity: By Biomarker }
@@ -501,8 +506,9 @@ pbmc@ident <- plyr::mapvalues(x = pbmc@ident, from = current.cluster.ids, to = n
 TSNEPlot(object=pbmc, do.label=T, pt.size=0.5) 
 ```
 
-# Further subdivisions within cell types {.tabset .tabset-fade .tabset-pills}
+# Cell Sub-clusters {.tabset .tabset-fade .tabset-pills}
 
+Further subdivisions within cell types.  
 If you perturb some of our parameter choices above (for example, setting resolution=0.8 or changing the number of PCs), you might see the CD4 T cells subdivide into two groups. You can explore this subdivision to find markers separating the two T cell subsets. However, before reclustering (which will overwrite object@ident), we can stash our renamed identities to be easily recovered later.
 
 ## Assign Identity
