@@ -1,4 +1,4 @@
---- 
+---  
 title: "Parkinson's Disease scRNA-seq of CD14+ Cells"
 author: |
   | Brian M. Schilder, Bioinformatician II
@@ -10,10 +10,9 @@ date: "12/26/2018"
 output: 
   html_document: 
     theme: spacelab
-    highlight: null 
+    highlight: zenburn 
     code_folding: show 
-    toc: true
-    toc_depth: 4
+    toc: true 
     toc_float: true
     smooth_scroll: true
     number_sections: false 
@@ -21,7 +20,7 @@ output:
 ---
 
 # Setup
-```{r setup} 
+```{r Setup} 
 ## Automatically generates rmarkdown output file
 
 # Subset gene biotypes to be analyzed
@@ -39,10 +38,8 @@ customOutput <- paste(sep="", "PDscRNAseq__",
                 "Genes-",subsetGenes,"__Cells-",subsetCells,"__Resolution-",resolution,
                 ".html")
 
-knitr::opts_chunk$set(echo=T, error=T, cache=T, cache.lazy=F)
-knitr::knit_theme$set(knitr::knit_theme$get("bipolar"))
-
-
+knitr::opts_chunk$set(echo=T, error=T, cache=T, cache.lazy=F) 
+ 
 # rmarkdown::render(input = "run_seurat.Rmd", output_file = params$set_title,   output_format = "html_document")   
 ```
 
@@ -54,7 +51,7 @@ library(Seurat)
 library(dplyr)
 library(gridExtra)
 library(knitr)
-library(kableExtra)
+library(kableExtra) 
 ## Install Bioconductor
 #  if (!requireNamespace("BiocManager"))
 #     install.packages("BiocManager")
