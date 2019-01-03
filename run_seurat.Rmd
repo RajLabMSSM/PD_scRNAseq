@@ -25,22 +25,25 @@ output:
 
 # Subset gene biotypes to be analyzed
 subsetGenes="protein_coding"#NULL
-subsetCells=500 # NULL
+resolution=0.6
+
+if (getwd()!="/Users/schilder/Desktop/PD_scRNAseq"){
+  subsetCells=500 # NULL 
+} else {subsetCells=NULL}
 # Specify the resolution of the unsupervised clustering algorithm
-resolution=0.6 
+ 
 
+
+# params <- list(set_title=paste(sep="", "PDscRNAseq__",
+#                 "Genes-",subsetGenes,"__Cells-",subsetCells,"__Resolution-",resolution,
+#                 ".html"))  
 kableStyle = c("striped", "hover", "condensed", "responsive")
-
-params <- list(set_title=paste(sep="", "PDscRNAseq__",
-                "Genes-",subsetGenes,"__Cells-",subsetCells,"__Resolution-",resolution,
-                ".html"))
-customOutput <- paste(sep="", "PDscRNAseq__",
-                "Genes-",subsetGenes,"__Cells-",subsetCells,"__Resolution-",resolution,
-                ".html")
-
 knitr::opts_chunk$set(echo=T, error=T, cache=T, cache.lazy=F) 
  
 # rmarkdown::render(input = "run_seurat.Rmd", output_file = params$set_title,   output_format = "html_document")   
+
+nCores = parallel::detectCores()
+print(paste("**** Utilized Cores **** =", parallel::detectCores() )) 
 ```
 
  
@@ -205,7 +208,9 @@ if(!is.null(subsetGenes)){
 
 ### Filter Cells, Gene Variance, & Normalize
 
-Filter by cells, normalize , filter by gene variability
+Filter by cells, normalize , filter by gene variability.  
+** Important!**: Specify do.par = T, and num.cores = nCores in 'ScaleData' to use all available cores.
+
 ```{r Filter & Normalize Data }
 pbmc <- FilterCells(object = pbmc, subset.names = c("nGene", "percent.mito"), 
     low.thresholds = c(200, -Inf), high.thresholds = c(2500, 0.05))
@@ -216,7 +221,9 @@ pbmc <- NormalizeData(object = pbmc, normalization.method = "LogNormalize",
 # Store the top most variable genes in @var.genes
 pbmc <- FindVariableGenes(object = pbmc, mean.function = ExpMean, dispersion.function = LogVMR,
     x.low.cutoff = 0.0125, x.high.cutoff = 3, y.cutoff = 0.5)
-pbmc <- ScaleData(object = pbmc, vars.to.regress = c("nUMI", "percent.mito"))
+
+# IMPORTANT!: Must set do.par=T and num.cors = n for large datasets being processed on computing clusters
+pbmc <- ScaleData(object = pbmc, vars.to.regress = c("nUMI", "percent.mito"), do.par = T, num.cores = nCores)
 ```
 
 # Diagnostic Plots
@@ -326,15 +333,16 @@ PrintFindClustersParams(object = pbmc)
 
 
 ## t-SNE
-As input to the tSNE, we suggest using the same PCs as input to the clustering analysis, although computing the tSNE based on scaled gene expression is also supported using the genes.use argument.
+As input to the tSNE, we suggest using the same PCs as input to the clustering analysis, although computing the tSNE based on scaled gene expression is also supported using the genes.use argument.  
+
+** Important!**: Specify num_threads=0 in 'RunTSNE' to use all available cores.
 ```{r t-SNE } 
 labSize <- 6
 #pbmc <- StashIdent(object = pbmc, save.name = "pre_clustering") 
 #pbmc <- SetAllIdent(object = pbmc, id = "pre_clustering") 
 
-
 pbmc <- RunTSNE(object=pbmc,  reduction.use = "pca", dims.use = 1:10, do.fast = TRUE, 
-                tsne.method = "Rtsne") # num_threads
+                tsne.method = "Rtsne", num_threads=0) # num_threads
 # note that you can set do.label=T to help label individual clusters
 TSNEPlot(object = pbmc, do.label=T, label.size = labSize) 
 ```
@@ -351,9 +359,9 @@ tSNE_metadata_plot <- function(var){
   print(paste("t-SNE Metadata plot for ", var))
   # Metadata plot 
   p1 <- TSNEPlot(pbmc, do.return = T, pt.size = 0.5, group.by = var, do.label = T, 
-                 dark.theme=F, plot.title=paste("Color by ",var))
+                 dark.theme=F, plot.title=paste("Color by ",var), vector.friendly=T)
   # t-SNE clusters plot
-  p2 <- TSNEPlot(pbmc, do.label = T, do.return = T, pt.size = 0.5, plot.title=paste("Color by t-SNE clusters"))
+  p2 <- TSNEPlot(pbmc, do.label = T, do.return = T, pt.size = 0.5, plot.title=paste("Color by Unsupervised Clusters"), vector.friendly=T)
   print(plot_grid(p1, p2))
 }   
 # metaVars <- c("CellType","dx","mut","Gender","Age")
@@ -474,15 +482,14 @@ figHeight <- nCols*7
 ```
 
 
-###  tSNE + Biomarker Expression
+###  tSNE
 
-```{r Biomarkers tSNE, fig.height=`figHeight`}
-
+```{r Biomarkers tSNE, fig.height=`figHeight`} 
 FeaturePlot(object = pbmc, features.plot = top1$gene, cols.use = c("grey", "blue"), 
     reduction.use = "tsne", nCol = nCols)
 ```
 
-### Heatmap + Biomarker Expression
+### Heatmap
 
 ```{r Biomarkers Heatmap }
 top10 <- pbmc.markers %>% group_by(cluster) %>% top_n(10, avg_logFC)
@@ -491,10 +498,17 @@ top10 <- pbmc.markers %>% group_by(cluster) %>% top_n(10, avg_logFC)
 DoHeatmap(object = pbmc, genes.use = top10$gene, slim.col.label=T, remove.key=T)
 ```
 
+### Ridgeplot
+
+```{r Biomarkers RidgePlot}
+RidgePlot(pbmc, features.plot = top1$gene,  nCol = nCols, do.sort = F)
+```
+
+
 ## Map Clusters to Cell Types
 
 ### Label Clusters by Biomarker 
-```{r Assign Identity: By Biomarker }
+```{r Label Clusters by Biomarker }
 current.cluster.ids <- unique(pbmc.markers$cluster) #c(0, 1, 2, 3, 4, 5, 6, 7)
 top1 <- pbmc.markers %>% group_by(cluster) %>% top_n(1, avg_logFC)
 new.cluster.ids <- top1$gene #c("CD4 T cells", "CD14+ Monocytes", "B cells", "CD8 T cells", "FCGR3A+ Monocytes", "NK cells", "Dendritic cells", "Megakaryocytes")
