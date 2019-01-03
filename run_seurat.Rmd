@@ -25,31 +25,29 @@ output:
 
 # Subset gene biotypes to be analyzed
 subsetGenes="protein_coding"#NULL
-# Specify the resolution of the unsupervised clustering algorithm
-<<<<<<< HEAD
-resolution=1.0 
-=======
-resolution=2.0 
->>>>>>> 96a75bd8e0458a8ddb96ee845073289da15b496e
+# Specify the resolution of the unsupervised clustering algorithm 
+resolution=2.0  
 # Subset cells
 if (getwd()!="/Users/schilder/Desktop/PD_scRNAseq"){
-  subsetCells=500
-} else {subsetCells=NULL}
+  subsetCells=subCells=500
+} else {subsetCells=NULL; subCells="All"}
+ 
  
 
-
-# params <- list(set_title=paste(sep="", "PDscRNAseq__",
-#                 "Genes-",subsetGenes,"__Cells-",subsetCells,"__Resolution-",resolution,
-#                 ".html"))  
+parameters <- paste(sep="", "PDscRNAseq__",
+                "Genes-",subsetGenes,"__Cells-",subCells,"__Resolution-",resolution,
+                ".html")
 kableStyle = c("striped", "hover", "condensed", "responsive")
 knitr::opts_chunk$set(echo=T, error=T, cache=T, cache.lazy=F) 
  
 # rmarkdown::render(input = "run_seurat.Rmd", output_file = params$set_title,   output_format = "html_document")   
-
+ 
 nCores = parallel::detectCores()
-print(paste("**** Utilized Cores **** =", parallel::detectCores() )) 
+print(paste("**** Utilized Cores **** =", parallel::detectCores() ))  
+
 ```
 
+*** `r parameters` ***
  
  
 ## Load Libraries & Report Versions
