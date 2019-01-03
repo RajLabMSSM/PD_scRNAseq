@@ -8,7 +8,7 @@ author: |
   | NYC, New York
 date: "12/26/2018" 
 output: 
-  html_document: 
+  rmarkdown::html_document: 
     theme: spacelab
     highlight: zenburn 
     code_folding: show 
@@ -26,7 +26,7 @@ output:
 # Subset gene biotypes to be analyzed
 subsetGenes="protein_coding"#NULL
 # Specify the resolution of the unsupervised clustering algorithm
-resolution=0.6 
+resolution=1.0 
 # Subset cells
 if (getwd()!="/Users/schilder/Desktop/PD_scRNAseq"){
   subsetCells=500
