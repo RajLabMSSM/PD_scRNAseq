@@ -26,7 +26,11 @@ output:
 # Subset gene biotypes to be analyzed
 subsetGenes="protein_coding"#NULL
 # Specify the resolution of the unsupervised clustering algorithm
+<<<<<<< HEAD
 resolution=1.0 
+=======
+resolution=2.0 
+>>>>>>> 96a75bd8e0458a8ddb96ee845073289da15b496e
 # Subset cells
 if (getwd()!="/Users/schilder/Desktop/PD_scRNAseq"){
   subsetCells=500
