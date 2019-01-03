@@ -1,43 +1,80 @@
----
-title: "run_seurat"
-author: "Brian M. Schilder"
-date: "12/26/2018"
+---  
+title: "Parkinson's Disease scRNA-seq of CD14+ Cells"
+author: |
+  | Brian M. Schilder, Bioinformatician II
+  | Raj Lab
+  | Department of Neuroscience
+  | Icahn School of Medicine at Mount Sinai
+  | NYC, New York
+date: "12/26/2018" 
 output: 
-  html_document:
-    toc: yes
+  html_document: 
+    theme: spacelab
+    highlight: zenburn 
+    code_folding: show 
+    toc: true 
+    toc_float: true
+    smooth_scroll: true
+    number_sections: false 
+    self_contained: true 
 ---
 
-# Parkinson's Disease -Omics: scRNA-seq of Monocytes
-
-<<<<<<< HEAD
-## Setup
-```{r setup} 
+# Setup
+```{r Setup} 
 ## Automatically generates rmarkdown output file
-knitr::opts_chunk$set(echo=T, error=T, cache=T, cache.lazy=F)
+
+# Subset gene biotypes to be analyzed
+subsetGenes="protein_coding"#NULL
+subsetCells=500 # NULL
+# Specify the resolution of the unsupervised clustering algorithm
+resolution=0.6 
+
+kableStyle = c("striped", "hover", "condensed", "responsive")
+
+params <- list(set_title=paste(sep="", "PDscRNAseq__",
+                "Genes-",subsetGenes,"__Cells-",subsetCells,"__Resolution-",resolution,
+                ".html"))
+customOutput <- paste(sep="", "PDscRNAseq__",
+                "Genes-",subsetGenes,"__Cells-",subsetCells,"__Resolution-",resolution,
+                ".html")
+
+knitr::opts_chunk$set(echo=T, error=T, cache=T, cache.lazy=F) 
+ 
+# rmarkdown::render(input = "run_seurat.Rmd", output_file = params$set_title,   output_format = "html_document")   
 ```
 
-### Load Libraries & Report Versions
-```{r}
+ 
+ 
+## Load Libraries & Report Versions
+```{r message=F, warning=F}
 library(Seurat)
 library(dplyr)
-library(gridExtra)  
+library(gridExtra)
+library(knitr)
+library(kableExtra) 
+## Install Bioconductor
+#  if (!requireNamespace("BiocManager"))
+#     install.packages("BiocManager")
+# BiocManager::install(c("biomaRt"))
+library(biomaRt) 
 
 sessionInfo()
 print(paste("Seurat ", packageVersion("Seurat")))
 ```
 
 
-### Load Data
+## Load Data
 ```{r Load Data }   
 #setwd("~/Desktop/PD_scRNAseq/")
-dir.create(file.path("Data"), showWarnings = FALSE) 
+dir.create(file.path("Data"), showWarnings=F) 
 load("Data/seurat_object_add_HTO_ids.Rdata")
 pbmc <- seurat.obj  
-str(pbmc@raw.data)
+rm(seurat.obj) 
+pbmc
 ```
 
-### Clean Metadata
-```{r Clean Metadata , eval=F}
+## Clean Metadata
+```{r Clean Metadata, include=F, eval=F}
 library(readxl)
 
 ## Update dx and mut fields
@@ -82,10 +119,13 @@ pbmc
 ```
 
 
-### Subset for Testing
-```{r Subset for Testing }  
+## Add Metadata
+```{r Subset for Testing, results="asis"}  
 metadata <- read.table("Data/meta.data4.tsv")  
-head(metadata)
+kable(head(metadata), caption = "Metadata") %>%  
+  kable_styling(bootstrap_options = kableStyle) %>%
+  scroll_box(width = "100%", height = "500px")
+
 # Make AgeGroups
 makeAgeGroups <- function(){
   dim(metadata)
@@ -111,29 +151,61 @@ makeAgeGroups <- function(){
 # metadata <- makeAgeGroups()
 
 pbmc <- AddMetaData(object = pbmc, metadata = metadata)  
-# Get rid of any NAs (cells that don't match up with the metadata)
+# Get rid of any NAs (cells that don't match up with the metadata) 
+cellLimiter <- ifelse(is.null(subsetCells), len(pbmc@cell.names), subsetCells)
 pbmc <- FilterCells(object = pbmc,  subset.names = "nGene", low.thresholds = 0,
                     # Subset for testing 
-                    #cells.use = pbmc@cell.names[0:2000] 
+                    cells.use = pbmc@cell.names[0:cellLimiter] 
                     )
-head(pbmc@meta.data) 
-```
-
-## Diagnostic Plots
-
-### Violin Plots
-```{r Violin Plots } 
-VlnPlot(object = pbmc, features.plot = c("nGene", "nUMI", "percent.mito"), nCol = 3)
-```
-
-### Gene Plots
-```{r Gene Plots } 
-par(mfrow = c(1, 2))
-GenePlot(object = pbmc, gene1 = "nUMI", gene2 = "percent.mito")
-GenePlot(object = pbmc, gene1 = "nUMI", gene2 = "nGene")
+pbmc
 ```
 
 ## Filter & Normalize Data
+
+### Gene Biotypes
+
+Include only subsets of genes by type.
+Biotypes from: https://useast.ensembl.org/info/genome/genebuild/biotypes.html
+
+```{r Low/Protein Filter}
+
+## Seurat::FindGeneTerms() # Enrichr API
+## Seurat::MultiModal_CCA() # Integrates data from disparate datasets (CIA version too)
+if(!is.null(subsetGenes)){
+  # If the gene_biotypes file exists, import csv. Otherwise, get from biomaRt
+  if(file_test("-f", "Data/gene_biotypes.csv")){
+    biotypes <- read.csv("Data/gene_biotypes.csv") 
+  }
+  else {
+    ensembl <- useMart(biomart="ENSEMBL_MART_ENSEMBL", host="grch37.ensembl.org",
+                     dataset="hsapiens_gene_ensembl") 
+    ensembl <- useDataset(mart = ensembl, dataset = "hsapiens_gene_ensembl")
+    listFilters(ensembl)
+    listAttributes(ensembl)   
+    biotypes <- getBM(attributes=c("hgnc_symbol", "gene_biotype"), filters="hgnc_symbol",
+          values=row.names(pbmc@data), mart=ensembl) 
+    write.csv(biotypes, "Data/gene_biotypes.csv", quote=F, row.names=F)
+  } 
+  # Subset data by creating new Seurat object (annoying but necessary)
+  geneSubset <- biotypes[biotypes$gene_biotype==subsetGenes,"hgnc_symbol"] 
+  
+  print(paste(dim(pbmc@raw.data[geneSubset, ])[1],"/", dim(pbmc@raw.data)[1], 
+              "genes are", subsetGenes))
+  # Add back into pbmc 
+  subset.matrix <- pbmc@raw.data[geneSubset, ] # Pull the raw expression matrix from the original Seurat object containing only the genes of interest
+  pbmc_sub <- CreateSeuratObject(subset.matrix) # Create a new Seurat object with just the genes of interest
+  orig.ident <- row.names(pbmc@meta.data) # Pull the identities from the original Seurat object as a data.frame
+  pbmc_sub <- AddMetaData(object = pbmc_sub, metadata = pbmc@meta.data) # Add the idents to the meta.data slot
+  pbmc_sub <- SetAllIdent(object = pbmc_sub, id = "ident") # Assign identities for the new Seurat object
+  pbmc <- pbmc_sub
+  rm(pbmc_sub)
+  pbmc
+} 
+```
+
+### Filter Cells, Gene Variance, & Normalize
+
+Filter by cells, normalize , filter by gene variability
 ```{r Filter & Normalize Data }
 pbmc <- FilterCells(object = pbmc, subset.names = c("nGene", "percent.mito"), 
     low.thresholds = c(200, -Inf), high.thresholds = c(2500, 0.05))
@@ -147,52 +219,113 @@ pbmc <- FindVariableGenes(object = pbmc, mean.function = ExpMean, dispersion.fun
 pbmc <- ScaleData(object = pbmc, vars.to.regress = c("nUMI", "percent.mito"))
 ```
 
-## Dimensionality Reduction & Clustering
+# Diagnostic Plots
 
-### PCA
+## Violin Plots
+```{r Violin Plots }  
+VlnPlot(object = pbmc, features.plot = c("nGene", "nUMI", "percent.mito"),nCol = 3)  
+```
+
+## Gene Plots {.tabset .tabset-fade .tabset-pills}
+
+### percent.mito plot
+
+```{r percent.mito - process, echo = T, results = 'hide'} 
+# par(mfrow = c(1, 2))
+gp1 <- GenePlot(object = pbmc, gene1 = "nUMI", gene2 = "percent.mito", pch.use=20, 
+         do.hover=T, data.hover = "mut")
+```
+```{r percent.mito - plot} 
+gp1
+```
+ 
+### nGene plot
+
+```{r nGene - process, echo = T, results = 'hide'}
+gp2 <- GenePlot(object = pbmc, gene1 = "nUMI", gene2 = "nGene", pch.use=20, 
+         do.hover=T, data.hover = "mut")
+```
+
+
+```{r nGene - plot}
+gp2
+```
+
+
+# Dimensionality Reduction
+
+## PCA {.tabset .tabset-fade .tabset-pills}
+
 ProjectPCA scores each gene in the dataset (including genes not included
 in the PCA) based on their correlation with the calculated components.
 Though we don't use this further here, it can be used to identify markers
 that are strongly correlated with cellular heterogeneity, but may not have
 passed through variable gene selection.  The results of the projected PCA
 can be explored by setting use.full=T in the functions above
+
+- Other Dim Reduction Methods in Seurat
+  + RunCCA()
+  + RunMultiCCA()
+  + RunDiffusion()
+  + RunPHATE()
+  + RunUMAP()
+  + RunICA()
+  
 ```{r PCA }
 # Run PCA with only the top most variables genes
-pbmc <- RunPCA(object = pbmc, pc.genes = pbmc@var.genes, do.print = TRUE, pcs.print = 1:5, 
-    genes.print = 5)
-
-# PCA plots
-VizPCA(object = pbmc, pcs.use = 1:2)
-PCAPlot(object = pbmc, dim.1 = 1, dim.2 = 2)
-
-pbmc <- ProjectPCA(object = pbmc, do.print = FALSE)
-
-## PCA Heatmap: PC1
-PCHeatmap(object = pbmc, pc.use = 1, cells.use = 500, do.balanced = TRUE, label.columns = FALSE)
-## PCA Heatmap: PC1-PCn
-PCHeatmap(object = pbmc, pc.use = 1:12, cells.use = 500, do.balanced = TRUE, 
-    label.columns = FALSE, use.full = FALSE)
+pbmc <- RunPCA(object = pbmc, pc.genes = pbmc@var.genes, do.print=F)
+  #, pcs.print = 1:5,  genes.print = 5
 ```
 
-### Determine statistically significant PCs
+### VizPCA
+
+```{r VizPCA}
+VizPCA(object = pbmc, pcs.use = 1:2)
+```
+
+
+### PCA plot
+
+```{r PCAplot} 
+PCAPlot(object = pbmc, dim.1 = 1, dim.2 = 2)
+```
+
+### PCHeatmap
+
+```{r PCHeatmap, message=F, warning=F}  
+pbmc <- ProjectPCA(object = pbmc, do.print=F)
+
+## PCA Heatmap: PC1
+PCHeatmap(object = pbmc, pc.use = 1, cells.use = 500, do.balanced=T, label.columns=F)
+## PCA Heatmap: PC1-PCn
+PCHeatmap(object = pbmc, pc.use = 1:12, cells.use = 500, do.balanced=T, 
+    label.columns=F, use.full=F)
+```
+
+
+### Significant PCs
+
+Determine statistically significant PCs for further analysis.
 NOTE: This process can take a long time for big datasets, comment out for
 expediency.  More approximate techniques such as those implemented in
 PCElbowPlot() can be used to reduce computation time
-```{r Determine statistically significant PCs }
+
+```{r Significant PCs }
 #pbmc <- JackStraw(object = pbmc, num.replicate = 100, display.progress = FALSE)
 PCElbowPlot(object = pbmc)
 ```
 
-### Cluster cells
+## Find Cell Clusters
 We first construct a KNN graph based on the euclidean distance in PCA space, and refine the edge weights between any two cells based on the shared overlap in their local neighborhoods (Jaccard similarity). To cluster the cells, we apply modularity optimization techniques such as the Louvain algorithm (default) or SLM [SLM, Blondel et al., Journal of Statistical Mechanics], to iteratively group cells together, with the goal of optimizing the standard modularity function.
 ```{r Cluster cells } 
+# TRY DIFFERENT RESOLUTIONS
 pbmc <- FindClusters(object = pbmc, reduction.type = "pca", dims.use = 1:10, 
-    resolution = 0.6, print.output = 0, save.SNN = F) 
+    resolution = resolution, print.output = 0, save.SNN = T) 
 PrintFindClustersParams(object = pbmc) 
 ```
 
 
-### t-SNE
+## t-SNE
 As input to the tSNE, we suggest using the same PCs as input to the clustering analysis, although computing the tSNE based on scaled gene expression is also supported using the genes.use argument.
 ```{r t-SNE } 
 labSize <- 6
@@ -200,18 +333,22 @@ labSize <- 6
 #pbmc <- SetAllIdent(object = pbmc, id = "pre_clustering") 
 
 
-pbmc <- RunTSNE(object = pbmc, dims.use = 1:10, do.fast = TRUE)
+pbmc <- RunTSNE(object=pbmc,  reduction.use = "pca", dims.use = 1:10, do.fast = TRUE, 
+                tsne.method = "Rtsne") # num_threads
 # note that you can set do.label=T to help label individual clusters
 TSNEPlot(object = pbmc, do.label=T, label.size = labSize) 
 ```
 
-### t-SNE + Metadata
 
-```{r t-SNE + Metadata}
-metaVars <- c("CellType","dx","mut","Gender","Age")
+```{r Save Results 1}
+saveRDS(pbmc, file = "Data/cd14-processed.rds") 
+```
 
-for (var in metaVars){
-  print(paste("t-SNE Metadata plot for ",var))
+## t-SNE + Metadata Plots {.tabset .tabset-fade .tabset-pills}
+
+```{r t-SNE + Metadata, warning=F, message=F}
+tSNE_metadata_plot <- function(var){
+  print(paste("t-SNE Metadata plot for ", var))
   # Metadata plot 
   p1 <- TSNEPlot(pbmc, do.return = T, pt.size = 0.5, group.by = var, do.label = T, 
                  dark.theme=F, plot.title=paste("Color by ",var))
@@ -219,13 +356,56 @@ for (var in metaVars){
   p2 <- TSNEPlot(pbmc, do.label = T, do.return = T, pt.size = 0.5, plot.title=paste("Color by t-SNE clusters"))
   print(plot_grid(p1, p2))
 }   
+# metaVars <- c("CellType","dx","mut","Gender","Age")
+# 
+# for (var in metaVars){
+#   print(paste("t-SNE Metadata plot for ",var))
+#   # Metadata plot 
+#   p1 <- TSNEPlot(pbmc, do.return = T, pt.size = 0.5, group.by = var, do.label = T, 
+#                  dark.theme=F, plot.title=paste("Color by ",var))
+#   # t-SNE clusters plot
+#   p2 <- TSNEPlot(pbmc, do.label = T, do.return = T, pt.size = 0.5, plot.title=paste("Color by t-SNE clusters"))
+#   print(plot_grid(p1, p2))
+# }   
+
+```
+
+### CellType
+
+```{r CellType, fig.width = 12}
+tSNE_metadata_plot("CellType") 
+```
+
+### Disease
+
+```{r dx, fig.width = 12}
+tSNE_metadata_plot("dx") 
+```
+
+### Mutations
+
+```{r mut, fig.width = 12}
+tSNE_metadata_plot("mut") 
+```
+
+### Gender
+
+```{r Gender, fig.width = 12}
+tSNE_metadata_plot("Gender") 
+```
+
+### Age
+
+```{r Age, fig.width = 12}
+tSNE_metadata_plot("Age") 
 ```
 
 
-## Finding differentially expressed genes (cluster biomarkers) 
+# Cluster Biomarkers
 
-### Biomarkers: All Clusters vs. All Other Clusters ***
-```{r cluster biomarkers 3 }
+Seurat has several tests for differential expression which can be set with the test.use parameter (see the DE vignette for details). For example, the ROC test returns the ‘classification power’ for any individual marker (ranging from 0 - random, to 1 - perfect).
+
+```{r cluster biomarkers tests, results="asis"}
 ### Biomarkers: One Cluster vs. Specific Clusters
 # cluster5.markers <- FindMarkers(object = pbmc, ident.1 = 0, ident.2 = c(2), 
 #     min.pct = 0.25)
@@ -238,61 +418,80 @@ for (var in metaVars){
 # print(x = head(x = cluster0.markers, n = 3))   
 
 
+### Biomarkers: All Clusters vs. All Other Clusters ***
 # find markers for every cluster compared to all remaining cells, report
 # only the positive ones
 pbmc.markers <- FindAllMarkers(object = pbmc, only.pos = TRUE, min.pct = 0.25, thresh.use = 0.25)
 topBiomarkers <- pbmc.markers %>% group_by(cluster) %>% top_n(2, avg_logFC)
+
+kable(topBiomarkers) %>% kable_styling(bootstrap_options = kableStyle)
+
 ```
 
-### Cluster Biomarker Tests
-Seurat has several tests for differential expression which can be set with the test.use parameter (see the DE vignette for details). For example, the ROC test returns the ‘classification power’ for any individual marker (ranging from 0 - random, to 1 - perfect).
-```{r cluster biomarkers 4 }
+## Cluster Biomarker Tests {.tabset .tabset-fade .tabset-pills}
+
+```{r cluster biomarker plots, results='asis'}
+
 getTopBiomarker <- function(pbmc.markers, clusterID, topN=1){
   df <- subset(pbmc.markers, p_val_adj<0.05 & cluster==as.character(clusterID)) %>% arrange(desc(avg_logFC))
   top_pct_markers <- df[1:topN,"gene"]
   return(top_pct_markers)
 }
-clust1_biomarkers <- getTopBiomarker(pbmc.markers, clusterID=1, topN=2)
-clust2_biomarkers <- getTopBiomarker(pbmc.markers, clusterID=2, topN=2)
+# clust1_biomarkers <- getTopBiomarker(pbmc.markers, clusterID=1, topN=2)
+# clust2_biomarkers <- getTopBiomarker(pbmc.markers, clusterID=2, topN=2)
 
 
-
-
-# Top Biomarkers for 
+### Plot biomarkers 
 plotBiomarkers <- function(pbmc, biomarkers, cluster){
   biomarkerPlots <- list()
   for (marker in biomarkers){
-    print(marker)
+    #print(marker)
     p <- VlnPlot(object = pbmc, features.plot = c(marker), y.log=T, return.plotlist=T)
     biomarkerPlots[[marker]] <- p + ggplot2::aes(alpha=.7) 
   }
-  combinedPlot <- do.call(grid.arrange, c(biomarkerPlots, 
-                                          list(ncol=2, top=paste("Top DEG Biomarkers for Cluster",cluster))) ) 
+  combinedPlot <- do.call(grid.arrange, c(biomarkerPlots, list(ncol=2, top=paste("Top DEG Biomarkers for Cluster",cluster))) )
   return(combinedPlot) 
-}
+} 
 
 # Plot top 2 biomarker genes for each 
 for (clust in unique(pbmc.markers$cluster)){ 
-  biomarkers <- getTopBiomarker(pbmc.markers, clusterID=clust, topN=2)
-  plotBiomarkers(pbmc, biomarkers, clust)
+   cat('\n')   
+   cat("### Cluster ",clust,"\n") 
+   biomarkers <- getTopBiomarker(pbmc.markers, clusterID=clust, topN=2)
+   plotBiomarkers(pbmc, biomarkers, clust)
+   cat('\n')   
 } 
 ```
+ 
 
-### Top Biomarkers: tSNE
-```{r Top biomarkers: tSNE }
-FeaturePlot(object = pbmc, features.plot = topBiomarkers$gene, cols.use = c("grey", "blue"), 
-    reduction.use = "tsne")
+
+## Top Biomarker Plots {.tabset .tabset-fade .tabset-pills}
+```{r}
+top1 <- pbmc.markers %>% group_by(cluster) %>% top_n(1, avg_logFC)
+
+nCols = round( length(unique(top1$cluster)) / 3 ) 
+figHeight <- nCols*7
 ```
 
-## Top Biomarkers: Heatmap
-```{r Top biomarkers: Heatmap }
+
+###  tSNE + Biomarker Expression
+
+```{r Biomarkers tSNE, fig.height=`figHeight`}
+
+FeaturePlot(object = pbmc, features.plot = top1$gene, cols.use = c("grey", "blue"), 
+    reduction.use = "tsne", nCol = nCols)
+```
+
+### Heatmap + Biomarker Expression
+
+```{r Biomarkers Heatmap }
 top10 <- pbmc.markers %>% group_by(cluster) %>% top_n(10, avg_logFC)
 # setting slim.col.label to TRUE will print just the cluster IDS instead of
 # every cell name
-DoHeatmap(object = pbmc, genes.use = top10$gene, slim.col.label = TRUE, remove.key = TRUE)
+DoHeatmap(object = pbmc, genes.use = top10$gene, slim.col.label=T, remove.key=T)
 ```
 
-## Assigning cell type identity to clusters
+## Map Clusters to Cell Types
 
 ### Label Clusters by Biomarker 
 ```{r Assign Identity: By Biomarker }
@@ -301,14 +500,18 @@ top1 <- pbmc.markers %>% group_by(cluster) %>% top_n(1, avg_logFC)
 new.cluster.ids <- top1$gene #c("CD4 T cells", "CD14+ Monocytes", "B cells", "CD8 T cells", "FCGR3A+ Monocytes", "NK cells", "Dendritic cells", "Megakaryocytes")
 
 pbmc@ident <- plyr::mapvalues(x = pbmc@ident, from = current.cluster.ids, to = new.cluster.ids)
-TSNEPlot(object = pbmc, do.label = TRUE, pt.size = 0.5) 
+TSNEPlot(object=pbmc, do.label=T, pt.size=0.5) 
 ```
 
-## Further subdivisions within cell types
+# Cell Sub-clusters {.tabset .tabset-fade .tabset-pills}
+
+Further subdivisions within cell types.  
 If you perturb some of our parameter choices above (for example, setting resolution=0.8 or changing the number of PCs), you might see the CD4 T cells subdivide into two groups. You can explore this subdivision to find markers separating the two T cell subsets. However, before reclustering (which will overwrite object@ident), we can stash our renamed identities to be easily recovered later.
-```{r Assign Identity: By Sub-cell types }
+
+## Assign Identity
+```{r Assign Identity, fig.width=12}
 # First lets stash our identities for later
-#pbmc <- StashIdent(object = pbmc, save.name = "ClusterNames_0.6")
+pbmc <- StashIdent(object = pbmc, save.name = "ClusterNames_0.6")
 
 # Note that if you set save.snn=T above, you don't need to recalculate the
 # SNN, and can simply put: pbmc <- FindClusters(pbmc,resolution = 0.8)
@@ -325,8 +528,11 @@ plot1 <- TSNEPlot(object = pbmc, do.return = TRUE, no.legend = TRUE, do.label = 
 plot2 <- TSNEPlot(object = pbmc, do.return = TRUE, group.by = "ClusterNames_0.6", 
                   no.legend = TRUE, do.label = TRUE, label.size=labSize)
 plot_grid(plot1, plot2)
+```
 
+## Find Markers
 
+```{r Find Markers, fig.height=`figHeight` }
 # Find discriminating markers
 tcell.markers <- FindMarkers(object = pbmc, ident.1 = 0, ident.2 = 1)
 
@@ -336,11 +542,11 @@ tcell.markers <- FindMarkers(object = pbmc, ident.1 = 0, ident.2 = 1)
 # palette from low to high expression
 FeaturePlot(object = pbmc, features.plot = top1$gene, cols.use = c("green", "blue"))
 
-# pbmc <- SetAllIdent(object = pbmc, id = "ClusterNames_0.6") 
+pbmc <- SetAllIdent(object = pbmc, id = "ClusterNames_0.6") 
 ```
 
-## Save Results
-```{r Save Results}
+
+```{r Save Results 2}
 saveRDS(pbmc, file = "Data/cd14-processed.rds") 
 ```
 
