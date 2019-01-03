@@ -25,7 +25,7 @@ output:
 
 # Subset gene biotypes to be analyzed
 subsetGenes="protein_coding"#NULL
-resolution=1 #0.6 
+resolution=2 #0.6 
 if (getwd()!="/Users/schilder/Desktop/PD_scRNAseq"){
   subsetCells=500 # NULL 
 } else {subsetCells=NULL}
