@@ -542,7 +542,7 @@ RidgePlot(pbmc, features.plot = top1$gene,  nCol = nCols, do.sort = F)
 ```
 
 
-# Map Clusters to Marker-Defined Cell Types 
+# Map Clusters to Known Biomarkers
 
 - Known Monocytes Biomarkers
  + Classical: CD14++ / CD16--
