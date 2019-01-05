@@ -19,7 +19,7 @@ output:
     self_contained: true  
 params:
   subsetGenes: "protein_coding" #FALSE
-  subsetCells: 500 #FALSE
+  subsetCells: 400 #FALSE
   resolution: 0.6
   resultsPath: "./" 
 ---
@@ -27,35 +27,28 @@ params:
 
 # Setup
 
-```{r setup}  
-local <- T #commandArgs(trailingOnly=T)
-# Settings for running locally vs. on computer cluster 
-if (local==T){ 
-  nCores = parallel::detectCores() 
-} else { 
-  nCores = parallel::detectCores()#*4  ## Defaults to 1/4 of all cores 
-} 
+```{r setup}    
 # Gather parameters from command line  
-#dir.create(file.path(resultsPath,"cache"), showWarnings=F, recursive=T)  
+#dir.create(file.path(resultsPath,"cache"), showWarnings=F, recursive=T)
+nCores <- parallel::detectCores()#params$nCores
+subsetGenes <- params$subsetGenes 
+subsetCells <- params$subsetCells 
+resolution <-  as.numeric(params$resolution)   
 
+root <- getwd()
 # Have to setwd via knitr
 # knitr::opts_knit$set(root.dir=resultsPath, child.path = resultsPath)
-knitr::opts_chunk$set(echo=T, error=T#, root.dir = resultsPath#cache=T, cache.lazy=T,     
+knitr::opts_chunk$set(echo=T, error=T, root.dir = resultsPath#cache=T, cache.lazy=T,     
                       ) 
  
 kableStyle = c("striped", "hover", "condensed", "responsive") 
 # Utilize parallel processing later on 
-print(paste("**** Utilized Cores **** =", parallel::detectCores() ))  
-print(paste("Saving results to: ", params$resultsPath))
- 
-  
+print(paste("**** Utilized Cores **** =", nCores))   
+
+params
 ```
 
-
-
-
-
-** `r parameters` **
+** `r params$resultsPath` **
  
  
 ## Load Libraries & Report Versions
@@ -65,10 +58,10 @@ library(dplyr)
 library(gridExtra)
 library(knitr)
 library(kableExtra) 
-library(plotly) 
+library(plotly)
+library(ggplot2)
 library(reshape2)
-library(shiny)
-library(heatmaply) 
+library(shiny) 
 # 
 # install.packages('devtools')
 # devtools::install_github('talgalili/heatmaply')
@@ -76,7 +69,9 @@ library(heatmaply)
 #  if (!requireNamespace("BiocManager"))
 #     install.packages("BiocManager")
 # BiocManager::install(c("biomaRt"))
-library(biomaRt) 
+library(biomaRt)  
+## Seurat::FindGeneTerms() # Enrichr API
+## Seurat::MultiModal_CCA() # Integrates data from disparate datasets (CIA version too)
 
 sessionInfo()
 print(paste("Seurat ", packageVersion("Seurat")))
@@ -136,9 +131,10 @@ head(metadata)
 # Correct misspelling
 ### Export updated Metadata
 write.table(metadata, file.path(root,"Data/meta.data4.tsv"))
-
 # Add metadata to seurat object
 pbmc <- AddMetaData(object = pbmc, metadata =  metadata )  
+
+rm(list = c("meta", "metadata", "map", "subjectInfo"))
 ## % Mitochondrial genes metadata
 #mito.genes <- grep(pattern = "^MT-", x = rownames(x = pbmc@data), value = TRUE)
 #percent.mito <- Matrix::colSums(pbmc@raw.data[mito.genes, ])/Matrix::colSums(pbmc@raw.data)
@@ -148,6 +144,7 @@ pbmc <- AddMetaData(object = pbmc, metadata =  metadata )
 
 
 ## Add Metadata
+
 ```{r Subset for Testing, results="asis"}  
 metadata <- read.table(file.path(root,"Data/meta.data4.tsv"))
 kable(head(metadata), caption = "Metadata") %>%  
@@ -199,39 +196,40 @@ Include only subsets of genes by type.
 Biotypes from: https://useast.ensembl.org/info/genome/genebuild/biotypes.html
 
 ```{r Subset Genes by Biotype}
-
-## Seurat::FindGeneTerms() # Enrichr API
-## Seurat::MultiModal_CCA() # Integrates data from disparate datasets (CIA version too)
-if( subsetGenes!=F ){
-  print(paste("Subsetting genes:",subsetGenes))
-  # If the gene_biotypes file exists, import csv. Otherwise, get from biomaRt
-  if(file_test("-f", file.path(root,"Data/gene_biotypes.csv"))){
-    biotypes <- read.csv(file.path(root,"Data/gene_biotypes.csv"))
-  }
-  else {
-    ensembl <- useMart(biomart="ENSEMBL_MART_ENSEMBL", host="grch37.ensembl.org",
-                     dataset="hsapiens_gene_ensembl") 
-    ensembl <- useDataset(mart = ensembl, dataset = "hsapiens_gene_ensembl")
-    listFilters(ensembl)
-    listAttributes(ensembl)   
-    biotypes <- getBM(attributes=c("hgnc_symbol", "gene_biotype"), filters="hgnc_symbol",
-          values=row.names(pbmc@data), mart=ensembl) 
-    write.csv(biotypes, file.path(root,"Data/gene_biotypes.csv"), quote=F, row.names=F)
+subsetBiotypes <- function(pbmc, subsetGenes){
+  if( subsetGenes!=F ){
+    print(paste("Subsetting genes:",subsetGenes))
+    # If the gene_biotypes file exists, import csv. Otherwise, get from biomaRt
+    if(file_test("-f", file.path(root,"Data/gene_biotypes.csv"))){
+      biotypes <- read.csv(file.path(root,"Data/gene_biotypes.csv"))
+    }
+    else {
+      ensembl <- useMart(biomart="ENSEMBL_MART_ENSEMBL", host="grch37.ensembl.org",
+                       dataset="hsapiens_gene_ensembl") 
+      ensembl <- useDataset(mart = ensembl, dataset = "hsapiens_gene_ensembl")
+      listFilters(ensembl)
+      listAttributes(ensembl)   
+      biotypes <- getBM(attributes=c("hgnc_symbol", "gene_biotype"), filters="hgnc_symbol",
+            values=row.names(pbmc@data), mart=ensembl) 
+      write.csv(biotypes, file.path(root,"Data/gene_biotypes.csv"), quote=F, row.names=F)
+    } 
+    # Subset data by creating new Seurat object (annoying but necessary)
+    geneSubset <- biotypes[biotypes$gene_biotype==subsetGenes,"hgnc_symbol"] 
+    
+    print(paste(dim(pbmc@raw.data[geneSubset, ])[1],"/", dim(pbmc@raw.data)[1], 
+                "genes are", subsetGenes))
+    # Add back into pbmc 
+    subset.matrix <- pbmc@raw.data[geneSubset, ] # Pull the raw expression matrix from the original Seurat object containing only the genes of interest
+    pbmc_sub <- CreateSeuratObject(subset.matrix) # Create a new Seurat object with just the genes of interest
+    orig.ident <- row.names(pbmc@meta.data) # Pull the identities from the original Seurat object as a data.frame
+    pbmc_sub <- AddMetaData(object = pbmc_sub, metadata = pbmc@meta.data) # Add the idents to the meta.data slot
+    pbmc_sub <- SetAllIdent(object = pbmc_sub, id = "ident") # Assign identities for the new Seurat object
+    pbmc <- pbmc_sub
+    rm(list = c("pbmc_sub","geneSubset", "subset.matrix", "orig.ident")) 
   } 
-  # Subset data by creating new Seurat object (annoying but necessary)
-  geneSubset <- biotypes[biotypes$gene_biotype==subsetGenes,"hgnc_symbol"] 
-  
-  print(paste(dim(pbmc@raw.data[geneSubset, ])[1],"/", dim(pbmc@raw.data)[1], 
-              "genes are", subsetGenes))
-  # Add back into pbmc 
-  subset.matrix <- pbmc@raw.data[geneSubset, ] # Pull the raw expression matrix from the original Seurat object containing only the genes of interest
-  pbmc_sub <- CreateSeuratObject(subset.matrix) # Create a new Seurat object with just the genes of interest
-  orig.ident <- row.names(pbmc@meta.data) # Pull the identities from the original Seurat object as a data.frame
-  pbmc_sub <- AddMetaData(object = pbmc_sub, metadata = pbmc@meta.data) # Add the idents to the meta.data slot
-  pbmc_sub <- SetAllIdent(object = pbmc_sub, id = "ident") # Assign identities for the new Seurat object
-  pbmc <- pbmc_sub
-  rm(pbmc_sub) 
-} 
+}
+
+subsetBiotypes(pbmc, subsetGenes)
 ```
 
 ### Subset Cells
@@ -321,8 +319,7 @@ can be explored by setting use.full=T in the functions above
   
 ```{r PCA }
 # Run PCA with only the top most variables genes
-pbmc <- RunPCA(object = pbmc, pc.genes = pbmc@var.genes, do.print=F)
-  #, pcs.print = 1:5,  genes.print = 5
+pbmc <- RunPCA(object = pbmc, pc.genes = pbmc@var.genes, do.print=F) #, pcs.print = 1:5,  genes.print = 5
 ```
 
 ### VizPCA
@@ -341,13 +338,10 @@ PCAPlot(object = pbmc, dim.1 = 1, dim.2 = 2, do.hover=T, data.hover="mut")
 ### PCHeatmaps
 
 ```{r PCHeatmap, message=F, warning=F}  
-pbmc <- ProjectPCA(object = pbmc, do.print=F)
-
-cells.use  <- ifelse(subsetCells==F, 500, subsetCells) 
+pbmc <- ProjectPCA(object = pbmc, do.print=F) 
 # 'PCHeatmap' is a wrapper for heatmap.2 
 # PCA Heatmap: PC1-PCn
-pcp <- PCHeatmap(object = pbmc, pc.use = 1:12, cells.use = cells.use, do.balanced=T, 
-    label.columns=F, use.full=F, do.return = T) 
+PCHeatmap(object = pbmc, pc.use = 1:12, do.balanced=T, label.columns=F, use.full=F) 
 # 
 # PCHeatmap_interactive <- function(PC=1){  
 #   PC_dat <- PCHeatmap(object = pbmc, pc.use = PC, do.return = T) 
@@ -383,8 +377,7 @@ We first construct a KNN graph based on the euclidean distance in PCA space, and
 The FindClusters function implements the procedure, and contains a resolution parameter that sets the ‘granularity’ of the downstream clustering, with increased values leading to a greater number of clusters. We find that setting this parameter between 0.6-1.2 typically returns good results for single cell datasets of around 3K cells. Optimal resolution often increases for larger datasets. The clusters are saved in the object@ident slot.
 ```{r Cluster cells } 
 # TRY DIFFERENT RESOLUTIONS
-pbmc <- FindClusters(object = pbmc, reduction.type = "pca", dims.use = 1:10, 
-    resolution = resolution, print.output = 0, save.SNN = T) 
+pbmc <- FindClusters(object = pbmc, reduction.type = "pca", dims.use = 1:10, resolution = resolution, print.output = 0, save.SNN = T) 
 PrintFindClustersParams(object = pbmc) 
 ```
 
@@ -592,9 +585,10 @@ markerMelt <- reshape2::acast(markerDF, Cell~Gene, value.var="Expression", fun.a
 #plot_ly(  z = markerMelt, y=row.names(markerMelt), z=colnames(markerMelt), type="heatmap")
 # dx_colors <- colorRampPalette(brewer.pal(2, "RdBu"))
 # mut_colors <- colorRampPalette(brewer.pal(length(unique(pbmc@meta.data$mut)), "Set3"))
-Spectral <- colorRampPalette(brewer.pal(length(unique(pbmc@meta.data$mut)), "Spectral"))  
- 
-heatmaply(markerMelt,  key.title="Expression",#plot_method= "plotly",
+Spectral <- grDevices::colorRampPalette(RColorBrewer::brewer.pal(length(unique(pbmc@meta.data$mut)), "Spectral"))
+# Spectral <- heatmaply::Spectral(length(unique(pbmc@meta.data$mut)))
+
+heatmaply::heatmaply(markerMelt,  key.title="Expression",#plot_method= "plotly",
           k_row = length(unique(pbmc.markers)), dendrogram = "row",
           showticklabels = c(T, F), xlab = "Known Markers", ylab = "Cells", column_text_angle = 0,
           row_side_colors =  pbmc@meta.data[,c("dx","mut")], row_side_palette = Spectral

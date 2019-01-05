@@ -3,7 +3,9 @@ args = commandArgs(trailingOnly = T)
 subsetGenes = args[1]
 subGenes <- ifelse(subsetGenes==F, 'all', subsetGenes)
 subsetCells = args[2]
-resolution = args[3]
+resolution = args[3] 
+#nCores <-args[4] #ifelse(is.null(args[4]), parallel::detectCores(), args[4]) 
+
 parameters <- paste(sep='', 'subsetGenes-',subGenes,'__subsetCells-',subsetCells, '__Resolution-', resolution)
 root = getwd()
 resultsPath <- file.path(root,'Results',parameters)
