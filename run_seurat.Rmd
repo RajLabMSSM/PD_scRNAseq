@@ -340,6 +340,8 @@ can be explored by setting use.full=T in the functions above
 ```{r PCA }
 # Run PCA with only the top most variables genes
 pbmc <- RunPCA(object = pbmc, pc.genes = pbmc@var.genes, do.print=F) #, pcs.print = 1:5,  genes.print = 5
+# Store in Seurat object so you don't have to recalculate it for the tSNE/UMAP steps
+pbmc <- ProjectPCA(object = pbmc, do.print=F) 
 ```
 
 ### VizPCA
@@ -358,23 +360,8 @@ PCAPlot(object = pbmc, dim.1 = 1, dim.2 = 2, do.hover=T, data.hover="mut")
 ### PCHeatmaps
 
 ```{r PCHeatmap, message=F, warning=F}  
-pbmc <- ProjectPCA(object = pbmc, do.print=F) 
-# 'PCHeatmap' is a wrapper for heatmap.2 
-# PCA Heatmap: PC1-PCn
-PCHeatmap(object = pbmc, pc.use = 1:12, do.balanced=T, label.columns=F, use.full=F) 
-# 
-# PCHeatmap_interactive <- function(PC=1){  
-#   PC_dat <- PCHeatmap(object = pbmc, pc.use = PC, do.return = T) 
-#   # Cluster samples
-#   Xclust <- pcp %>% dist(upper = T) %>% hclust() 
-#   Yclust <- PC_dat %>% t() %>% dist(upper = T) %>% hclust() 
-#   PC_dat <- PC_dat[Xclust$order, Yclust$order]  
-#   # Plotly 
-#   plot_ly(y=row.names(PC_dat), z=matrix(PC_dat), type = "heatmap", 
-#           colors =viridis::plasma(n=100))
-# }
-# PCHeatmap_interactive(PC=1)   
- 
+# 'PCHeatmap' is a wrapper for heatmap.2  
+PCHeatmap(object = pbmc, pc.use = 1:12, do.balanced=T, label.columns=F, use.full=F)  
 ```
 
 
@@ -410,7 +397,7 @@ pbmc <- StashIdent(object = pbmc, save.name = "post_clustering")
 ## UMAP
 
 ```{r UMAP} 
-pbmc <- RunUMAP(object = pbmc, dims.use = 1:10)
+pbmc <- RunUMAP(object = pbmc, dims.use = 1:10, num_threads=0)
 # Plot results
 DimPlot(object = pbmc, reduction.use = 'umap')
 ```
