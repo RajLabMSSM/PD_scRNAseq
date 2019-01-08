@@ -1,7 +1,7 @@
-Results/../*.rds
-Results/../cd14-processed.rds
-/Results/*.rds
-Results/**/*.rds 
+Results/**/*.rds
+/**/*.rds
+/**/*.rds
+/*.rds 
 run_seurat_cache/
 run_seurat_files/
 *_cache/
