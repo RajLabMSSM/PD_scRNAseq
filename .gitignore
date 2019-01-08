@@ -1,7 +1,14 @@
-Data/cd14-processed.rds 
+Results/../*.rds
+Results/../cd14-processed.rds
+/Results/*.rds
+Results/**/*.rds 
 run_seurat_cache/
 run_seurat_files/
 *_cache/
 *_files/
 
 *.DS_Store
+./cd14-processed.rds
+./Data/cd14-processed.rds
+./Results/subsetGenes-protein_coding__subsetCells-400__Resolution-0.6/cd14-processed.rds
+./cd14-processed.rds

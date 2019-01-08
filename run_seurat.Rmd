@@ -66,18 +66,6 @@ library(reshape2)
 library(shiny) 
 library(ggrepel)
 library(DT)
-
-
-createDT <- function(DF, caption="", scrollY=500){
-  data <- datatable(DF, caption=caption,
-    extensions = 'Buttons',
-    options = list( dom = 'Bfrtip', 
-                    buttons = c('copy', 'csv', 'excel', 'pdf', 'print'), 
-                    scrollY = scrollY, paging = F
-              )
-  ) 
-  print(data)
-}
 # 
 # install.packages('devtools')
 # devtools::install_github('talgalili/heatmaply')
@@ -88,6 +76,18 @@ createDT <- function(DF, caption="", scrollY=500){
 library(biomaRt)
 # BiocManager::install(c("DESeq2"))
 library(DESeq2)
+
+createDT <- function(DF, caption="", scrollY=500){
+  data <- datatable(DF, caption=caption,
+    extensions = 'Buttons',
+    options = list( dom = 'Bfrtip', 
+                    buttons = c('copy', 'csv', 'excel', 'pdf', 'print'), 
+                    scrollY = scrollY, paging = F
+              )
+  ) 
+   return(data)
+}
+
 
 # Useful Seurat functions
 ## Seurat::FindGeneTerms() # Enrichr API
@@ -100,7 +100,7 @@ print(paste("Seurat ", packageVersion("Seurat")))
 
 ## Load Data
 ```{r Load Data }   
-#setwd("~/Desktop/PD_scRNAseq/")
+setwd("~/Desktop/PD_scRNAseq/")
 dir.create(file.path(root,"Data"), showWarnings=F) 
 load(file.path(root,"Data/seurat_object_add_HTO_ids.Rdata"))
 pbmc <- seurat.obj  
@@ -148,6 +148,7 @@ metadata <- subset(metadata, select = -CellType)
 dim(meta)
 dim(metadata)
 head(metadata)
+paste("singlet.or.not.binary =",unique(pbmc@meta.data$singlet.or.not.binary))
 # Correct misspelling
 ### Export updated Metadata
 write.table(metadata, file.path(root,"Data/meta.data4.tsv"))
@@ -160,6 +161,7 @@ rm(list = c("meta", "metadata", "map", "subjectInfo"))
 #percent.mito <- Matrix::colSums(pbmc@raw.data[mito.genes, ])/Matrix::colSums(pbmc@raw.data)
 #pbmc <- AddMetaData(object = pbmc, metadata = percent.mito, col.name = "percent.mito")
 ```
+
 
 
 
@@ -327,7 +329,7 @@ that are strongly correlated with cellular heterogeneity, but may not have
 passed through variable gene selection.  The results of the projected PCA
 can be explored by setting use.full=T in the functions above
 
-- Other Dim Reduction Methods in Seurat
+* Other Dim Reduction Methods in Seurat
   + RunCCA()
   + RunMultiCCA()
   + RunDiffusion()
@@ -393,7 +395,7 @@ We first construct a KNN graph based on the euclidean distance in PCA space, and
 
 **On Resolution**  
 The FindClusters function implements the procedure, and contains a resolution parameter that sets the ‘granularity’ of the downstream clustering, with increased values leading to a greater number of clusters. We find that setting this parameter between 0.6-1.2 typically returns good results for single cell datasets of around 3K cells. Optimal resolution often increases for larger datasets. The clusters are saved in the object@ident slot.
-```{r Cluster cells } 
+```{r Cluster Cells} 
 # TRY DIFFERENT RESOLUTIONS
 pbmc <- StashIdent(object = pbmc, save.name = "pre_clustering") 
 # pbmc <- SetAllIdent(object = pbmc, id = "pre_clustering") 
@@ -465,27 +467,27 @@ tSNE_metadata_plot <- function(var){
 ```
 
 
-### Disease
+### tSNE Disease
 
-```{r dx}
+```{r tSNE dx}
 tSNE_metadata_plot("dx") 
 ```
 
 ### Mutations
 
-```{r mut, fig.width = 12}
+```{r tSNE mut}
 tSNE_metadata_plot("mut") 
 ```
 
 ### Gender
 
-```{r Gender, fig.width = 12}
+```{r tSNE Gender}
 tSNE_metadata_plot("Gender") 
 ```
 
 ### Age
 
-```{r Age, fig.width = 12}
+```{r tSNE Age}
 tSNE_metadata_plot("Age") 
 ```
 
@@ -494,16 +496,26 @@ tSNE_metadata_plot("Age")
 
 Seurat has several tests for differential expression which can be set with the test.use parameter (see the DE vignette for details). For example, the ROC test returns the ‘classification power’ for any individual marker (ranging from 0 - random, to 1 - perfect).
 
-```{r cluster biomarkers tests, results="asis"}  
-### Biomarkers: All Clusters vs. All Other Clusters ***
-# find markers for every cluster compared to all remaining cells, report
-# only the positive ones
-topNum = 5 
-pbmc.markers <- FindAllMarkers(object = pbmc, only.pos = TRUE, min.pct = 0.25, thresh.use = 0.25)
-topBiomarkers <- pbmc.markers %>% group_by(cluster) %>% top_n(topNum, avg_logFC)
- 
-createDT(topBiomarkers, caption = paste("Top",topNum,"Biomarkers: All Clusters"))
+Shown here: Biomarkers of each cluster vs. all other clusters.
+
+## Biomarkers Data {.tabset .tabset-fade .tabset-pills}
+
+### All Biomarkers
+
+```{r All Biomarkers} 
+pbmc.markers <- FindAllMarkers(object = pbmc, only.pos = TRUE, 
+                               min.pct = 0.25, thresh.use = 0.25)
+createDT(pbmc.markers, caption = paste("All Biomarkers: All Clusters"))
 ```
+
+### Top Biomarkers
+
+```{r Top Biomarkers} 
+topNum = 5
+topBiomarkers <- pbmc.markers %>% group_by(cluster) %>% top_n(topNum, avg_logFC)
+createDT(pbmc.markers, caption = paste("All Biomarkers: All Clusters"))
+```
+
 
 ## Cluster Biomarker: Violin Plots {.tabset .tabset-fade .tabset-pills}
 
@@ -578,7 +590,7 @@ volcanoPlot <- function(DEG_df, caption="", topFC_labeled=5){
     geom_vline(xintercept= -1.5,lty=4, lwd=.3, alpha=.5) + 
     geom_vline(xintercept= 1.5,lty=4, lwd=.3, alpha=.5) +
     geom_hline(yintercept= -log10(0.05),lty=4, lwd=.3, alpha=.5) + 
-    ggtitle(caption)
+    ggtitle(caption) 
   print(vol)
 }
 
@@ -601,7 +613,7 @@ for (clust in unique(pbmc.markers$cluster)){
 
 ```{r Biomarkers tSNE} 
 fp <- FeaturePlot(object = pbmc, features.plot = top1$gene, cols.use = c("grey", "purple"), 
-    reduction.use = "tsne", nCol = nCols, do.return = T) 
+    reduction.use = "tsne", nCol = nCols, do.return = T)
 ```
 
 
@@ -628,27 +640,123 @@ RidgePlot(pbmc, features.plot = top1$gene,  nCol = nCols, do.sort = F)
  + Intermediate: CD14++ / CD16+
  + Nonclassical: CD14+ / CD16++ (not captured in this data)
   
+## Markers Dataframe
 
-```{r Map Clusters}
+```{r Markers Dataframe}
 markerList <- c("CD14", "FCGR3A") 
-
-genes_by_cluster <- function(pbmc, markerList){
+ 
+get_markerDF <- function(pbmc, markerList){
   marker.matrix <- pbmc@scale.data[row.names(pbmc@scale.data) %in% markerList, ]   
   markerMelt <- reshape2:::melt.matrix(marker.matrix)
   colnames(markerMelt) <- c("Gene", "Cell", "Expression")
-  identData <- data.frame(pbmc@ident)  
-  identData$Cell <- row.names(identData)
-  colnames(identData) <- c("Cluster","Cell") 
-  markerDF <- merge(markerMelt,  identData, by = "Cell")
- 
+  # Fuse metadata
+  # clusterData <- data.frame(pbmc@ident)  
+  # clusterData$Cell <- row.names(clusterData)
+  # colnames(clusterData) <- c("Cluster","Cell")  
+  # markerDF <- merge(markerMelt,  clusterData, by = "Cell")
+  metaSelect <-  pbmc@meta.data[,c("barcode", "dx", "mut","post_clustering",
+                                   "percent.mito","nGene", "nUMI")] 
+  markerDF <- merge(markerMelt,metaSelect, by.x="Cell", by.y="barcode") 
   return(markerDF)
 }
-markerDF <- genes_by_cluster(pbmc, markerList)
+markerDF <- get_markerDF(pbmc, markerList)
+createDT(markerDF, caption = "Known Marker Expression")
 ```
+
+## Marker ANOVAs + Boxplots 
+
+```{r Marker ANOVAs + Boxplots } 
+# Explore expression differences between groups
+marker_vs_metadata <- function(markerDF, meta_var){ 
+  # Create title from ANOVA summary
+  ANOVAtitle <- function(markerDF, marker){
+      nTests <- length(unique(markerDF$Gene))
+      res <- anova(lm(data = subset(markerDF, Gene==marker), 
+                      formula = Expression ~ eval(parse(text=meta_var))))
+      
+      title <-paste(paste("ANOVA (",marker, " vs. ",meta_var, ")", sep=""), 
+                    ": p=",round(res$`Pr(>F)`,3), 
+                    ", F=",round(res$`F value`,3), 
+        ifelse(res$`Pr(>F)`<.05/nTests,"(Significant**)",
+               "(Non-significant)") ) 
+  }
+  
+  title = ""
+  for (marker in unique(markerDF$Gene) ){
+    print(marker)
+    title <- paste(title, "\n", ANOVAtitle(markerDF, marker))
+  } 
+  
+  ggplot(markerDF, aes(x=eval(parse(text=meta_var)), y=Expression, fill= Gene)) + 
+    geom_boxplot() +  
+    labs(title = title, x=meta_var) +
+    theme(plot.title = element_text( size=10)) +
+    scale_fill_manual(values=c("brown", "slategray"))
+}
+```
+
+### ANOVA: dx
+
+```{r ANOVA: dx} 
+marker_vs_metadata(markerDF, "dx")
+```
+
+### ANOVA: mut
+
+```{r ANOVA: mut}
+marker_vs_metadata(markerDF, "mut") 
+```
+
+
+
+
+## Defining Cell-types by Markers 
+
+A simplistic way of categorizing cells into CD14++/CD16+ and CD14++/CD16--, is by splitting cells into groups based on whether their expression is higher or lower than the average CD16 expression of all cells.
+
+```{r Defining Cell-types by Markers}
+orig_meta.data <- pbmc@meta.data
+################################
+
+avgMarkerExp <-markerDF %>% group_by(Gene) %>% dplyr::summarise(meanExp = mean(Expression))
+avgMarkerExp <- setNames(avgMarkerExp$meanExp, avgMarkerExp$Gene)
+
+CD16 <- markerDF[markerDF$Gene=="FCGR3A",]
+CD16_group <- ifelse(CD16$Expression >= avgMarkerExp["FCGR3A"], 
+                             "CD14++/CD16+", "CD14++/CD16--") 
+CD16["CD16_group"]  <- CD16_group
+
+
+# Make sure row order is same before putting back into meta.data    
+metaD <- pbmc@meta.data
+newMeta <- merge(metaD, CD16[,c("Cell","CD16_group")], by.x="barcode", by.y="Cell")
+row.names(newMeta) <- row.names(metaD)
+pbmc <- AddMetaData(pbmc, metadata = newMeta)
+ 
+
+# Get proportions of cell types in each cluster
+cluster_proportions <- newMeta %>% group_by(CD16_group, post_clustering) %>% 
+  tally() %>%
+  group_by(CD16_group) %>%
+  mutate(percentTotal = n/sum(n)*100)
+
+
+ggplot(cluster_proportions, aes(x=post_clustering, y=percentTotal, fill=CD16_group)) + geom_col(position = "fill") +  
+  labs(title="Proportions of Cell-types per Cluster", 
+       x="Cluster", y="Cell Type / Total Cells") +
+  scale_fill_manual(values=c("brown", "slategray"))
+ 
+ 
+tSNE_metadata_plot("CD16_group")
+```
+
+
+
+
 
 ## Known Biomarkers: Heatmaps
 
-### Clusters Averaged
+### Average Expression: By Clusters
 
 ```{r Clusters Averaged}
 # Show mean exp for each marker
@@ -656,9 +764,19 @@ avgMarker <- markerDF %>% group_by(Gene, Cluster) %>% summarise(meanExp = mean(E
 ggplot(data = avgMarker, aes(x=Gene, y=Cluster, fill=meanExp)) %>% + geom_tile() %>% + scale_fill_distiller(palette="viridis") %>% ggplotly()
 ```
 
-### Clusters Separated
+### Average Expression: By Disease
 
-```{r Clusters Separated}
+```{r Average Expression: By Clusters}
+# Show mean exp for each marker
+avgMarker <- markerDF %>% group_by(Gene, dx) %>% summarise(meanExp = mean(Expression)) 
+ggplot(data = avgMarker, aes(x=Gene, y=Cluster, fill=meanExp)) %>% + geom_tile() %>% + scale_fill_distiller(palette="viridis") %>% ggplotly()
+```
+
+
+
+### Cells Separated
+
+```{r Cells Separated}
 markerMelt <- reshape2::acast(markerDF, Cell~Gene, value.var="Expression", fun.aggregate = mean, drop = F, fill = 0) 
 
 #plot_ly(  z = markerMelt, y=row.names(markerMelt), z=colnames(markerMelt), type="heatmap")
@@ -679,7 +797,7 @@ heatmaply::heatmaply(markerMelt,  key.title="Expression",#plot_method= "plotly",
 ## Known Biomarkers: Boxplot
 
 ```{r Known Biomarkers: Boxplot} 
-ggplot(data = markerDF, aes(x=Cluster, y=Expression, fill=Gene)) %>% 
+ggplot(data = markerDF, aes(x=post_clustering, y=Expression, fill=Gene)) %>% 
   + geom_boxplot(alpha=0.5) %>% + scale_fill_manual(values=c("purple", "turquoise")) # %>% ggplotly()  
 ```
 
@@ -712,14 +830,14 @@ TSNEPlot(object=pbmc, do.label=T, pt.size=0.5, do.return=T) %>% ggplotly()
 ```
 
 
-# Differential Gene Expression {.tabset .tabset-fade .tabset-pills}
+# Differential Gene Expression 
 
 - DGE methods available in Seurat include:
  + DESeq2DETest()
  + DiffExpTest()
  + DiffTTest()
 
-## DGE: All Cells
+## DGE: All Cells {.tabset .tabset-fade .tabset-pills}
 
 ```{r DGE: All Cells} 
 # Available DGE methods:
@@ -735,7 +853,7 @@ runDGE <- function(pbmc, meta_var, group1, group2, test.use="wilcox"){
 ```
 
 
-## PD vs. Controls
+### PD vs. Controls
 
 ```{r DGE: PD vs. Controls}
 DEG_df <-runDGE(pbmc, "dx", group1 = "PD", group2="control")
@@ -745,7 +863,7 @@ createDT(DEG_df, caption = cap)
 volcanoPlot(DEG_df, caption = cap)
 ```
 
-## PD vs. Controls
+### LRRK vs. PD
 
 ```{r DGE: LRRK2 vs. PD} 
 DEG_df <-runDGE(pbmc, "mut", "LRRK2", "PD")
@@ -755,7 +873,18 @@ createDT(DEG_df, caption = cap)
 volcanoPlot(DEG_df, caption = cap)
 ```
 
-## DGE: Within Clusters
+### LRRK vs. PD
+
+```{r DGE: CD14++/CD16+ vs. CD14++/CD16--}  
+DEG_df <-runDGE(pbmc, "CD16_group", "CD14++/CD16+", "CD14++/CD16--")
+cap <- paste("DEGs (All Cells): CD14++/CD16+ vs. CD14++/CD16--")
+
+createDT(DEG_df, caption = cap)
+volcanoPlot(DEG_df, caption = cap)
+```
+
+
+# DGE: Within Clusters
 
 ## Between Disease Groups {.tabset .tabset-fade .tabset-pills}
 
@@ -790,6 +919,27 @@ for (clust in unique(pbmc@ident)){
    cat("### ",cap)
    # DGE
    DEG_df <-runDGE(pbmc_clustSub, "mut", group1 = "LRKK2", group2="PD") 
+   # Show results
+   volcanoPlot(DEG_df, caption = cap)
+   createDT(DEG_df, caption = cap)
+   cat('\n')   
+} 
+```
+
+## Between Mutation Groups {.tabset .tabset-fade .tabset-pills}
+
+```{r Between Known Cell Types}  
+for (clust in unique(pbmc@ident)){
+    # Subset cells by cluster
+   pbmc <- SetAllIdent(pbmc, id = "post_clustering")
+   pbmc_clustSub <- SubsetData(pbmc, ident.use = clust, subset.raw = T) 
+   cap <- paste("Cluster ",clust,": CD14++/CD16+ vs. CD14++/CD16--", sep="")
+   
+   cat('\n')   
+   cat("### ",cap)
+   # DGE
+   DEG_df <-runDGE(pbmc_clustSub, "CD16_group", 
+                   group1 = "CD14++/CD16+", group2="CD14++/CD16--") 
    # Show results
    volcanoPlot(DEG_df, caption = cap)
    createDT(DEG_df, caption = cap)
