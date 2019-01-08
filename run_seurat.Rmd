@@ -27,7 +27,8 @@ params:
 
 # Setup
 
-```{r setup}    
+```{r setup}
+resultsPath=file.path(getwd(),"Results")
 # Gather parameters from command line  
 #dir.create(file.path(resultsPath,"cache"), showWarnings=F, recursive=T)
 nCores <- parallel::detectCores()#params$nCores
@@ -41,8 +42,10 @@ root <- getwd()
 knitr::opts_chunk$set(echo=T, error=T, root.dir = resultsPath#cache=T, cache.lazy=T,     
                       ) 
  
-kableStyle = c("striped", "hover", "condensed", "responsive") 
-# Utilize parallel processing later on 
+# kableStyle = c("striped", "hover", "condensed", "responsive") 
+
+
+# Utilize parallel processing later on
 print(paste("**** Utilized Cores **** =", nCores))   
 
 params
@@ -56,12 +59,25 @@ params
 library(Seurat)
 library(dplyr)
 library(gridExtra)
-library(knitr)
-library(kableExtra) 
+library(knitr) 
 library(plotly)
 library(ggplot2)
 library(reshape2)
 library(shiny) 
+library(ggrepel)
+library(DT)
+
+
+createDT <- function(DF, caption="", scrollY=500){
+  data <- datatable(DF, caption=caption,
+    extensions = 'Buttons',
+    options = list( dom = 'Bfrtip', 
+                    buttons = c('copy', 'csv', 'excel', 'pdf', 'print'), 
+                    scrollY = scrollY, paging = F
+              )
+  ) 
+  print(data)
+}
 # 
 # install.packages('devtools')
 # devtools::install_github('talgalili/heatmaply')
@@ -69,7 +85,11 @@ library(shiny)
 #  if (!requireNamespace("BiocManager"))
 #     install.packages("BiocManager")
 # BiocManager::install(c("biomaRt"))
-library(biomaRt)  
+library(biomaRt)
+# BiocManager::install(c("DESeq2"))
+library(DESeq2)
+
+# Useful Seurat functions
 ## Seurat::FindGeneTerms() # Enrichr API
 ## Seurat::MultiModal_CCA() # Integrates data from disparate datasets (CIA version too)
 
@@ -147,9 +167,7 @@ rm(list = c("meta", "metadata", "map", "subjectInfo"))
 
 ```{r Subset for Testing, results="asis"}  
 metadata <- read.table(file.path(root,"Data/meta.data4.tsv"))
-kable(head(metadata), caption = "Metadata") %>%  
-  kable_styling(bootstrap_options = kableStyle) %>%
-  scroll_box(width = "100%", height = "500px")
+createDT( metadata, caption = "Metadata")  
 
 # Make AgeGroups
 makeAgeGroups <- function(){
@@ -377,19 +395,33 @@ We first construct a KNN graph based on the euclidean distance in PCA space, and
 The FindClusters function implements the procedure, and contains a resolution parameter that sets the ‘granularity’ of the downstream clustering, with increased values leading to a greater number of clusters. We find that setting this parameter between 0.6-1.2 typically returns good results for single cell datasets of around 3K cells. Optimal resolution often increases for larger datasets. The clusters are saved in the object@ident slot.
 ```{r Cluster cells } 
 # TRY DIFFERENT RESOLUTIONS
-pbmc <- FindClusters(object = pbmc, reduction.type = "pca", dims.use = 1:10, resolution = resolution, print.output = 0, save.SNN = T) 
+pbmc <- StashIdent(object = pbmc, save.name = "pre_clustering") 
+# pbmc <- SetAllIdent(object = pbmc, id = "pre_clustering") 
+
+pbmc <- FindClusters(object = pbmc, reduction.type = "pca", dims.use = 1:10, 
+                     resolution = resolution, print.output = 0, save.SNN = T) 
 PrintFindClustersParams(object = pbmc) 
+
+pbmc <- StashIdent(object = pbmc, save.name = "post_clustering") 
+```
+
+## UMAP
+
+```{r UMAP} 
+pbmc <- RunUMAP(object = pbmc, dims.use = 1:10)
+# Plot results
+DimPlot(object = pbmc, reduction.use = 'umap')
 ```
 
 
+
 ## t-SNE
+
 As input to the tSNE, we suggest using the same PCs as input to the clustering analysis, although computing the tSNE based on scaled gene expression is also supported using the genes.use argument.  
 
 ** Important!**: Specify num_threads=0 in 'RunTSNE' to use all available cores.
 ```{r t-SNE } 
-labSize <- 6
-#pbmc <- StashIdent(object = pbmc, save.name = "pre_clustering") 
-#pbmc <- SetAllIdent(object = pbmc, id = "pre_clustering") 
+labSize <- 6 
 
 pbmc <- RunTSNE(object=pbmc,  reduction.use = "pca", dims.use = 1:10, do.fast = TRUE, 
                 tsne.method = "Rtsne", num_threads=0) # num_threads
@@ -466,19 +498,22 @@ Seurat has several tests for differential expression which can be set with the t
 ### Biomarkers: All Clusters vs. All Other Clusters ***
 # find markers for every cluster compared to all remaining cells, report
 # only the positive ones
+topNum = 5 
 pbmc.markers <- FindAllMarkers(object = pbmc, only.pos = TRUE, min.pct = 0.25, thresh.use = 0.25)
-topBiomarkers <- pbmc.markers %>% group_by(cluster) %>% top_n(2, avg_logFC)
+topBiomarkers <- pbmc.markers %>% group_by(cluster) %>% top_n(topNum, avg_logFC)
  
-kable(topBiomarkers) %>% kable_styling(bootstrap_options = kableStyle) 
+createDT(topBiomarkers, caption = paste("Top",topNum,"Biomarkers: All Clusters"))
 ```
 
-## Cluster Biomarker Tests {.tabset .tabset-fade .tabset-pills}
+## Cluster Biomarker: Violin Plots {.tabset .tabset-fade .tabset-pills}
 
 ```{r cluster biomarker plots, results='asis'}
 
 getTopBiomarker <- function(pbmc.markers, clusterID, topN=1){
-  df <- subset(pbmc.markers, p_val_adj<0.05 & cluster==as.character(clusterID)) %>% arrange(desc(avg_logFC))
-  top_pct_markers <- df[1:topN,"gene"]
+  df <-pbmc.markers %>%
+    subset(p_val_adj<0.05 & cluster==as.character(clusterID)) %>%
+    arrange(desc(avg_logFC))
+    top_pct_markers <- df[1:topN,"gene"]
   return(top_pct_markers)
 }
 # clust1_biomarkers <- getTopBiomarker(pbmc.markers, clusterID=1, topN=2)
@@ -514,6 +549,50 @@ for (clust in unique(pbmc.markers$cluster)){
 } 
 ```
  
+## Cluster Biomarker: Volcano Plots {.tabset .tabset-fade .tabset-pills}
+
+```{r Volcano Plots, fig.height=5, fig.width=5}
+##Construct the plot object
+volcanoPlot <- function(DEG_df, caption="", topFC_labeled=5){
+  DEG_df$sig<-  ifelse( DEG_df$p_val_adj<0.05 & DEG_df$avg_logFC<1.5, "p_val_adj<0.05",
+            ifelse( DEG_df$p_val_adj<0.05  & DEG_df$avg_logFC>1.5, "p_val_adj<0.05 & avg_logFC>1.5",
+		        "p_val_adj>0.05"
+		)) 
+  DEG_df <- arrange(DEG_df, desc(sig))
+  
+  vol <- ggplot(data=DEG_df, aes(x=avg_logFC, y= -log10(p_val_adj))) +
+    geom_point(alpha=0.5, size=3, aes(col=sig)) + 
+    scale_color_manual(values=list("p_val_adj<0.05"="turquoise3",
+                                   "p_val_adj<0.05 & avg_logFC>1.5"="purple", 
+                                   "p_val_adj>0.05" = "darkgray")) +
+    theme(legend.position = "none") + 
+    xlab(expression(paste("Average ",log^{2},"(fold change)"))) +
+    ylab(expression(paste(-log^{10},"(p-value)"))) + xlim(-2,2) + 
+    ## ggrepl labels
+    geom_text_repel(data= arrange(DEG_df,  p_val_adj, desc(avg_logFC))[1:topFC_labeled,], 
+                    # filter(DEG_df, avg_logFC>=1.5)[1:10,],
+                    aes(label=gene),  color="black", alpha=.5,
+                    segment.color="black", segment.alpha=.5  
+                    ) +  
+    # Lines
+    geom_vline(xintercept= -1.5,lty=4, lwd=.3, alpha=.5) + 
+    geom_vline(xintercept= 1.5,lty=4, lwd=.3, alpha=.5) +
+    geom_hline(yintercept= -log10(0.05),lty=4, lwd=.3, alpha=.5) + 
+    ggtitle(caption)
+  print(vol)
+}
+
+for (clust in unique(pbmc.markers$cluster)){
+   cat('\n')   
+   cat("### Cluster ",clust,"\n") 
+   cap <- paste("Cluster",clust,"DEG Table") 
+   DEG_df <- subset(pbmc.markers, cluster==as.character(clust)) %>% arrange(desc(avg_logFC))  
+   volcanoPlot(DEG_df, caption = cap)
+   createDT(DEG_df, caption = cap)
+   cat('\n')   
+}
+
+```
 
 
 ## Top Biomarker Plot
@@ -608,18 +687,21 @@ ggplot(data = markerDF, aes(x=Cluster, y=Expression, fill=Gene)) %>%
 
 ##  Known Biomarkers: tSNE
 
-```{r Known Biomarkers: tSNE }
+```{r Known Biomarkers: tSNE code, echo = T, results = 'hide', fig.show='hide'}
 expressionTSNE <- function(pbmc, marker, colors=c("grey", "red")){
   FeaturePlot(object = pbmc, features.plot = marker, cols.use = colors, 
     reduction.use = "tsne", nCol=2, do.return = T, dark.theme = T)[[1]] %>% ggplotly()
 }
- 
- subplot(expressionTSNE(pbmc, markerList[1]), 
-        expressionTSNE(pbmc, markerList[2],  colors=c("grey", "green")))
+tp1 <- expressionTSNE(pbmc, markerList[1])
+tp2 <- expressionTSNE(pbmc, markerList[2], colors=c("grey", "green"))
+```
+```{r Known Biomarkers: tSNE}
+subplot(tp1, tp2)
 ```
 
 
 ## Label Clusters by Known Biomarker 
+
 ```{r Label Clusters by Biomarker }
 current.cluster.ids <- unique(pbmc.markers$cluster) #c(0, 1, 2, 3, 4, 5, 6, 7)
 top1 <- pbmc.markers %>% group_by(cluster) %>% top_n(1, avg_logFC)
@@ -629,12 +711,101 @@ pbmc@ident <- plyr::mapvalues(x = pbmc@ident, from = current.cluster.ids, to = n
 TSNEPlot(object=pbmc, do.label=T, pt.size=0.5, do.return=T) %>% ggplotly()
 ```
 
+
+# Differential Gene Expression {.tabset .tabset-fade .tabset-pills}
+
+- DGE methods available in Seurat include:
+ + DESeq2DETest()
+ + DiffExpTest()
+ + DiffTTest()
+
+## DGE: All Cells
+
+```{r DGE: All Cells} 
+# Available DGE methods:
+## "wilcox", "bimod", "roc", "t", "tobit", "poisson", "negbinom", "MAST", "DESeq2"
+runDGE <- function(pbmc, meta_var, group1, group2, test.use="wilcox"){
+  #print(paste("DGE_allCells",meta_var,sep="_")) 
+  pbmc <- SetAllIdent(pbmc, id = meta_var)
+  pbmc <- StashIdent(pbmc, save.name = meta_var)  
+  DEGs <- FindMarkers(pbmc, ident.1=group1, ident.2=group2, test.use=test.use)
+  DEGs$gene <- row.names(DEGs)
+  return(DEGs)
+}
+```
+
+
+## PD vs. Controls
+
+```{r DGE: PD vs. Controls}
+DEG_df <-runDGE(pbmc, "dx", group1 = "PD", group2="control")
+cap = paste("DEGs (All Cells): PD vs. Controls")
+
+createDT(DEG_df, caption = cap)
+volcanoPlot(DEG_df, caption = cap)
+```
+
+## PD vs. Controls
+
+```{r DGE: LRRK2 vs. PD} 
+DEG_df <-runDGE(pbmc, "mut", "LRRK2", "PD")
+cap <- paste("DEGs (All Cells): LRRK2 vs. PD")
+
+createDT(DEG_df, caption = cap)
+volcanoPlot(DEG_df, caption = cap)
+```
+
+## DGE: Within Clusters
+
+## Between Disease Groups {.tabset .tabset-fade .tabset-pills}
+
+```{r Between Disease Groups}  
+for (clust in unique(pbmc@ident)){
+    # Subset cells by cluster
+   pbmc <- SetAllIdent(pbmc, id = "post_clustering")
+   pbmc_clustSub <- SubsetData(pbmc, ident.use = clust, subset.raw = T) 
+   cap <- paste("Cluster ",clust,": PD vs. Control", sep="")
+   
+   cat('\n')   
+   cat("### ",cap)
+   # DGE
+   DEG_df <-runDGE(pbmc_clustSub, "dx", group1 = "PD", group2="control") 
+   # Show results
+   volcanoPlot(DEG_df, caption = cap)
+   createDT(DEG_df, caption = cap)
+   cat('\n')   
+} 
+```
+
+## Between Mutation Groups {.tabset .tabset-fade .tabset-pills}
+
+```{r Between Mutation Groups}  
+for (clust in unique(pbmc@ident)){
+    # Subset cells by cluster
+   pbmc <- SetAllIdent(pbmc, id = "post_clustering")
+   pbmc_clustSub <- SubsetData(pbmc, ident.use = clust, subset.raw = T) 
+   cap <- paste("Cluster ",clust,": LRRK2 vs. PD", sep="")
+   
+   cat('\n')   
+   cat("### ",cap)
+   # DGE
+   DEG_df <-runDGE(pbmc_clustSub, "mut", group1 = "LRKK2", group2="PD") 
+   # Show results
+   volcanoPlot(DEG_df, caption = cap)
+   createDT(DEG_df, caption = cap)
+   cat('\n')   
+} 
+```
+
+
+
 # Cell Sub-clusters {.tabset .tabset-fade .tabset-pills}
 
 Further subdivisions within cell types.  
 If you perturb some of our parameter choices above (for example, setting resolution=0.8 or changing the number of PCs), you might see the CD4 T cells subdivide into two groups. You can explore this subdivision to find markers separating the two T cell subsets. However, before reclustering (which will overwrite object@ident), we can stash our renamed identities to be easily recovered later.
 
 ## Assign Identity
+
 ```{r Assign Identity, fig.width=12}
 # First lets stash our identities for later
 pbmc <- StashIdent(object = pbmc, save.name = "ClusterNames_0.6")
@@ -670,6 +841,8 @@ FeaturePlot(object = pbmc, features.plot = top1$gene, cols.use = c("green", "blu
 
 pbmc <- SetAllIdent(object = pbmc, id = "ClusterNames_0.6") 
 ```
+
+ 
 
 
 ```{r Save Results} 
