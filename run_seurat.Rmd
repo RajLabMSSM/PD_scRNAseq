@@ -278,7 +278,7 @@ pbmc <- FindVariableGenes(object = pbmc, mean.function = ExpMean, dispersion.fun
 
 # IMPORTANT!: Must set do.par=T and num.cors = n for large datasets being processed on computing clusters
 par.Cores <- ifelse(nCores <= 12, 48, nCores)
-pbmc <- ScaleData(object = pbmc, vars.to.regress = c("nUMI", "percent.mito"), do.par = T, num.cores = par.Cores)
+pbmc <- ScaleData(object = pbmc, vars.to.regress = c("nUMI", "percent.mito"), do.par = T, num.cores = 48)
 ```
 
 ### Filtered Dimensions
