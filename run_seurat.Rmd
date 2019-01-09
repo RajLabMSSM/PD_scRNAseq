@@ -6,7 +6,7 @@ author: |
   | Department of Neuroscience
   | Icahn School of Medicine at Mount Sinai
   | NYC, New York
-date: "12/26/2018" 
+date: "`r Sys.Date()`"
 output: 
   rmarkdown::html_document: 
     theme: spacelab
@@ -100,6 +100,7 @@ print(paste("Seurat ", packageVersion("Seurat")))
 
 ## Load Data
 ```{r Load Data }   
+## ! IMPORTANT! Must not setwd to local path when launching on cluster
 # setwd("~/Desktop/PD_scRNAseq/")
 dir.create(file.path(root,"Data"), showWarnings=F) 
 load(file.path(root,"Data/seurat_object_add_HTO_ids.Rdata"))
