@@ -100,7 +100,7 @@ print(paste("Seurat ", packageVersion("Seurat")))
 
 ## Load Data
 ```{r Load Data }   
-setwd("~/Desktop/PD_scRNAseq/")
+# setwd("~/Desktop/PD_scRNAseq/")
 dir.create(file.path(root,"Data"), showWarnings=F) 
 load(file.path(root,"Data/seurat_object_add_HTO_ids.Rdata"))
 pbmc <- seurat.obj  
