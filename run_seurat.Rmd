@@ -65,7 +65,9 @@ library(ggplot2)
 library(reshape2)
 library(shiny) 
 library(ggrepel)
-library(DT)
+library(DT) 
+ 
+ 
 # 
 # install.packages('devtools')
 # devtools::install_github('talgalili/heatmaply')
@@ -76,7 +78,8 @@ library(DT)
 library(biomaRt)
 # BiocManager::install(c("DESeq2"))
 library(DESeq2)
-
+# library(snow); #BiocManager::install("Rmpi") #NOTE: different lib name than install name (snow vs Rmpi)
+ 
 createDT <- function(DF, caption="", scrollY=500){
   data <- datatable(DF, caption=caption,
     extensions = 'Buttons',
@@ -274,7 +277,8 @@ pbmc <- FindVariableGenes(object = pbmc, mean.function = ExpMean, dispersion.fun
     x.low.cutoff = 0.0125, x.high.cutoff = 3, y.cutoff = 0.5)
 
 # IMPORTANT!: Must set do.par=T and num.cors = n for large datasets being processed on computing clusters
-pbmc <- ScaleData(object = pbmc, vars.to.regress = c("nUMI", "percent.mito"), do.par = T, num.cores = nCores)
+par.Cores <- ifelse(nCores <= 12, 48, nCores)
+pbmc <- ScaleData(object = pbmc, vars.to.regress = c("nUMI", "percent.mito"), do.par = T, num.cores = par.Cores)
 ```
 
 ### Filtered Dimensions
