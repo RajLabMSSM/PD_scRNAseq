@@ -19,9 +19,10 @@ output:
     self_contained: true  
 params:
   subsetGenes: "protein_coding" #FALSE
-  subsetCells: 400 #FALSE
+  subsetCells: 500 #FALSE
   resolution: 0.6
-  resultsPath: "./" 
+  resultsPath: "./"
+  interactive: FALSE
 ---
  
 
@@ -34,19 +35,20 @@ resultsPath=file.path(getwd(),"Results")
 nCores <- parallel::detectCores()#params$nCores
 subsetGenes <- params$subsetGenes 
 subsetCells <- params$subsetCells 
-resolution <-  as.numeric(params$resolution)   
+resolution <-  as.numeric(params$resolution)
+interactive <- params$interactive 
 
 root <- getwd()
 # Have to setwd via knitr
 # knitr::opts_knit$set(root.dir=resultsPath, child.path = resultsPath)
-knitr::opts_chunk$set(echo=T, error=T, root.dir = resultsPath, 
-                      cache=T, cache.lazy=T
+knitr::opts_chunk$set(echo=T, error=T, root.dir = resultsPath 
+                      # cache=T, cache.lazy=T
                       ) 
 
 # Utilize parallel processing later on
 print(paste("**** Utilized Cores **** =", nCores))   
 
-params
+params 
 ```
 
 ** `r params$resultsPath` **
@@ -79,12 +81,13 @@ library(DESeq2)
 # library(snow); #BiocManager::install("Rmpi") #NOTE: different lib name than install name (snow vs Rmpi)
  
 createDT <- function(DF, caption="", scrollY=500){
-  data <- datatable(DF, caption=caption,
-    extensions = 'Buttons',
+  data <- DT::datatable(DF, caption=caption,
+    extensions = list('Buttons','Scroller'),
     options = list( dom = 'Bfrtip', 
                     buttons = c('copy', 'csv', 'excel', 'pdf', 'print'), 
-                    scrollY = scrollY, paging = F
-              )
+                    scrollY = scrollY, scrollX=T, scrollCollapse = T, paging = F,  
+                      columnDefs = list(list(className = 'dt-center', targets = "_all"))
+    )
   ) 
    return(data)
 }
@@ -275,8 +278,12 @@ pbmc <- FindVariableGenes(object = pbmc, mean.function = ExpMean, dispersion.fun
     x.low.cutoff = 0.0125, x.high.cutoff = 3, y.cutoff = 0.5)
 
 # IMPORTANT!: Must set do.par=T and num.cors = n for large datasets being processed on computing clusters
+# IMPORTANT!: Use only the var.genes identified by 'FindVariableGenes' as the 'gene.use' arg in 'ScaleData'
+## This will greatly reduced the computational load.
+
 # par.Cores <- ifelse(nCores <= 12, 48, nCores)
-pbmc <- ScaleData(object = pbmc, vars.to.regress = c("nUMI", "percent.mito"), do.par = T, num.cores = nCores)
+pbmc <- ScaleData(object = pbmc, genes.use = pbmc@var.genes, vars.to.regress = c("nUMI", "percent.mito"), 
+                  do.par = T, num.cores = nCores)
 ```
 
 ### Filtered Dimensions
@@ -385,13 +392,19 @@ We first construct a KNN graph based on the euclidean distance in PCA space, and
 
 **On Resolution**  
 The FindClusters function implements the procedure, and contains a resolution parameter that sets the ‘granularity’ of the downstream clustering, with increased values leading to a greater number of clusters. We find that setting this parameter between 0.6-1.2 typically returns good results for single cell datasets of around 3K cells. Optimal resolution often increases for larger datasets. The clusters are saved in the object@ident slot.
+
+* To further increase speed, you can employ an approximate nearest neighbor search via the RANN package by increasing the nn.eps + parameter. Setting this at 0 (the default) represents an exact neighbor search.
+* By default, we perform 100 random starts for clustering and select the result with highest modularity. You can lower this through the n.start parameter to reduce clustering time.
+
+
 ```{r Cluster Cells} 
 # TRY DIFFERENT RESOLUTIONS
 pbmc <- StashIdent(object = pbmc, save.name = "pre_clustering") 
 # pbmc <- SetAllIdent(object = pbmc, id = "pre_clustering") 
 
 pbmc <- FindClusters(object = pbmc, reduction.type = "pca", dims.use = 1:10, 
-                     resolution = resolution, print.output = 0, save.SNN = T) 
+                     resolution = resolution, print.output = F, save.SNN = T, 
+                     n.start = 10, nn.eps = 0.5) 
 PrintFindClustersParams(object = pbmc) 
 
 pbmc <- StashIdent(object = pbmc, save.name = "post_clustering") 
@@ -412,13 +425,16 @@ DimPlot(object = pbmc, reduction.use = 'umap')
 As input to the tSNE, we suggest using the same PCs as input to the clustering analysis, although computing the tSNE based on scaled gene expression is also supported using the genes.use argument.  
 
 ** Important!**: Specify num_threads=0 in 'RunTSNE' to use all available cores.
+
+"FItSNE", a new fast implementation of t-SNE, is also available through RunTSNE. However FItSNE must first be setup on your computer.
 ```{r t-SNE } 
 labSize <- 6 
 
 pbmc <- RunTSNE(object=pbmc,  reduction.use = "pca", dims.use = 1:10, do.fast = TRUE, 
-                tsne.method = "Rtsne", num_threads=0) # num_threads
+                tsne.method = "Rtsne", num_threads=0) #   FItSNE
 # note that you can set do.label=T to help label individual clusters
-TSNEPlot(object = pbmc, do.label=T, label.size = labSize, do.return=T) %>% ggplotly() 
+tp <- TSNEPlot(object = pbmc, do.label=T, label.size = labSize, do.return=T) 
+ifelse(interactive, tp %>% ggplotly() %>% toWebGL() %>% print(), print(tp))
 ```
 
 
@@ -429,18 +445,21 @@ tSNE_metadata_plot <- function(var){
   print(paste("t-SNE Metadata plot for ", var))
   # Metadata plot 
   p1 <- TSNEPlot(pbmc, do.return = T,  do.label = T,  group.by = var, pt.size=1,
-                 plot.title=paste("Color by ",var), vector.friendly=T) %>% ggplotly() %>% 
-     layout(legend = list(orientation = 'h', xanchor = "center", x = 0.5, y = .999)) 
+                 plot.title=paste("Color by ",var), vector.friendly=T) + theme(legend.position = "top")
+     # layout(legend = list(orientation = 'h', xanchor = "center", x = 0.5, y = .999)) 
+     
   # t-SNE clusters plot
   p2 <- TSNEPlot(pbmc, do.return = T, do.label = T, pt.size=1,
-                 plot.title=paste("Color by Clusters"), vector.friendly=T) %>% ggplotly() %>% 
-  layout(legend = list(orientation = 'h', xanchor = "center", x = 0.5, y = .999)) 
+                 plot.title=paste("Color by Clusters"), vector.friendly=T)  + theme(legend.position = "top")
+  # layout(legend = list(orientation = 'h', xanchor = "center", x = 0.5, y = .999))  
   #print(plot_grid(ggplotly(p1), ggplotly(p2)))
-  fluidPage( 
-    fluidRow(
-      column(6, p1), column(6, p2) 
+  if(interactive==T){
+    fluidPage( 
+      fluidRow(
+        column(6, p1), column(6, p2) 
+      )
     )
-  )
+  } else{return(plot_grid(p1,p2))}
 }   
 # metaVars <- c(dx","mut","Gender","Age")
 # 
@@ -459,25 +478,25 @@ tSNE_metadata_plot <- function(var){
 
 ### tSNE Disease
 
-```{r tSNE dx}
+```{r tSNE dx, fig.width=12}
 tSNE_metadata_plot("dx") 
 ```
 
 ### Mutations
 
-```{r tSNE mut}
+```{r tSNE mut, fig.width=12}
 tSNE_metadata_plot("mut") 
 ```
 
 ### Gender
 
-```{r tSNE Gender}
+```{r tSNE Gender, fig.width=12}
 tSNE_metadata_plot("Gender") 
 ```
 
 ### Age
 
-```{r tSNE Age}
+```{r tSNE Age, fig.width=12}
 tSNE_metadata_plot("Age") 
 ```
 
@@ -493,8 +512,10 @@ Shown here: Biomarkers of each cluster vs. all other clusters.
 ### All Biomarkers
 
 ```{r All Biomarkers} 
-pbmc.markers <- FindAllMarkers(object = pbmc, only.pos = TRUE, 
-                               min.pct = 0.25, thresh.use = 0.25)
+# Limit to only top variable genes?: 
+# Set arg 'only.pos=F' to capture negative biomarkers
+pbmc.markers <- FindAllMarkers(object = pbmc, min.pct = 0.25, thresh.use = 0.25,  only.pos = F,  test.use = "wilcox")
+pbmc.markers <- pbmc.markers %>% mutate(FC = 2^avg_logFC)
 createDT(pbmc.markers, caption = paste("All Biomarkers: All Clusters"))
 ```
 
@@ -586,7 +607,7 @@ volcanoPlot <- function(DEG_df, caption="", topFC_labeled=5){
 
 for (clust in unique(pbmc.markers$cluster)){
    cat('\n')   
-   cat("### Cluster ",clust,"\n") 
+   cat("### Cluster ",clust,": Volcano") 
    cap <- paste("Cluster",clust,"DEG Table") 
    DEG_df <- subset(pbmc.markers, cluster==as.character(clust)) %>% arrange(desc(avg_logFC))  
    volcanoPlot(DEG_df, caption = cap)
@@ -609,11 +630,12 @@ fp <- FeaturePlot(object = pbmc, features.plot = top1$gene, cols.use = c("grey",
 
 ### Biomarkers Heatmap
 
-```{r Biomarkers Heatmap }
+```{r Biomarkers Heatmap}
 top5 <- pbmc.markers %>% group_by(cluster) %>% top_n(5, avg_logFC)
 # setting slim.col.label to TRUE will print just the cluster IDS instead of
 # every cell name
-DoHeatmap(object = pbmc, genes.use = top5$gene, slim.col.label=T, remove.key=T) %>% ggplotly()
+p <- DoHeatmap(object = pbmc, genes.use = top5$gene, slim.col.label=T, remove.key=T) 
+ifelse(interactive, p %>% ggplotly() %>% toWebGL() %>% print(), print(p))
 ```
 
 ### Biomarkers Ridgeplot
@@ -622,6 +644,16 @@ DoHeatmap(object = pbmc, genes.use = top5$gene, slim.col.label=T, remove.key=T) 
 RidgePlot(pbmc, features.plot = top1$gene,  nCol = nCols, do.sort = F)
 ```
 
+### Biomarkers Split Dot Plot
+
+Visualize biomarker expression for each cluster, by disease
+
+```{r Biomarkers Split Dot Plot} 
+top2 <- pbmc.markers %>% group_by(cluster) %>% top_n(2, avg_logFC)
+
+sdp <- SplitDotPlotGG(pbmc, genes.plot = top2$gene, cols.use = c("blue","red"), 
+                      x.lab.rot = T, plot.legend = T, dot.scale = 8, do.return = T, grouping.var = "dx")
+```
 
 # Map Clusters to Known Biomarkers
 
@@ -629,6 +661,9 @@ RidgePlot(pbmc, features.plot = top1$gene,  nCol = nCols, do.sort = F)
  + Classical: CD14++ / CD16--
  + Intermediate: CD14++ / CD16+
  + Nonclassical: CD14+ / CD16++ (not captured in this data)
+ 
+ The following plots show the absolute expression of each biomarker, 
+ as opposed to avg_logFC which is dependent on the expression patterns of other cell types being compared.
   
 ## Markers Dataframe
 
@@ -636,14 +671,10 @@ RidgePlot(pbmc, features.plot = top1$gene,  nCol = nCols, do.sort = F)
 markerList <- c("CD14", "FCGR3A") 
  
 get_markerDF <- function(pbmc, markerList){
-  marker.matrix <- pbmc@scale.data[row.names(pbmc@scale.data) %in% markerList, ]   
-  markerMelt <- reshape2:::melt.matrix(marker.matrix)
-  colnames(markerMelt) <- c("Gene", "Cell", "Expression")
-  # Fuse metadata
-  # clusterData <- data.frame(pbmc@ident)  
-  # clusterData$Cell <- row.names(clusterData)
-  # colnames(clusterData) <- c("Cluster","Cell")  
-  # markerDF <- merge(markerMelt,  clusterData, by = "Cell")
+  exp <- pbmc@scale.data %>% data.frame() 
+  marker.matrix <- exp[row.names(exp) %in% markerList, ] 
+  marker.matrix$Gene <- row.names(marker.matrix)
+  markerMelt <- reshape2:::melt.data.frame(marker.matrix, id.vars = "Gene", variable.name = "Cell",value.name = "Expression") 
   metaSelect <-  pbmc@meta.data[,c("barcode", "dx", "mut","post_clustering",
                                    "percent.mito","nGene", "nUMI")] 
   markerDF <- merge(markerMelt,metaSelect, by.x="Cell", by.y="barcode") 
@@ -700,45 +731,84 @@ marker_vs_metadata(markerDF, "mut")
 
 
 
-## Defining Cell-types by Markers 
+## Defining Cell-types  
 
-A simplistic way of categorizing cells into CD14++/CD16+ and CD14++/CD16--, is by splitting cells into groups based on whether their expression is higher or lower than the average CD16 expression of all cells.
+### Identify Cell Types By DEGs
 
-```{r Defining Cell-types by Markers}
-orig_meta.data <- pbmc@meta.data
-################################
+* Classification Approach 1
+  + Go through each cluster and see what biomarkers they have through DGE. 
+  + If a cluster has a known gene marker within their top N biomarkers (with the right valence +/-), 
+classify all cells within that cluster as a given cell type.
+  + __Drawback__: The biomarkers that DGE identifies for each cluster will depend on the composition of the other cells. 
+So some clusters may remain unidentified simply by the fact that they didn't have the proper cells to be compared to.
+```{r Identify Cell Types By DEGs} 
+identify_cellTypes_by_biomarkers <- function(pbmc.markers, topN_search=5){
+  top <- pbmc.markers %>% group_by(cluster) %>% top_n(topN_search, avg_logFC) 
+  clust_cellTypes <- list()
+  for (clust in top$cluster){ 
+    clustSub <- top[top5$cluster==clust, ]
+    CD16_logFC <- subset(clustSub, gene=="CFD")$avg_logFC 
+    
+    cellType <- ifelse(sum(markerList %in% clustSub$gene), # Both CD14 and CD16? Great, keep going
+           ifelse(CD16_logFC == abs(CD16_logFC), "CD14++/CD16+",  # But does CD16 have pos logfC? If so, then it's "CD14++/CD16+"
+                  "CD14++/CD16--"), # Otherwise, it means it means CD16 logFC is neg, meaning "CD14++/CD16--"
+           "N/A") # If it's none of these, it's an undefined cell type 
+     clust_cellTypes[clust] <- cellType
+  }
+  newMeta <- pbmc@meta.data
+  newMeta["CellType_DGE"] <- plyr::mapvalues(metaD$post_clustering, names(clust_cellTypes), as.character(clust_cellTypes) )  
+  pbmc <- AddMetaData(pbmc, metadata = newMeta)
+  return(pbmc)
+} 
+pbmc <- identify_cellTypes_by_biomarkers(pbmc.markers, 5)
 
-avgMarkerExp <-markerDF %>% group_by(Gene) %>% dplyr::summarise(meanExp = mean(Expression))
-avgMarkerExp <- setNames(avgMarkerExp$meanExp, avgMarkerExp$Gene)
+# (Doesn't make sense to do bar plot because whole clusters are defined by their biomarkers)
 
-CD16 <- markerDF[markerDF$Gene=="FCGR3A",]
-CD16_group <- ifelse(CD16$Expression >= avgMarkerExp["FCGR3A"], 
-                             "CD14++/CD16+", "CD14++/CD16--") 
-CD16["CD16_group"]  <- CD16_group
+tSNE_metadata_plot("CellType_DGE")
+```
 
 
-# Make sure row order is same before putting back into meta.data    
-metaD <- pbmc@meta.data
-newMeta <- merge(metaD, CD16[,c("Cell","CD16_group")], by.x="barcode", by.y="Cell")
-row.names(newMeta) <- row.names(metaD)
-pbmc <- AddMetaData(pbmc, metadata = newMeta)
+
+## Identify Cell Types By Average Expression
+
+* Classification Approach 2
+  + Alternatively, you could classify cells by their absolute expression values. 
+  E.g. If any cell expresses CD16 more than the average expression of CD16 across all cells, then classify it as CD16+.
+  + __Drawback__: The threshold for classifying a cell as either CD16+ or CD16-- is defined rather arbitrarily
+  (the average expression of CD16 in this sample isn't necessarily biologically meaningful).
+```{r Identify Cell Types By Average Expression}  
+# A simplistic way of categorizing cells into CD14++/CD16+ and CD14++/CD16--, 
+## is by splitting cells into groups based on whether their expression is 
+## higher or lower than the average CD16 expression of all cells.
+identify_cellTypes_by_avgExpression <- function(pbmc, markerDF){
+  avgMarkerExp <-markerDF %>% group_by(Gene) %>% dplyr::summarise(meanExp = mean(Expression))
+  avgMarkerExp <- setNames(avgMarkerExp$meanExp, avgMarkerExp$Gene)
+  CD16 <- markerDF[markerDF$Gene=="FCGR3A",]
+  CD16_group <- ifelse(CD16$Expression >= avgMarkerExp["FCGR3A"], "CD14++/CD16+", "CD14++/CD16--")
+  CD16["CellType_AvgExp"]  <- CD16_group
+  # Make sure row order is same before putting back into meta.data
+  metaD <- pbmc@meta.data
+  newMeta <- merge(metaD, CD16[,c("Cell","CellType_AvgExp")], by.x="barcode", by.y="Cell")
+  row.names(newMeta) <- row.names(metaD)
+  pbmc <- AddMetaData(pbmc, metadata = newMeta)
+  return(pbmc)
+}
+pbmc <- identify_cellTypes_by_avgExpression(pbmc, markerDF)
  
-
 # Get proportions of cell types in each cluster
-cluster_proportions <- newMeta %>% group_by(CD16_group, post_clustering) %>% 
+cluster_proportions <- pbmc@meta.data %>% group_by(CellType_AvgExp, post_clustering) %>% 
   tally() %>%
-  group_by(CD16_group) %>%
+  group_by(post_clustering, CellType_AvgExp) %>%
   mutate(percentTotal = n/sum(n)*100)
 
-
-ggplot(cluster_proportions, aes(x=post_clustering, y=percentTotal, fill=CD16_group)) + geom_col(position = "fill") +  
-  labs(title="Proportions of Cell-types per Cluster", 
+ggplot(cluster_proportions, aes(x=post_clustering, y=percentTotal, fill=CellType_AvgExp)) + geom_col(position = "fill") +  
+  labs(title="Proportions of Cell-types per Cluster: \n CellType_AvgExp", 
        x="Cluster", y="Cell Type / Total Cells") +
   scale_fill_manual(values=c("brown", "slategray"))
  
- 
-tSNE_metadata_plot("CD16_group")
+tSNE_metadata_plot("CellType_AvgExp")
 ```
+
 
 
 
@@ -749,17 +819,21 @@ tSNE_metadata_plot("CD16_group")
 ### Average Expression: By Clusters
 
 ```{r Clusters Averaged}
+markerDF <- markerDF %>% mutate(Cluster = post_clustering)
 # Show mean exp for each marker
 avgMarker <- markerDF %>% group_by(Gene, Cluster) %>% summarise(meanExp = mean(Expression)) 
-ggplot(data = avgMarker, aes(x=Gene, y=Cluster, fill=meanExp)) %>% + geom_tile() %>% + scale_fill_distiller(palette="viridis") %>% ggplotly()
+
+p <- ggplot(data = avgMarker, aes(x=Gene, y=Cluster, fill=meanExp)) %>% + geom_tile() %>% + scale_fill_distiller(palette="viridis") 
+ifelse(interactive, p %>% ggplotly() %>% toWebGL() %>% print(), print(p))
 ```
 
 ### Average Expression: By Disease
 
 ```{r Average Expression: By Clusters}
 # Show mean exp for each marker
-avgMarker <- markerDF %>% group_by(Gene, dx) %>% summarise(meanExp = mean(Expression)) 
-ggplot(data = avgMarker, aes(x=Gene, y=Cluster, fill=meanExp)) %>% + geom_tile() %>% + scale_fill_distiller(palette="viridis") %>% ggplotly()
+avgMarker <- markerDF %>% group_by(Gene, dx, Cluster) %>% summarise(meanExp = mean(Expression)) 
+p <- ggplot(data = avgMarker, aes(x=Gene, y=Cluster, fill=meanExp)) %>% + geom_tile() %>% + scale_fill_distiller(palette="viridis") 
+ifelse(interactive, p %>% ggplotly() %>% toWebGL() %>% print(), print(p))
 ```
 
 
@@ -778,57 +852,60 @@ Spectral <- grDevices::colorRampPalette(RColorBrewer::brewer.pal(length(unique(p
 heatmaply::heatmaply(markerMelt,  key.title="Expression",#plot_method= "plotly",
           k_row = length(unique(pbmc.markers)), dendrogram = "row",
           showticklabels = c(T, F), xlab = "Known Markers", ylab = "Cells", column_text_angle = 0,
-          row_side_colors =  pbmc@meta.data[,c("dx","mut")], row_side_palette = Spectral
+          row_side_colors =  pbmc@meta.data[,c("dx","mut", "CellType_DGE")], row_side_palette = Spectral
           )  %>%  colorbar(tickfont = list(size = 12), titlefont = list(size = 14), which = 2)  %>% 
-          colorbar(tickfont = list(size = 12), titlefont = list(size = 14), which = 1) 
+          colorbar(tickfont = list(size = 12), titlefont = list(size = 14), which = 1)
 ```
 
 
 ## Known Biomarkers: Boxplot
 
 ```{r Known Biomarkers: Boxplot} 
-ggplot(data = markerDF, aes(x=post_clustering, y=Expression, fill=Gene)) %>% 
-  + geom_boxplot(alpha=0.5) %>% + scale_fill_manual(values=c("purple", "turquoise")) # %>% ggplotly()  
+ggplot(data = markerDF, aes(x=Cluster, y=Expression, fill=Gene)) %>% 
+  + geom_boxplot(alpha=0.5) %>% + scale_fill_manual(values=c("purple", "turquoise"))  
 ```
 
 
 
 ##  Known Biomarkers: tSNE
 
-```{r Known Biomarkers: tSNE code, echo = T, results = 'hide', fig.show='hide'}
+```{r Known Biomarkers: tSNE code}
+#, results = 'hide', fig.show='hide'
 expressionTSNE <- function(pbmc, marker, colors=c("grey", "red")){
-  FeaturePlot(object = pbmc, features.plot = marker, cols.use = colors, 
-    reduction.use = "tsne", nCol=2, do.return = T, dark.theme = T)[[1]] %>% ggplotly()
+  p <- FeaturePlot(object = pbmc, features.plot = marker, cols.use = colors, 
+    reduction.use = "tsne", nCol=2, do.return = T, dark.theme = T)[[1]]
+  p <- ifelse(interactive, p %>% ggplotly() %>% toWebGL(), print(p))
+  return(p)
 }
 tp1 <- expressionTSNE(pbmc, markerList[1])
 tp2 <- expressionTSNE(pbmc, markerList[2], colors=c("grey", "green"))
 ```
 ```{r Known Biomarkers: tSNE}
-subplot(tp1, tp2)
+if(interactive==T){
+    subplot(tp1, tp2, titleX = T, titleY = T ) 
+}
 ```
 
 
-## Label Clusters by Known Biomarker 
+## Label Clusters by DGE Biomarkers
 
-```{r Label Clusters by Biomarker }
+```{r Label Clusters by DGE Biomarkers }
 current.cluster.ids <- unique(pbmc.markers$cluster) #c(0, 1, 2, 3, 4, 5, 6, 7)
 top1 <- pbmc.markers %>% group_by(cluster) %>% top_n(1, avg_logFC)
 new.cluster.ids <- top1$gene #c("CD4 T cells", "CD14+ Monocytes", "B cells", "CD8 T cells", "FCGR3A+ Monocytes", "NK cells", "Dendritic cells", "Megakaryocytes")
 
 pbmc@ident <- plyr::mapvalues(x = pbmc@ident, from = current.cluster.ids, to = new.cluster.ids)
-TSNEPlot(object=pbmc, do.label=T, pt.size=0.5, do.return=T) %>% ggplotly()
+p <- TSNEPlot(object=pbmc, do.label=T, pt.size=0.5, do.return=T) 
+ifelse(interactive, p %>% ggplotly() %>% toWebGL() %>% print(), print(p)) 
 ```
 
 
-# Differential Gene Expression 
+# DGE: All Cells {.tabset .tabset-fade .tabset-pills}
 
 - DGE methods available in Seurat include:
  + DESeq2DETest()
  + DiffExpTest()
- + DiffTTest()
-
-## DGE: All Cells {.tabset .tabset-fade .tabset-pills}
-
+ + DiffTTest() 
 ```{r DGE: All Cells} 
 # Available DGE methods:
 ## "wilcox", "bimod", "roc", "t", "tobit", "poisson", "negbinom", "MAST", "DESeq2"
@@ -842,8 +919,7 @@ runDGE <- function(pbmc, meta_var, group1, group2, test.use="wilcox"){
 }
 ```
 
-
-### PD vs. Controls
+## PD vs. Controls
 
 ```{r DGE: PD vs. Controls}
 DEG_df <-runDGE(pbmc, "dx", group1 = "PD", group2="control")
@@ -853,7 +929,7 @@ createDT(DEG_df, caption = cap)
 volcanoPlot(DEG_df, caption = cap)
 ```
 
-### LRRK vs. PD
+## LRRK vs. PD
 
 ```{r DGE: LRRK2 vs. PD} 
 DEG_df <-runDGE(pbmc, "mut", "LRRK2", "PD")
@@ -863,10 +939,10 @@ createDT(DEG_df, caption = cap)
 volcanoPlot(DEG_df, caption = cap)
 ```
 
-### LRRK vs. PD
+## DGE: CD14++/CD16+ vs. CD14++/CD16--
 
 ```{r DGE: CD14++/CD16+ vs. CD14++/CD16--}  
-DEG_df <-runDGE(pbmc, "CD16_group", "CD14++/CD16+", "CD14++/CD16--")
+DEG_df <-runDGE(pbmc, "CellType_DGE", "CD14++/CD16+", "CD14++/CD16--")
 cap <- paste("DEGs (All Cells): CD14++/CD16+ vs. CD14++/CD16--")
 
 createDT(DEG_df, caption = cap)
@@ -876,114 +952,82 @@ volcanoPlot(DEG_df, caption = cap)
 
 # DGE: Within Clusters
 
+```{r DGE: Within Clusters: function} 
+DGE_within_clusters <- function(pbmc, meta_var, group1, group2){
+  for (clust in unique(pbmc@ident)){
+    # Subset cells by cluster
+   pbmc <- SetAllIdent(pbmc, id = "post_clustering")
+   pbmc_clustSub <- SubsetData(pbmc, ident.use = clust, subset.raw = T) 
+   cap <- paste("Cluster ",clust,": \n ",group1," vs. ", group2, sep="") 
+   cat('\n')   
+   cat("### ",cap)
+   # DGE
+   DEG_df <-runDGE(pbmc_clustSub, meta_var, group1 , group2 ) 
+   # Show results
+   volcanoPlot(DEG_df, caption = cap)
+   createDT(DEG_df, caption = cap)
+   cat('\n')   
+  } 
+}
+```
+
+
 ## Between Disease Groups {.tabset .tabset-fade .tabset-pills}
 
-```{r Between Disease Groups}  
-for (clust in unique(pbmc@ident)){
-    # Subset cells by cluster
-   pbmc <- SetAllIdent(pbmc, id = "post_clustering")
-   pbmc_clustSub <- SubsetData(pbmc, ident.use = clust, subset.raw = T) 
-   cap <- paste("Cluster ",clust,": PD vs. Control", sep="")
-   
-   cat('\n')   
-   cat("### ",cap)
-   # DGE
-   DEG_df <-runDGE(pbmc_clustSub, "dx", group1 = "PD", group2="control") 
-   # Show results
-   volcanoPlot(DEG_df, caption = cap)
-   createDT(DEG_df, caption = cap)
-   cat('\n')   
-} 
+```{r Between Disease Groups}   
+DGE_within_clusters(pbmc, "dx", "PD", "control") 
 ```
 
 ## Between Mutation Groups {.tabset .tabset-fade .tabset-pills}
 
-```{r Between Mutation Groups}  
-for (clust in unique(pbmc@ident)){
-    # Subset cells by cluster
-   pbmc <- SetAllIdent(pbmc, id = "post_clustering")
-   pbmc_clustSub <- SubsetData(pbmc, ident.use = clust, subset.raw = T) 
-   cap <- paste("Cluster ",clust,": LRRK2 vs. PD", sep="")
-   
-   cat('\n')   
-   cat("### ",cap)
-   # DGE
-   DEG_df <-runDGE(pbmc_clustSub, "mut", group1 = "LRKK2", group2="PD") 
-   # Show results
-   volcanoPlot(DEG_df, caption = cap)
-   createDT(DEG_df, caption = cap)
-   cat('\n')   
-} 
+```{r Between Mutation Groups}
+DGE_within_clusters(pbmc, "mut", "LRKK2", "PD")
 ```
 
 ## Between Mutation Groups {.tabset .tabset-fade .tabset-pills}
 
-```{r Between Known Cell Types}  
-for (clust in unique(pbmc@ident)){
-    # Subset cells by cluster
-   pbmc <- SetAllIdent(pbmc, id = "post_clustering")
-   pbmc_clustSub <- SubsetData(pbmc, ident.use = clust, subset.raw = T) 
-   cap <- paste("Cluster ",clust,": CD14++/CD16+ vs. CD14++/CD16--", sep="")
-   
-   cat('\n')   
-   cat("### ",cap)
-   # DGE
-   DEG_df <-runDGE(pbmc_clustSub, "CD16_group", 
-                   group1 = "CD14++/CD16+", group2="CD14++/CD16--") 
-   # Show results
-   volcanoPlot(DEG_df, caption = cap)
-   createDT(DEG_df, caption = cap)
-   cat('\n')   
-} 
+```{r Between Known Cell Types}
+DGE_within_clusters(pbmc, "CellType_DGE", "CD14++/CD16+", "CD14++/CD16--") 
+DGE_within_clusters(pbmc, "CellType_AvgExp", "CD14++/CD16+", "CD14++/CD16--")
 ```
 
 
 
-# Cell Sub-clusters {.tabset .tabset-fade .tabset-pills}
+# Try Different Cluster Resolutions {.tabset .tabset-fade .tabset-pills}
 
-Further subdivisions within cell types.  
 If you perturb some of our parameter choices above (for example, setting resolution=0.8 or changing the number of PCs), you might see the CD4 T cells subdivide into two groups. You can explore this subdivision to find markers separating the two T cell subsets. However, before reclustering (which will overwrite object@ident), we can stash our renamed identities to be easily recovered later.
 
-## Assign Identity
+## Find New Clusters
 
-```{r Assign Identity, fig.width=12}
-# First lets stash our identities for later
-pbmc <- StashIdent(object = pbmc, save.name = "ClusterNames_0.6")
-
-# Note that if you set save.snn=T above, you don't need to recalculate the
-# SNN, and can simply put: pbmc <- FindClusters(pbmc,resolution = 0.8)
-pbmc <- FindClusters(object = pbmc, reduction.type = "pca", dims.use = 1:10, 
-    resolution = 0.8, print.output = FALSE)
+```{r Find New Clusters, fig.width=12}
+new_resolution <- 3.0
+orig_resolution <- paste("resolution",params$resolution,sep="_")
+pbmc <- StashIdent(object = pbmc, save.name = orig_resolution) 
 
 ## Warning in BuildSNN(object = object, genes.use = genes.use, reduction.type
 ## = reduction.type, : Build parameters exactly match those of already
 ## computed and stored SNN. To force recalculation, set force.recalc to TRUE.
+pbmc <- FindClusters(object = pbmc, reduction.type = "pca", dims.use = 1:10,
+                     resolution = new_resolution, print.output = F)
+pbmc <- StashIdent(object = pbmc, save.name = "resolution_3.0") 
 
-# Demonstration of how to plot two tSNE plots side by side, and how to color
-# points based on different criteria
 plot1 <- TSNEPlot(object = pbmc, do.return = TRUE, no.legend = TRUE, do.label = TRUE, label.size=labSize)
 plot2 <- TSNEPlot(object = pbmc, do.return = TRUE, group.by = "ClusterNames_0.6", 
                   no.legend = TRUE, do.label = TRUE, label.size=labSize)
 plot_grid(plot1, plot2)
 ```
 
-## Find Markers
+## Find New Biomarkers
 
-```{r Find Markers}
-# Find discriminating markers
-tcell.markers <- FindMarkers(object = pbmc, ident.1 = 0, ident.2 = 1)
-
-# Most of the markers tend to be expressed in C1 (i.e. S100A4). However, we
-# can see that CCR7 is upregulated in C0, strongly indicating that we can
-# differentiate memory from naive CD4 cells.  cols.use demarcates the color
-# palette from low to high expression
+```{r Find New Biomarkers}  
+res3.0_markers <- FindAllMarkers(object = pbmc, min.pct = 0.25, thresh.use = 0.25,  only.pos = F,  test.use = "wilcox")
 FeaturePlot(object = pbmc, features.plot = top1$gene, cols.use = c("green", "blue"))
 
-pbmc <- SetAllIdent(object = pbmc, id = "ClusterNames_0.6") 
+# Set back to orig
+pbmc <- SetAllIdent(object = pbmc, id = orig_resolution) 
 ```
 
- 
-
+# Save Results
 
 ```{r Save Results} 
 # Save results for EACH run (in their respective subfolders)
