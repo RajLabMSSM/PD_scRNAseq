@@ -1,8 +1,8 @@
 #!/bin/bash
-#BSUB -J PD_scRNAseq_rmarkdown_n48_ptile12  # Name of job
+#BSUB -J PD_scRNAseq_rmarkdown_n24_ptile12  # Name of job
 #BSUB -P acc_ad-omics		    # Project to charge time
 #BSUB -q premium		    # Target queue for job execution
-#BSUB -n 48			    # Number of cores required
+#BSUB -n 24			    # Number of cores required
 #BSUB -R span[ptile=12]		    # Number of cores per host 
 #BSUB -R rusage[mem=12000]	    # Memory per core
 #BSUB -W 2:00			    # Time requested 

@@ -66,6 +66,7 @@ library(reshape2)
 library(shiny) 
 library(ggrepel)
 library(DT) 
+library(ComplexHeatmap); #BiocManager::install("ComplexHeatmap") 
  
  
 # 
@@ -309,7 +310,7 @@ vp
 ```{r percent.mito - process, echo = T, results = 'hide', fig.show='hide'} 
 # par(mfrow = c(1, 2))
 gp1 <- GenePlot(object = pbmc, gene1 = "nUMI", gene2 = "percent.mito", pch.use=20, 
-         do.hover=T, data.hover = "mut")
+         do.hover=ifelse(interactive==T, T, F), data.hover = "mut")
 ```
 
 ```{r percent.mito - plot} 
@@ -320,7 +321,7 @@ gp1
 
 ```{r nGene - process, echo = T, results = 'hide', fig.show='hide'}
 gp2 <- GenePlot(object = pbmc, gene1 = "nUMI", gene2 = "nGene", pch.use=20, 
-         do.hover=T, data.hover = "mut")
+         do.hover=ifelse(interactive==T, T, F), data.hover = "mut")
 ```
 
 ```{r nGene - plot}
@@ -364,7 +365,7 @@ VizPCA(object = pbmc, pcs.use = 1:2)
 ### PCA plot
 
 ```{r PCAplot} 
-PCAPlot(object = pbmc, dim.1 = 1, dim.2 = 2, do.hover=T, data.hover="mut")
+PCAPlot(object = pbmc, dim.1 = 1, dim.2 = 2, do.hover=ifelse(interactive==T, T, F), data.hover="mut")
 ```
 
 ### PCHeatmaps
@@ -499,7 +500,11 @@ tSNE_metadata_plot("Gender")
 ```{r tSNE Age, fig.width=12}
 tSNE_metadata_plot("Age") 
 ```
+### Individual ID
 
+```{r tSNE Individual ID, fig.width=12}
+tSNE_metadata_plot("ID")  
+```
 
 # Cluster Biomarkers
 
@@ -670,13 +675,12 @@ sdp <- SplitDotPlotGG(pbmc, genes.plot = top2$gene, cols.use = c("blue","red"),
 ```{r Markers Dataframe}
 markerList <- c("CD14", "FCGR3A") 
  
-get_markerDF <- function(pbmc, markerList){
+get_markerDF <- function(pbmc, markerList, meta_vars =c("barcode", "dx", "mut","post_clustering", "percent.mito","nGene", "nUMI")){
   exp <- pbmc@scale.data %>% data.frame() 
   marker.matrix <- exp[row.names(exp) %in% markerList, ] 
   marker.matrix$Gene <- row.names(marker.matrix)
   markerMelt <- reshape2:::melt.data.frame(marker.matrix, id.vars = "Gene", variable.name = "Cell",value.name = "Expression") 
-  metaSelect <-  pbmc@meta.data[,c("barcode", "dx", "mut","post_clustering",
-                                   "percent.mito","nGene", "nUMI")] 
+  metaSelect <-  pbmc@meta.data[,meta_vars] 
   markerDF <- merge(markerMelt,metaSelect, by.x="Cell", by.y="barcode") 
   return(markerDF)
 }
@@ -741,7 +745,7 @@ marker_vs_metadata(markerDF, "mut")
 classify all cells within that cluster as a given cell type.
   + __Drawback__: The biomarkers that DGE identifies for each cluster will depend on the composition of the other cells. 
 So some clusters may remain unidentified simply by the fact that they didn't have the proper cells to be compared to.
-```{r Identify Cell Types By DEGs} 
+```{r Identify Cell Types By DEGs, fig.width=12} 
 identify_cellTypes_by_biomarkers <- function(pbmc.markers, topN_search=5){
   top <- pbmc.markers %>% group_by(cluster) %>% top_n(topN_search, avg_logFC) 
   clust_cellTypes <- list()
@@ -752,11 +756,11 @@ identify_cellTypes_by_biomarkers <- function(pbmc.markers, topN_search=5){
     cellType <- ifelse(sum(markerList %in% clustSub$gene), # Both CD14 and CD16? Great, keep going
            ifelse(CD16_logFC == abs(CD16_logFC), "CD14++/CD16+",  # But does CD16 have pos logfC? If so, then it's "CD14++/CD16+"
                   "CD14++/CD16--"), # Otherwise, it means it means CD16 logFC is neg, meaning "CD14++/CD16--"
-           "N/A") # If it's none of these, it's an undefined cell type 
-     clust_cellTypes[clust] <- cellType
+           NA) # If it's none of these, it's an undefined cell type 
+     clust_cellTypes[clust] <- as.factor(cellType)
   }
   newMeta <- pbmc@meta.data
-  newMeta["CellType_DGE"] <- plyr::mapvalues(metaD$post_clustering, names(clust_cellTypes), as.character(clust_cellTypes) )  
+  newMeta["CellType_DGE"] <- plyr::mapvalues(newMeta$post_clustering, names(clust_cellTypes), as.character(clust_cellTypes) )  
   pbmc <- AddMetaData(pbmc, metadata = newMeta)
   return(pbmc)
 } 
@@ -776,7 +780,7 @@ tSNE_metadata_plot("CellType_DGE")
   E.g. If any cell expresses CD16 more than the average expression of CD16 across all cells, then classify it as CD16+.
   + __Drawback__: The threshold for classifying a cell as either CD16+ or CD16-- is defined rather arbitrarily
   (the average expression of CD16 in this sample isn't necessarily biologically meaningful).
-```{r Identify Cell Types By Average Expression}  
+```{r Identify Cell Types By Average Expression, fig.width=12}  
 # A simplistic way of categorizing cells into CD14++/CD16+ and CD14++/CD16--, 
 ## is by splitting cells into groups based on whether their expression is 
 ## higher or lower than the average CD16 expression of all cells.
@@ -785,7 +789,7 @@ identify_cellTypes_by_avgExpression <- function(pbmc, markerDF){
   avgMarkerExp <- setNames(avgMarkerExp$meanExp, avgMarkerExp$Gene)
   CD16 <- markerDF[markerDF$Gene=="FCGR3A",]
   CD16_group <- ifelse(CD16$Expression >= avgMarkerExp["FCGR3A"], "CD14++/CD16+", "CD14++/CD16--")
-  CD16["CellType_AvgExp"]  <- CD16_group
+  CD16["CellType_AvgExp"]  <- as.factor(CD16_group)
   # Make sure row order is same before putting back into meta.data
   metaD <- pbmc@meta.data
   newMeta <- merge(metaD, CD16[,c("Cell","CellType_AvgExp")], by.x="barcode", by.y="Cell")
@@ -814,7 +818,7 @@ tSNE_metadata_plot("CellType_AvgExp")
 
 
 
-## Known Biomarkers: Heatmaps
+## Known Biomarkers: Heatmaps {.tabset .tabset-fade .tabset-pills}
 
 ### Average Expression: By Clusters
 
@@ -829,10 +833,10 @@ ifelse(interactive, p %>% ggplotly() %>% toWebGL() %>% print(), print(p))
 
 ### Average Expression: By Disease
 
-```{r Average Expression: By Clusters}
+```{r Average Expression: By Disease}
 # Show mean exp for each marker
 avgMarker <- markerDF %>% group_by(Gene, dx, Cluster) %>% summarise(meanExp = mean(Expression)) 
-p <- ggplot(data = avgMarker, aes(x=Gene, y=Cluster, fill=meanExp)) %>% + geom_tile() %>% + scale_fill_distiller(palette="viridis") 
+p <- ggplot(data = avgMarker, aes(x=Gene, y=dx, fill=meanExp)) %>% + geom_tile() %>% + scale_fill_distiller(palette="viridis") 
 ifelse(interactive, p %>% ggplotly() %>% toWebGL() %>% print(), print(p))
 ```
 
@@ -840,21 +844,66 @@ ifelse(interactive, p %>% ggplotly() %>% toWebGL() %>% print(), print(p))
 
 ### Cells Separated
 
-```{r Cells Separated}
-markerMelt <- reshape2::acast(markerDF, Cell~Gene, value.var="Expression", fun.aggregate = mean, drop = F, fill = 0) 
-
-#plot_ly(  z = markerMelt, y=row.names(markerMelt), z=colnames(markerMelt), type="heatmap")
-# dx_colors <- colorRampPalette(brewer.pal(2, "RdBu"))
-# mut_colors <- colorRampPalette(brewer.pal(length(unique(pbmc@meta.data$mut)), "Set3"))
+```{r Cells Separated} 
+markerDF <- get_markerDF(pbmc, markerList, 
+             meta_vars =c("barcode", "dx", "mut","ID","post_clustering", "percent.mito","nGene", "nUMI",
+                          "CellType_DGE","CellType_AvgExp"))
 Spectral <- grDevices::colorRampPalette(RColorBrewer::brewer.pal(length(unique(pbmc@meta.data$mut)), "Spectral"))
-# Spectral <- heatmaply::Spectral(length(unique(pbmc@meta.data$mut)))
 
-heatmaply::heatmaply(markerMelt,  key.title="Expression",#plot_method= "plotly",
-          k_row = length(unique(pbmc.markers)), dendrogram = "row",
-          showticklabels = c(T, F), xlab = "Known Markers", ylab = "Cells", column_text_angle = 0,
-          row_side_colors =  pbmc@meta.data[,c("dx","mut", "CellType_DGE")], row_side_palette = Spectral
-          )  %>%  colorbar(tickfont = list(size = 12), titlefont = list(size = 14), which = 2)  %>% 
-          colorbar(tickfont = list(size = 12), titlefont = list(size = 14), which = 1)
+if (interactive==T){
+  # Spectral <- heatmaply::Spectral(length(unique(pbmc@meta.data$mut)))
+  markerMelt <- reshape2::acast(markerDF, Cell~Gene, value.var="Expression", fun.aggregate = mean, drop = F, fill = 0) 
+  heatmaply::heatmaply(markerMelt,  key.title="Expression",#plot_method= "ggplot",
+        k_row = dim(markerMelt)[2], dendrogram = "row",
+        showticklabels = c(T, F), xlab = "Known Markers", ylab = "Cells", column_text_angle = 45, 
+        row_side_colors =  pbmc@meta.data[,c("dx","mut", "CellType_DGE")], row_side_palette = Spectral
+        )  %>%  colorbar(tickfont = list(size = 12), titlefont = list(size = 14), which = 2)  %>% 
+        colorbar(tickfont = list(size = 12), titlefont = list(size = 14), which = 1)
+}else{ 
+  # markerDF_sub <-subset(markerDF, Gene==markerList[1])  
+  # var_to_colors(markerDF_sub, "post_clustering")  
+  # library(pheatmap)
+  # pheatmap(markerMelt, annotation_row = markerDF_sub[c("dx","mut","CellType_DGE", "CellType_AvgExp")])
+  # pheatmap(markerMelt, kmeans_k = NA, annotation_row = markerDF_sub[c("dx","mut","CellType_DGE", "CellType_AvgExp")],
+  #         cluster_cols = F, cutree_rows = length(unique(markerDF$post_clustering)),  angle_col=45 )
+  library(RColorBrewer) 
+  var_to_colors <- function(markerDF, metaVar){
+    colors <- brewer.pal(length(unique(markerDF[metaVar]) ), "Dark2")
+     sample(colors, length(unique(markerDF[metaVar])), replace = TRUE, prob = NULL)
+    # metaColors <- colors[ subset(markerDF, Gene==markerList[1])[metaVar][,1] %>% as.factor() ]
+    return(metaColors)
+  }  
+  # library(GMD)
+  # myCols = cbind(var_to_colors(markerDF, "dx"), var_to_colors(markerDF, "mut")) 
+  # rlab=t(cbind(
+  #   var_to_colors(markerDF, "post_clustering"),
+  #   var_to_colors(markerDF, "dx")
+  #   ))
+  #   heatmap.2(marker.matrix, key.title="Expression",  col = viridis(300), trace="none",Colv = F, Rowv = F,
+  #             labRow = F, xlab = "Biomarker", ylab="Cell", cexCol=1, RowSideColors = var_to_colors(markerDF, "post_clustering")
+  #             )
+  # heatmap.3(markerMelt, dendrogram = 'row', kr = length(unique(markerDF)), labRow = F, 
+  #           xlab = "Biomarker", ylab = "Cell", RowSideColors = rlab, RowSideColorsSize=2 )
+   
+  
+  
+  markerDF <- markerDF %>%    
+    mutate_at(vars(post_clustering, dx, mut, ID, CellType_DGE, CellType_AvgExp), as.factor) %>% 
+    arrange(post_clustering) 
+  # markerMelt <- reshape2::acast(markerDF, Cell~Gene, value.var="Expression", fun.aggregate = mean, drop = F, fill = 0) 
+  markerMelt <- dcast(markerDF,  Cell + post_clustering + dx + mut + ID + CellType_DGE + CellType_AvgExp ~ Gene,
+                      fun.aggregate = mean, value.var = "Expression") %>% arrange(post_clustering)
+  marker.matrix <- markerMelt[markerList] %>%as.matrix()
+  row.names(marker.matrix) <- markerMelt$Cell
+  
+  ha = HeatmapAnnotation(df = markerDF[c("dx","mut","ID","CellType_DGE","CellType_AvgExp")], which = "row") 
+  
+  ComplexHeatmap::Heatmap(marker.matrix, col=viridis(300), column_title = "Biomarker", row_title = "Cell",  
+                          row_dend_reorder = F,show_row_names = F, show_column_dend = F,show_row_dend =T,
+                          cluster_rows = T, column_title_side = "bottom",km = length(unique(markerMelt$post_clustering))) + ha
+ 
+
+} 
 ```
 
 
