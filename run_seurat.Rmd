@@ -39,11 +39,9 @@ resolution <-  as.numeric(params$resolution)
 root <- getwd()
 # Have to setwd via knitr
 # knitr::opts_knit$set(root.dir=resultsPath, child.path = resultsPath)
-knitr::opts_chunk$set(echo=T, error=T, root.dir = resultsPath#cache=T, cache.lazy=T,     
+knitr::opts_chunk$set(echo=T, error=T, root.dir = resultsPath, 
+                      cache=T, cache.lazy=T
                       ) 
- 
-# kableStyle = c("striped", "hover", "condensed", "responsive") 
-
 
 # Utilize parallel processing later on
 print(paste("**** Utilized Cores **** =", nCores))   
@@ -277,8 +275,8 @@ pbmc <- FindVariableGenes(object = pbmc, mean.function = ExpMean, dispersion.fun
     x.low.cutoff = 0.0125, x.high.cutoff = 3, y.cutoff = 0.5)
 
 # IMPORTANT!: Must set do.par=T and num.cors = n for large datasets being processed on computing clusters
-par.Cores <- ifelse(nCores <= 12, 48, nCores)
-pbmc <- ScaleData(object = pbmc, vars.to.regress = c("nUMI", "percent.mito"), do.par = T, num.cores = 48)
+# par.Cores <- ifelse(nCores <= 12, 48, nCores)
+pbmc <- ScaleData(object = pbmc, vars.to.regress = c("nUMI", "percent.mito"), do.par = T, num.cores = nCores)
 ```
 
 ### Filtered Dimensions
