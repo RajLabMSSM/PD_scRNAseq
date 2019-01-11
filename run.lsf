@@ -11,4 +11,4 @@
 #BSUB -L /bin/bash	 	    # Script shell language (/bin/tcsh, /bin/ksh etc.)
     
 module load R pandoc
-Rscript seurat_params.R 'protein_coding' F 0.6
+Rscript seurat_params.R 'protein_coding' F 0.6 F
