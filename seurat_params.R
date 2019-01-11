@@ -4,7 +4,7 @@ subsetGenes = args[1]
 subGenes <- ifelse(subsetGenes==F, 'all', subsetGenes)
 subsetCells = args[2]
 resolution = args[3]
-interactive = args[4]#try({return(args[4])}) exce{return(F)}
+interactive = args[4]#try({return(args[4])})  
 
 #nCores <-args[4] #ifelse(is.null(args[4]), parallel::detectCores(), args[4]) 
 

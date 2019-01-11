@@ -309,8 +309,9 @@ vp
 
 ```{r percent.mito - process, echo = T, results = 'hide', fig.show='hide'} 
 # par(mfrow = c(1, 2))
+do.hover <- ifelse(interactive==T, T, F)
 gp1 <- GenePlot(object = pbmc, gene1 = "nUMI", gene2 = "percent.mito", pch.use=20, 
-         do.hover=ifelse(interactive==T, T, F), data.hover = "mut")
+         do.hover=do.hover, data.hover = "mut")
 ```
 
 ```{r percent.mito - plot} 
@@ -320,8 +321,9 @@ gp1
 ### nGene plot
 
 ```{r nGene - process, echo = T, results = 'hide', fig.show='hide'}
+do.hover <-ifelse(interactive==T, T, F)
 gp2 <- GenePlot(object = pbmc, gene1 = "nUMI", gene2 = "nGene", pch.use=20, 
-         do.hover=ifelse(interactive==T, T, F), data.hover = "mut")
+         do.hover=do.hover, data.hover = "mut")
 ```
 
 ```{r nGene - plot}
@@ -365,7 +367,8 @@ VizPCA(object = pbmc, pcs.use = 1:2)
 ### PCA plot
 
 ```{r PCAplot} 
-PCAPlot(object = pbmc, dim.1 = 1, dim.2 = 2, do.hover=ifelse(interactive==T, T, F), data.hover="mut")
+do.hover <-ifelse(interactive==T, T, F)
+PCAPlot(object = pbmc, dim.1 = 1, dim.2 = 2, do.hover=do.hover, data.hover="mut")
 ```
 
 ### PCHeatmaps
@@ -434,8 +437,8 @@ labSize <- 6
 pbmc <- RunTSNE(object=pbmc,  reduction.use = "pca", dims.use = 1:10, do.fast = TRUE, 
                 tsne.method = "Rtsne", num_threads=0) #   FItSNE
 # note that you can set do.label=T to help label individual clusters
-tp <- TSNEPlot(object = pbmc, do.label=T, label.size = labSize, do.return=T) 
-ifelse(interactive, tp %>% ggplotly() %>% toWebGL() %>% print(), print(tp))
+TSNEPlot(object = pbmc, do.label=T, label.size = labSize, do.return=T) 
+# ifelse(interactive, tp %>% ggplotly() %>% toWebGL() %>% print(), print(tp))
 ```
 
 
@@ -639,8 +642,8 @@ fp <- FeaturePlot(object = pbmc, features.plot = top1$gene, cols.use = c("grey",
 top5 <- pbmc.markers %>% group_by(cluster) %>% top_n(5, avg_logFC)
 # setting slim.col.label to TRUE will print just the cluster IDS instead of
 # every cell name
-p <- DoHeatmap(object = pbmc, genes.use = top5$gene, slim.col.label=T, remove.key=T) 
-ifelse(interactive, p %>% ggplotly() %>% toWebGL() %>% print(), print(p))
+DoHeatmap(object = pbmc, genes.use = top5$gene, slim.col.label=T, remove.key=T) 
+# ifelse(interactive, p %>% ggplotly() %>% toWebGL() %>% print(), print(p))
 ```
 
 ### Biomarkers Ridgeplot
@@ -827,8 +830,8 @@ markerDF <- markerDF %>% mutate(Cluster = post_clustering)
 # Show mean exp for each marker
 avgMarker <- markerDF %>% group_by(Gene, Cluster) %>% summarise(meanExp = mean(Expression)) 
 
-p <- ggplot(data = avgMarker, aes(x=Gene, y=Cluster, fill=meanExp)) %>% + geom_tile() %>% + scale_fill_distiller(palette="viridis") 
-ifelse(interactive, p %>% ggplotly() %>% toWebGL() %>% print(), print(p))
+ggplot(data = avgMarker, aes(x=Gene, y=Cluster, fill=meanExp)) %>% + geom_tile() %>% + scale_fill_distiller(palette="viridis") 
+# ifelse(interactive, p %>% ggplotly() %>% toWebGL() %>% print(), print(p))
 ```
 
 ### Average Expression: By Disease
@@ -837,7 +840,7 @@ ifelse(interactive, p %>% ggplotly() %>% toWebGL() %>% print(), print(p))
 # Show mean exp for each marker
 avgMarker <- markerDF %>% group_by(Gene, dx, Cluster) %>% summarise(meanExp = mean(Expression)) 
 p <- ggplot(data = avgMarker, aes(x=Gene, y=dx, fill=meanExp)) %>% + geom_tile() %>% + scale_fill_distiller(palette="viridis") 
-ifelse(interactive, p %>% ggplotly() %>% toWebGL() %>% print(), print(p))
+# ifelse(interactive, p %>% ggplotly() %>% toWebGL() %>% print(), print(p))
 ```
 
 
@@ -850,7 +853,7 @@ markerDF <- get_markerDF(pbmc, markerList,
                           "CellType_DGE","CellType_AvgExp"))
 Spectral <- grDevices::colorRampPalette(RColorBrewer::brewer.pal(length(unique(pbmc@meta.data$mut)), "Spectral"))
 
-if (interactive==T){
+if (ive==T){
   # Spectral <- heatmaply::Spectral(length(unique(pbmc@meta.data$mut)))
   markerMelt <- reshape2::acast(markerDF, Cell~Gene, value.var="Expression", fun.aggregate = mean, drop = F, fill = 0) 
   heatmaply::heatmaply(markerMelt,  key.title="Expression",#plot_method= "ggplot",
@@ -889,6 +892,7 @@ if (interactive==T){
   
   markerDF <- markerDF %>%    
     mutate_at(vars(post_clustering, dx, mut, ID, CellType_DGE, CellType_AvgExp), as.factor) %>% 
+    mutate(Cluster = post_clustering) %>%
     arrange(post_clustering) 
   # markerMelt <- reshape2::acast(markerDF, Cell~Gene, value.var="Expression", fun.aggregate = mean, drop = F, fill = 0) 
   markerMelt <- dcast(markerDF,  Cell + post_clustering + dx + mut + ID + CellType_DGE + CellType_AvgExp ~ Gene,
@@ -918,22 +922,17 @@ ggplot(data = markerDF, aes(x=Cluster, y=Expression, fill=Gene)) %>%
 
 ##  Known Biomarkers: tSNE
 
-```{r Known Biomarkers: tSNE code}
+```{r Known Biomarkers: tSNE code, fig.width=12}
 #, results = 'hide', fig.show='hide'
 expressionTSNE <- function(pbmc, marker, colors=c("grey", "red")){
-  p <- FeaturePlot(object = pbmc, features.plot = marker, cols.use = colors, 
+   FeaturePlot(object = pbmc, features.plot = marker, cols.use = colors, 
     reduction.use = "tsne", nCol=2, do.return = T, dark.theme = T)[[1]]
-  p <- ifelse(interactive, p %>% ggplotly() %>% toWebGL(), print(p))
-  return(p)
+  # p <- ifelse(interactive, p %>% ggplotly() %>% toWebGL(), print(p)) 
 }
-tp1 <- expressionTSNE(pbmc, markerList[1])
-tp2 <- expressionTSNE(pbmc, markerList[2], colors=c("grey", "green"))
+ plot_grid(expressionTSNE(pbmc, markerList[1]),
+ expressionTSNE(pbmc, markerList[2], colors=c("grey", "green")))
 ```
-```{r Known Biomarkers: tSNE}
-if(interactive==T){
-    subplot(tp1, tp2, titleX = T, titleY = T ) 
-}
-```
+ 
 
 
 ## Label Clusters by DGE Biomarkers
@@ -944,8 +943,8 @@ top1 <- pbmc.markers %>% group_by(cluster) %>% top_n(1, avg_logFC)
 new.cluster.ids <- top1$gene #c("CD4 T cells", "CD14+ Monocytes", "B cells", "CD8 T cells", "FCGR3A+ Monocytes", "NK cells", "Dendritic cells", "Megakaryocytes")
 
 pbmc@ident <- plyr::mapvalues(x = pbmc@ident, from = current.cluster.ids, to = new.cluster.ids)
-p <- TSNEPlot(object=pbmc, do.label=T, pt.size=0.5, do.return=T) 
-ifelse(interactive, p %>% ggplotly() %>% toWebGL() %>% print(), print(p)) 
+TSNEPlot(object=pbmc, do.label=T, pt.size=0.5, do.return=T) 
+# ifelse(interactive, p %>% ggplotly() %>% toWebGL() %>% print(), print(p)) 
 ```
 
 
