@@ -46,16 +46,16 @@ knitr::opts_chunk$set(echo=T, error=T, root.dir = resultsPath
                       ) 
 
 # Utilize parallel processing later on
-print(paste("**** Utilized Cores **** =", nCores))   
+cat(paste("**** Utilized Cores **** =", nCores))   
 
-params 
+params
 ```
 
 ** `r params$resultsPath` **
  
  
 ## Load Libraries & Report Versions
-```{r message=F, warning=F}
+```{r Load Libraries & Report Versions, message=F, warning=F}
 library(Seurat)
 library(dplyr)
 library(ulimit) # devtools::install_github("krlmlr/ulimit")
@@ -108,7 +108,7 @@ Rstudio has a default memory limit of only 1GB. To override this, detect the tru
 RAM <- print(benchmarkme::get_ram())
 ## Convert GB to Mib
 RAM_Mib <- strsplit(RAM, " ")[[1]][1] %>% as.numeric() * 953.67431640625
-print(paste("Available RAM:",RAM))
+cat(paste("Available RAM:",RAM))
 ## Set new memory limit 
 ulimit::memory_limit(RAM_Mib) 
 ```
@@ -235,7 +235,7 @@ Biotypes from: https://useast.ensembl.org/info/genome/genebuild/biotypes.html
 ```{r Subset Genes by Biotype}
 subsetBiotypes <- function(pbmc, subsetGenes){
   if( subsetGenes!=F ){
-    print(paste("Subsetting genes:",subsetGenes))
+    cat(paste("Subsetting genes:",subsetGenes))
     # If the gene_biotypes file exists, import csv. Otherwise, get from biomaRt
     if(file_test("-f", file.path(root,"Data/gene_biotypes.csv"))){
       biotypes <- read.csv(file.path(root,"Data/gene_biotypes.csv"))
@@ -253,7 +253,7 @@ subsetBiotypes <- function(pbmc, subsetGenes){
     # Subset data by creating new Seurat object (annoying but necessary)
     geneSubset <- biotypes[biotypes$gene_biotype==subsetGenes,"hgnc_symbol"] 
     
-    print(paste(dim(pbmc@raw.data[geneSubset, ])[1],"/", dim(pbmc@raw.data)[1], 
+    cat(paste(dim(pbmc@raw.data[geneSubset, ])[1],"/", dim(pbmc@raw.data)[1], 
                 "genes are", subsetGenes))
     # Add back into pbmc 
     subset.matrix <- pbmc@raw.data[geneSubset, ] # Pull the raw expression matrix from the original Seurat object containing only the genes of interest
@@ -390,7 +390,7 @@ PCAPlot(object = pbmc, dim.1 = 1, dim.2 = 2, do.hover=do.hover, data.hover="mut"
 
 ```{r PCHeatmap, message=F, warning=F}  
 # 'PCHeatmap' is a wrapper for heatmap.2  
-PCHeatmap(object = pbmc, pc.use = 1:12, do.balanced=T, label.columns=F, use.full=F)  
+PCHeatmap(object = pbmc, pc.use = 1:12, cells.use = 500, do.balanced=T, label.columns=F, use.full=F)  
 ```
 
 
@@ -422,7 +422,7 @@ pbmc <- StashIdent(object = pbmc, save.name = "pre_clustering")
 # pbmc <- SetAllIdent(object = pbmc, id = "pre_clustering") 
 
 pbmc <- FindClusters(object = pbmc, reduction.type = "pca", dims.use = 1:10, 
-                     resolution = resolution, print.output = F, save.SNN = T, 
+                     resolution = resolution, print.output = T, save.SNN = T, 
                      n.start = 10, nn.eps = 0.5) 
 PrintFindClustersParams(object = pbmc) 
 
@@ -462,7 +462,7 @@ TSNEPlot(object = pbmc, do.label=T, label.size = labSize, do.return=T)
 
 ```{r t-SNE + Metadata, warning=F, message=F}
 tSNE_metadata_plot <- function(var){
-  print(paste("t-SNE Metadata plot for ", var))
+  cat(paste("t-SNE Metadata plot for ", var))
   # Metadata plot 
   p1 <- TSNEPlot(pbmc, do.return = T,  do.label = T,  group.by = var, pt.size=1,
                  plot.title=paste("Color by ",var), vector.friendly=T) + theme(legend.position = "top")
@@ -626,7 +626,7 @@ volcanoPlot <- function(DEG_df, caption="", topFC_labeled=5){
     geom_vline(xintercept= 1.5,lty=4, lwd=.3, alpha=.5) +
     geom_hline(yintercept= -log10(0.05),lty=4, lwd=.3, alpha=.5) + 
     ggtitle(caption) 
-  print(vol)
+  cat(vol)
 }
 
 for (clust in unique(pbmc.markers$cluster)){
@@ -727,7 +727,7 @@ marker_vs_metadata <- function(markerDF, meta_var){
   
   title = ""
   for (marker in unique(markerDF$Gene) ){
-    print(marker)
+    cat(marker)
     title <- paste(title, "\n", ANOVAtitle(markerDF, marker))
   } 
   
@@ -973,7 +973,7 @@ TSNEPlot(object=pbmc, do.label=T, pt.size=0.5, do.return=T)
  + DESeq2DETest()
  + DiffExpTest()
  + DiffTTest() 
-```{r DGE: All Cells} 
+```{r All Cells: function} 
 # Available DGE methods:
 ## "wilcox", "bimod", "roc", "t", "tobit", "poisson", "negbinom", "MAST", "DESeq2"
 runDGE <- function(pbmc, meta_var, group1, group2, test.use="wilcox"){
@@ -982,57 +982,53 @@ runDGE <- function(pbmc, meta_var, group1, group2, test.use="wilcox"){
   pbmc <- StashIdent(pbmc, save.name = meta_var)  
   DEGs <- FindMarkers(pbmc, ident.1=group1, ident.2=group2, test.use=test.use)
   DEGs$gene <- row.names(DEGs)
+  
+  cap <- paste("DEGs:\n",group1, "vs.", group2)
+  createDT(DEG_df, caption = cap)
+  volcanoPlot(DEG_df, caption = cap)
+  
+  pbmc <- SetAllIdent(pbmc, id = "post_clustering")
   return(DEGs)
 }
 ```
 
 ## PD vs. Controls
 
-```{r DGE: PD vs. Controls}
+```{r All Cells: PD vs. Controls}
 DEG_df <-runDGE(pbmc, "dx", group1 = "PD", group2="control")
-cap = paste("DEGs (All Cells): PD vs. Controls")
-
-createDT(DEG_df, caption = cap)
-volcanoPlot(DEG_df, caption = cap)
 ```
 
 ## LRRK vs. PD
 
-```{r DGE: LRRK2 vs. PD} 
+```{r All Cells: LRRK2 vs. PD} 
 DEG_df <-runDGE(pbmc, "mut", "LRRK2", "PD")
-cap <- paste("DEGs (All Cells): LRRK2 vs. PD")
-
-createDT(DEG_df, caption = cap)
-volcanoPlot(DEG_df, caption = cap)
 ```
 
-## DGE: CD14++/CD16+ vs. CD14++/CD16--
+## CellType_DGE
 
-```{r DGE: CD14++/CD16+ vs. CD14++/CD16--}  
-DEG_df <-runDGE(pbmc, "CellType_DGE", "CD14++/CD16+", "CD14++/CD16--")
-cap <- paste("DEGs (All Cells): CD14++/CD16+ vs. CD14++/CD16--")
+### CellType_DGE
 
-createDT(DEG_df, caption = cap)
-volcanoPlot(DEG_df, caption = cap)
+```{r All Cells: CellType_DGE}  
+DEG_df <-runDGE(pbmc, "CellType_DGE", "CD14++/CD16+", "CD14++/CD16--") 
 ```
 
+### CellType_AvgExp
+
+```{r All Cells: CellType_AvgExp}
+DEG_df <-runDGE(pbmc, "CellType_AvgExp", "CD14++/CD16+", "CD14++/CD16--") 
+```
 
 # DGE: Within Clusters
 
-```{r DGE: Within Clusters: function} 
-DGE_within_clusters <- function(pbmc, meta_var, group1, group2){
-  for (clust in unique(pbmc@ident)){
-    # Subset cells by cluster
-   pbmc <- SetAllIdent(pbmc, id = "post_clustering")
-   pbmc_clustSub <- SubsetData(pbmc, ident.use = clust, subset.raw = T) 
+```{r Within Clusters: function} 
+DGE_within_clusters <- function(pbmc, meta_var, group1, group2){ 
+  for (clust in unique(pbmc@meta.data$post_clustering)){
+    # Subset cells by cluster 
+   pbmc_clustSub <- Seurat::SubsetData(pbmc, accept.value = clust, subset.raw = T) 
    cap <- paste("Cluster ",clust,": \n ",group1," vs. ", group2, sep="") 
    cat('\n')   
    cat("### ",cap)
-   # DGE
-   DEG_df <-runDGE(pbmc_clustSub, meta_var, group1 , group2 ) 
-   # Show results
-   volcanoPlot(DEG_df, caption = cap)
-   createDT(DEG_df, caption = cap)
+   DEG_df <-runDGE(pbmc_clustSub, meta_var, group1, group2 ) 
    cat('\n')   
   } 
 }
@@ -1041,20 +1037,23 @@ DGE_within_clusters <- function(pbmc, meta_var, group1, group2){
 
 ## Between Disease Groups {.tabset .tabset-fade .tabset-pills}
 
-```{r Between Disease Groups}   
-DGE_within_clusters(pbmc, "dx", "PD", "control") 
+```{r Within Clusters: Between Disease Groups}   
+DGE_within_clusters(pbmc, "dx", "PD", "control")    
 ```
 
 ## Between Mutation Groups {.tabset .tabset-fade .tabset-pills}
 
-```{r Between Mutation Groups}
-DGE_within_clusters(pbmc, "mut", "LRKK2", "PD")
+```{r Within Clusters: Between Mutation Groups}
+DGE_within_clusters(pbmc, "mut", "LRRK2", "PD")
 ```
 
 ## Between Mutation Groups {.tabset .tabset-fade .tabset-pills}
 
-```{r Between Known Cell Types}
+```{r Within Clusters: CellType_DGE}
 DGE_within_clusters(pbmc, "CellType_DGE", "CD14++/CD16+", "CD14++/CD16--") 
+```
+
+```{r Within Clusters: CellType_AvgExp}
 DGE_within_clusters(pbmc, "CellType_AvgExp", "CD14++/CD16+", "CD14++/CD16--")
 ```
 
