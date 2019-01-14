@@ -64,14 +64,13 @@ library(gridExtra)
 library(knitr) 
 library(plotly)
 library(ggplot2)
+library(viridis)
 library(reshape2)
 library(shiny) 
 library(ggrepel)
 library(DT) 
 library(ComplexHeatmap); #BiocManager::install("ComplexHeatmap") 
  
- 
-# 
 # install.packages('devtools')
 # devtools::install_github('talgalili/heatmaply')
 ## Install Bioconductor
@@ -104,14 +103,14 @@ print(paste("Seurat ", packageVersion("Seurat")))
 
 ## Raise Memory Limit
 
-Rstudio has a memory default limit of only 1GB. To override this, detect the true memory available and set a new limit.
+Rstudio has a default memory limit of only 1GB. To override this, detect the true memory available and set a new limit.
 ```{r Raise Memory Limit}
 RAM <- print(benchmarkme::get_ram())
 ## Convert GB to Mib
 RAM_Mib <- strsplit(RAM, " ")[[1]][1] %>% as.numeric() * 953.67431640625
 print(paste("Available RAM:",RAM))
 ## Set new memory limit 
-ulimit::memory_limit(RAM_Mib)
+ulimit::memory_limit(RAM_Mib) 
 ```
 
 
@@ -284,9 +283,12 @@ pbmc <- NormalizeData(object = pbmc, normalization.method = "LogNormalize",
 
 ### Subset Genes by Variance
 
-** Important!**: Specify do.par = T, and num.cores = nCores in 'ScaleData' to use all available cores.
+** Important!**:
+* In ScaleData...
+  + Specify do.par = F (unless you have parallel processing set up properly, this will cause your script to crash)
+  + Specify num.cores = nCores (to use all available cores, determined by parallel::detectCores())
 
-Control for: number of unique transcripts (nUMI), % mitochondrial transcripts (percent.mito) 
+Regress out: number of unique transcripts (nUMI), % mitochondrial transcripts (percent.mito) 
 ```{r Subset Genes by Variance} 
 # Store the top most variable genes in @var.genes
 pbmc <- FindVariableGenes(object = pbmc, mean.function = ExpMean, dispersion.function = LogVMR,
@@ -360,13 +362,12 @@ can be explored by setting use.full=T in the functions above
   + RunCCA()
   + RunMultiCCA()
   + RunDiffusion()
-  + RunPHATE()
-  + RunUMAP()
+  + RunPHATE() 
   + RunICA()
   
 ```{r PCA }
 # Run PCA with only the top most variables genes
-pbmc <- RunPCA(object = pbmc, pc.genes = pbmc@var.genes, do.print=F) #, pcs.print = 1:5,  genes.print = 5
+pbmc <- RunPCA(object = pbmc, pc.genes = pbmc@var.genes, do.print=F, verbose=T) #, pcs.print = 1:5,  genes.print = 5
 # Store in Seurat object so you don't have to recalculate it for the tSNE/UMAP steps
 pbmc <- ProjectPCA(object = pbmc, do.print=F) 
 ```
@@ -430,8 +431,9 @@ pbmc <- StashIdent(object = pbmc, save.name = "post_clustering")
 
 ## UMAP
 
+Additional UMAP arguments detailed here: https://umap-learn.readthedocs.io/en/latest/api.html#module-umap.umap_ 
 ```{r UMAP} 
-pbmc <- RunUMAP(object = pbmc, dims.use = 1:10, num_threads=0)
+pbmc <- RunUMAP(object = pbmc, reduction.use = "pca", dims.use = 1:10, verbose=TRUE) # , num_threads=0 
 # Plot results
 DimPlot(object = pbmc, reduction.use = 'umap')
 ```
@@ -448,8 +450,8 @@ As input to the tSNE, we suggest using the same PCs as input to the clustering a
 ```{r t-SNE } 
 labSize <- 6 
 
-pbmc <- RunTSNE(object=pbmc,  reduction.use = "pca", dims.use = 1:10, do.fast = TRUE, 
-                tsne.method = "Rtsne", num_threads=0) #   FItSNE
+pbmc <- RunTSNE(object=pbmc,  reduction.use = "pca", dims.use = 1:10, do.fast = TRUE,
+                tsne.method = "Rtsne", num_threads=0, verbose=T) #   FItSNE
 # note that you can set do.label=T to help label individual clusters
 TSNEPlot(object = pbmc, do.label=T, label.size = labSize, do.return=T) 
 # ifelse(interactive, tp %>% ggplotly() %>% toWebGL() %>% print(), print(tp))
@@ -844,7 +846,8 @@ markerDF <- markerDF %>% mutate(Cluster = post_clustering)
 # Show mean exp for each marker
 avgMarker <- markerDF %>% group_by(Gene, Cluster) %>% summarise(meanExp = mean(Expression)) 
 
-ggplot(data = avgMarker, aes(x=Gene, y=Cluster, fill=meanExp)) %>% + geom_tile() %>% + scale_fill_distiller(palette="viridis") 
+p <- ggplot(data = avgMarker, aes(x=Gene, y=Cluster, fill=meanExp)) %>% + geom_tile() + scale_fill_viridis()
+p
 # ifelse(interactive, p %>% ggplotly() %>% toWebGL() %>% print(), print(p))
 ```
 
@@ -853,7 +856,9 @@ ggplot(data = avgMarker, aes(x=Gene, y=Cluster, fill=meanExp)) %>% + geom_tile()
 ```{r Average Expression: By Disease}
 # Show mean exp for each marker
 avgMarker <- markerDF %>% group_by(Gene, dx, Cluster) %>% summarise(meanExp = mean(Expression)) 
-p <- ggplot(data = avgMarker, aes(x=Gene, y=dx, fill=meanExp)) %>% + geom_tile() %>% + scale_fill_distiller(palette="viridis") 
+p <- ggplot(data = avgMarker, aes(x=Gene, y=dx, fill=meanExp)) %>% + geom_tile() + scale_fill_viridis()
+p
+
 # ifelse(interactive, p %>% ggplotly() %>% toWebGL() %>% print(), print(p))
 ```
 
@@ -867,7 +872,7 @@ markerDF <- get_markerDF(pbmc, markerList,
                           "CellType_DGE","CellType_AvgExp"))
 Spectral <- grDevices::colorRampPalette(RColorBrewer::brewer.pal(length(unique(pbmc@meta.data$mut)), "Spectral"))
 
-if (ive==T){
+if (interactive==T){
   # Spectral <- heatmaply::Spectral(length(unique(pbmc@meta.data$mut)))
   markerMelt <- reshape2::acast(markerDF, Cell~Gene, value.var="Expression", fun.aggregate = mean, drop = F, fill = 0) 
   heatmaply::heatmaply(markerMelt,  key.title="Expression",#plot_method= "ggplot",
