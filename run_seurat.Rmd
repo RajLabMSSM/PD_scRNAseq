@@ -58,6 +58,8 @@ params
 ```{r message=F, warning=F}
 library(Seurat)
 library(dplyr)
+library(ulimit) # devtools::install_github("krlmlr/ulimit")
+library(benchmarkme)
 library(gridExtra)
 library(knitr) 
 library(plotly)
@@ -92,14 +94,24 @@ createDT <- function(DF, caption="", scrollY=500){
   ) 
    return(data)
 }
-
-
 # Useful Seurat functions
 ## Seurat::FindGeneTerms() # Enrichr API
 ## Seurat::MultiModal_CCA() # Integrates data from disparate datasets (CIA version too)
 
 sessionInfo()
 print(paste("Seurat ", packageVersion("Seurat")))
+```
+
+## Raise Memory Limit
+
+Rstudio has a memory default limit of only 1GB. To override this, detect the true memory available and set a new limit.
+```{r Raise Memory Limit}
+RAM <- print(benchmarkme::get_ram())
+## Convert GB to Mib
+RAM_Mib <- strsplit(RAM, " ")[[1]][1] %>% as.numeric() * 953.67431640625
+print(paste("Available RAM:",RAM))
+## Set new memory limit 
+ulimit::memory_limit(RAM_Mib)
 ```
 
 
@@ -273,6 +285,8 @@ pbmc <- NormalizeData(object = pbmc, normalization.method = "LogNormalize",
 ### Subset Genes by Variance
 
 ** Important!**: Specify do.par = T, and num.cores = nCores in 'ScaleData' to use all available cores.
+
+Control for: number of unique transcripts (nUMI), % mitochondrial transcripts (percent.mito) 
 ```{r Subset Genes by Variance} 
 # Store the top most variable genes in @var.genes
 pbmc <- FindVariableGenes(object = pbmc, mean.function = ExpMean, dispersion.function = LogVMR,
@@ -284,7 +298,7 @@ pbmc <- FindVariableGenes(object = pbmc, mean.function = ExpMean, dispersion.fun
 
 # par.Cores <- ifelse(nCores <= 12, 48, nCores)
 pbmc <- ScaleData(object = pbmc, genes.use = pbmc@var.genes, vars.to.regress = c("nUMI", "percent.mito"), 
-                  do.par = T, num.cores = nCores)
+                  do.par = F, num.cores = nCores)
 ```
 
 ### Filtered Dimensions
