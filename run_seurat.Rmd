@@ -84,12 +84,23 @@ library(DESeq2)
  
 createDT <- function(DF, caption="", scrollY=500){
   data <- DT::datatable(DF, caption=caption,
-    extensions = list('Buttons','Scroller'),
+    extensions =  'Buttons',
     options = list( dom = 'Bfrtip', 
                     buttons = c('copy', 'csv', 'excel', 'pdf', 'print'), 
                     scrollY = scrollY, scrollX=T, scrollCollapse = T, paging = F,  
                       columnDefs = list(list(className = 'dt-center', targets = "_all"))
     )
+  ) 
+   return(data)
+}
+
+
+createDT <- function(DF, caption="", scrollY=500){
+  data <- datatable(DF, caption=caption,
+    extensions = 'Buttons',
+    options = list( dom = 'Bfrtip', 
+                    buttons = c('copy', 'csv', 'excel', 'pdf', 'print'), 
+                    scrollY = scrollY, paging = F)
   ) 
    return(data)
 }
@@ -626,7 +637,7 @@ volcanoPlot <- function(DEG_df, caption="", topFC_labeled=5){
     geom_vline(xintercept= 1.5,lty=4, lwd=.3, alpha=.5) +
     geom_hline(yintercept= -log10(0.05),lty=4, lwd=.3, alpha=.5) + 
     ggtitle(caption) 
-  cat(vol)
+  print(vol)
 }
 
 for (clust in unique(pbmc.markers$cluster)){
