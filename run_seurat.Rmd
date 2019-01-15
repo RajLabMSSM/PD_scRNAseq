@@ -93,17 +93,7 @@ createDT <- function(DF, caption="", scrollY=500){
   ) 
    return(data)
 }
-
-
-createDT <- function(DF, caption="", scrollY=500){
-  data <- datatable(DF, caption=caption,
-    extensions = 'Buttons',
-    options = list( dom = 'Bfrtip', 
-                    buttons = c('copy', 'csv', 'excel', 'pdf', 'print'), 
-                    scrollY = scrollY, paging = F)
-  ) 
-   return(data)
-}
+ 
 # Useful Seurat functions
 ## Seurat::FindGeneTerms() # Enrichr API
 ## Seurat::MultiModal_CCA() # Integrates data from disparate datasets (CIA version too)
