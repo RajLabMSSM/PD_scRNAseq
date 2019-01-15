@@ -434,7 +434,7 @@ pbmc <- StashIdent(object = pbmc, save.name = "post_clustering")
 
 Additional UMAP arguments detailed here: https://umap-learn.readthedocs.io/en/latest/api.html#module-umap.umap_ 
 ```{r UMAP} 
-pbmc <- RunUMAP(object = pbmc, reduction.use = "pca", dims.use = 1:10, verbose=TRUE) # , num_threads=0 
+pbmc <- RunUMAP(object = pbmc, reduction.use = "pca", dims.use = 1:10, verbose=TRUE, num_threads=nCores) # , num_threads=0 
 # Plot results
 DimPlot(object = pbmc, reduction.use = 'umap')
 ```
@@ -452,7 +452,7 @@ As input to the tSNE, we suggest using the same PCs as input to the clustering a
 labSize <- 6 
 
 pbmc <- RunTSNE(object=pbmc,  reduction.use = "pca", dims.use = 1:10, do.fast = TRUE,
-                tsne.method = "Rtsne", num_threads=0, verbose=T) #   FItSNE
+                tsne.method = "Rtsne", num_threads=nCores, verbose=T) #   FItSNE
 # note that you can set do.label=T to help label individual clusters
 TSNEPlot(object = pbmc, do.label=T, label.size = labSize, do.return=T) 
 # ifelse(interactive, tp %>% ggplotly() %>% toWebGL() %>% print(), print(tp))
