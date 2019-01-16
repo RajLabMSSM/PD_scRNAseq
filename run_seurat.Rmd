@@ -434,7 +434,7 @@ pbmc <- StashIdent(object = pbmc, save.name = "post_clustering")
 ## UMAP
 
 Additional UMAP arguments detailed here: https://umap-learn.readthedocs.io/en/latest/api.html#module-umap.umap_ 
-```{r UMAP} 
+```{r UMAP, eval=F} 
 pbmc <- RunUMAP(object = pbmc, reduction.use = "pca", dims.use = 1:10, verbose=TRUE, num_threads=nCores) # , num_threads=0 
 # Plot results
 DimPlot(object = pbmc, reduction.use = 'umap')
