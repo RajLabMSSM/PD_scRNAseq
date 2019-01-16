@@ -1,14 +1,17 @@
 #!/bin/bash
-#BSUB -J PD_scRNAseq_rmarkdown_n12_hosts1 # Name of job
+
+nCores=2
+
+#BSUB -J "PD_scRNAseq_$nCores_mem15000"    # Name of job
 #BSUB -P acc_ad-omics		    # Project to charge time
 #BSUB -q premium		    # Target queue for job execution
-#BSUB -n 12			    # Number of cores required
+#BSUB -n $nCores		    # Number of cores required
 #BSUB -R span[hosts=1]		    # Number of cores per host 
-#BSUB -R rusage[mem=12000]	    # Memory per core
-#BSUB -W 4:00			    # Time requested 
+#BSUB -R rusage[mem=15000]	    # Memory per core
+#BSUB -W 2:00			    # Time requested 
 #BSUB -oo /dev/PD_scRNAseq.out      # Log file for standard output (overwrite)
 #BSUB -eo /dev/PD_scRNAseq.error.out	    # log file for standard error (overwrite)
 #BSUB -L /bin/bash	 	    # Script shell language (/bin/tcsh, /bin/ksh etc.)
     
 module load R pandoc
-Rscript seurat_params.R 'protein_coding' F 0.6 F
+Rscript seurat_params.R 'protein_coding' F 0.6 $nCores
