@@ -4,17 +4,17 @@ subsetGenes = args[1]
 subGenes <- ifelse(subsetGenes==F, 'all', subsetGenes)
 subsetCells = args[2]
 resolution = args[3]
-interactive = args[4]#try({return(args[4])})  
+nCores = args[4] 
 
 #nCores <-args[4] #ifelse(is.null(args[4]), parallel::detectCores(), args[4]) 
 
-parameters <- paste(sep='', 'subsetGenes-',subGenes,'__subsetCells-',subsetCells, '__Resolution-', resolution)
+parameters <- paste(sep='', 'subsetGenes-',subGenes,'__subsetCells-',subsetCells, '__Resolution-', resolution, '__nCores-',nCores)
 root = getwd()
 resultsPath <- file.path(root,'Results',parameters)
 dir.create(resultsPath, showWarnings=F, recursive=T)
         
 
 rmarkdown::render(input = 'run_seurat.Rmd', 
-                  params = list(subsetGenes= subsetGenes, subsetCells=subsetCells, resolution=resolution, resultsPath=resultsPath, interactive=interactive), 
+                  params = list(subsetGenes= subsetGenes, subsetCells=subsetCells, resolution=resolution, resultsPath=resultsPath, nCores=nCores), 
                   output_file = file.path(resultsPath,paste(parameters,".html",sep=""))
                   )

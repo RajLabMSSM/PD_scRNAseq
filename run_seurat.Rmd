@@ -22,7 +22,7 @@ params:
   subsetCells: 500 #FALSE
   resolution: 0.6
   resultsPath: "./"
-  interactive: FALSE
+  nCores: 2
 ---
  
 
@@ -32,7 +32,7 @@ params:
 resultsPath=file.path(getwd(),"Results")
 # Gather parameters from command line  
 #dir.create(file.path(resultsPath,"cache"), showWarnings=F, recursive=T)
-nCores <- parallel::detectCores()#params$nCores
+nCores <- params$nCores #parallel::detectCores()
 subsetGenes <- params$subsetGenes 
 subsetCells <- params$subsetCells 
 resolution <-  as.numeric(params$resolution)
@@ -44,7 +44,18 @@ root <- getwd()
 knitr::opts_chunk$set(echo=T, error=T, root.dir = resultsPath 
                       # cache=T, cache.lazy=T
                       ) 
-
+local({
+  now = Sys.time()
+  knitr::knit_hooks$set(timeit = function(before) {
+    if (before) {
+      now <<- Sys.time()
+    } else {
+      x = round(Sys.time() - now, digits = 3)
+      x = sprintf("%% Chunk rendering time: %s seconds.", x)
+      cat('\\end{kframe}\n', x, '\n\\begin{kframe}')
+    }
+  })
+})
 # Utilize parallel processing later on
 cat(paste("**** Utilized Cores **** =", nCores))   
 
@@ -59,8 +70,6 @@ params
 ```{r Load Libraries & Report Versions, message=F, warning=F}
 library(Seurat)
 library(dplyr)
-library(ulimit) # devtools::install_github("krlmlr/ulimit")
-library(benchmarkme)
 library(gridExtra)
 library(knitr) 
 library(plotly)
@@ -83,6 +92,16 @@ library(biomaRt)
 library(DESeq2)
 # library(snow); #BiocManager::install("Rmpi") #NOTE: different lib name than install name (snow vs Rmpi)
  
+# Useful Seurat functions
+## Seurat::FindGeneTerms() # Enrichr API
+## Seurat::MultiModal_CCA() # Integrates data from disparate datasets (CIA version too)
+
+sessionInfo()
+print(paste("Seurat ", packageVersion("Seurat")))
+```
+
+## Helper Functions 
+```{r Helper Functions, results='asis'}
 createDT <- function(DF, caption="", scrollY=500){
   data <- DT::datatable(DF, caption=caption,
     extensions =  'Buttons',
@@ -95,18 +114,16 @@ createDT <- function(DF, caption="", scrollY=500){
    return(data)
 }
  
-# Useful Seurat functions
-## Seurat::FindGeneTerms() # Enrichr API
-## Seurat::MultiModal_CCA() # Integrates data from disparate datasets (CIA version too)
-
-sessionInfo()
-print(paste("Seurat ", packageVersion("Seurat")))
 ```
+
 
 ## Raise Memory Limit
 
 Rstudio has a default memory limit of only 1GB. To override this, detect the true memory available and set a new limit.
-```{r Raise Memory Limit}
+```{r Raise Memory Limit, eval=F}
+library(ulimit) # devtools::install_github("krlmlr/ulimit")
+library(benchmarkme)
+
 RAM <- print(benchmarkme::get_ram())
 ## Convert GB to Mib
 RAM_Mib <- strsplit(RAM, " ")[[1]][1] %>% as.numeric() * 953.67431640625
@@ -117,6 +134,7 @@ ulimit::memory_limit(RAM_Mib)
 
 
 ## Load Data
+
 ```{r Load Data }   
 ## ! IMPORTANT! Must not setwd to local path when launching on cluster
 # setwd("~/Desktop/PD_scRNAseq/")
@@ -134,6 +152,7 @@ pbmc
 
 
 ## Clean Metadata
+
 ```{r Clean Metadata, include=F, eval=F}
 library(readxl)
 
@@ -182,8 +201,6 @@ rm(list = c("meta", "metadata", "map", "subjectInfo"))
 ```
 
 
-
-
 ## Add Metadata
 
 ```{r Subset for Testing, results="asis"}  
@@ -224,6 +241,7 @@ if(subsetCells==F){
                     )
 }  
 ```
+
 
 
 
@@ -277,7 +295,7 @@ Filter by cells, normalize , filter by gene variability.
 
 ```{r Subset Cells }
 pbmc <- FilterCells(object = pbmc, subset.names = c("nGene", "percent.mito"), 
-    low.thresholds = c(200, -Inf), high.thresholds = c(2500, 0.05))
+    low.thresholds = c(200, -Inf), high.thresholds = c(5000, 0.05))
 
 pbmc <- NormalizeData(object = pbmc, normalization.method = "LogNormalize", 
     scale.factor = 10000)
@@ -300,9 +318,10 @@ pbmc <- FindVariableGenes(object = pbmc, mean.function = ExpMean, dispersion.fun
 # IMPORTANT!: Use only the var.genes identified by 'FindVariableGenes' as the 'gene.use' arg in 'ScaleData'
 ## This will greatly reduced the computational load.
 
-# par.Cores <- ifelse(nCores <= 12, 48, nCores)
-pbmc <- ScaleData(object = pbmc, genes.use = pbmc@var.genes, vars.to.regress = c("nUMI", "percent.mito"), 
-                  do.par = F, num.cores = nCores)
+# Ensure CD14 and CD16 are included
+appendedGenes <- c(pbmc@var.genes, "CD14", "FCGR3A")
+pbmc <- ScaleData(object = pbmc, genes.use = appendedGenes , vars.to.regress = c("nUMI", "percent.mito"), 
+                  do.par = T, num.cores = nCores)
 ```
 
 ### Filtered Dimensions
@@ -327,9 +346,9 @@ vp
 
 ```{r percent.mito - process, echo = T, results = 'hide', fig.show='hide'} 
 # par(mfrow = c(1, 2))
-do.hover <- ifelse(interactive==T, T, F)
-gp1 <- GenePlot(object = pbmc, gene1 = "nUMI", gene2 = "percent.mito", pch.use=20, 
-         do.hover=do.hover, data.hover = "mut")
+# do.hover <- ifelse(interactive==T, T, F)
+gp1 <- GenePlot(object = pbmc, gene1 = "nUMI", gene2 = "percent.mito", pch.use=20) 
+         #do.hover=do.hover, data.hover = "mut")
 ```
 
 ```{r percent.mito - plot} 
@@ -339,9 +358,9 @@ gp1
 ### nGene plot
 
 ```{r nGene - process, echo = T, results = 'hide', fig.show='hide'}
-do.hover <-ifelse(interactive==T, T, F)
-gp2 <- GenePlot(object = pbmc, gene1 = "nUMI", gene2 = "nGene", pch.use=20, 
-         do.hover=do.hover, data.hover = "mut")
+# do.hover <-ifelse(interactive==T, T, F)
+gp2 <- GenePlot(object = pbmc, gene1 = "nUMI", gene2 = "nGene", pch.use=20)
+         #do.hover=do.hover, data.hover = "mut")
 ```
 
 ```{r nGene - plot}
@@ -384,15 +403,15 @@ VizPCA(object = pbmc, pcs.use = 1:2)
 ### PCA plot
 
 ```{r PCAplot} 
-do.hover <-ifelse(interactive==T, T, F)
-PCAPlot(object = pbmc, dim.1 = 1, dim.2 = 2, do.hover=do.hover, data.hover="mut")
+# do.hover <-ifelse(interactive==T, T, F)
+PCAPlot(object = pbmc, dim.1 = 1, dim.2 = 2)#, do.hover=do.hover, data.hover="mut")
 ```
 
 ### PCHeatmaps
 
 ```{r PCHeatmap, message=F, warning=F}  
 # 'PCHeatmap' is a wrapper for heatmap.2  
-PCHeatmap(object = pbmc, pc.use = 1:12, cells.use = 500, do.balanced=T, label.columns=F, use.full=F)  
+PCHeatmap(object = pbmc, pc.use = 1:12,do.balanced=T, label.columns=F, use.full=F)   # cells.use = 500, 
 ```
 
 
@@ -434,8 +453,10 @@ pbmc <- StashIdent(object = pbmc, save.name = "post_clustering")
 ## UMAP
 
 Additional UMAP arguments detailed here: https://umap-learn.readthedocs.io/en/latest/api.html#module-umap.umap_ 
-```{r UMAP, eval=F} 
-pbmc <- RunUMAP(object = pbmc, reduction.use = "pca", dims.use = 1:10, verbose=TRUE, num_threads=nCores) # , num_threads=0 
+```{r UMAP, results = 'asis'} 
+# cat(print(mem_used()))
+pbmc <- RunUMAP(object = pbmc, reduction.use = "pca", dims.use = 1:10, verbose=TRUE, num_threads=nCores) # , num_threads=0
+# cat(print(mem_used()))
 # Plot results
 DimPlot(object = pbmc, reduction.use = 'umap')
 ```
@@ -449,11 +470,13 @@ As input to the tSNE, we suggest using the same PCs as input to the clustering a
 ** Important!**: Specify num_threads=0 in 'RunTSNE' to use all available cores.
 
 "FItSNE", a new fast implementation of t-SNE, is also available through RunTSNE. However FItSNE must first be setup on your computer.
-```{r t-SNE } 
-labSize <- 6 
+```{r t-SNE, results = 'asis' } 
+labSize <- 6
 
+# cat(print(mem_used()))
 pbmc <- RunTSNE(object=pbmc,  reduction.use = "pca", dims.use = 1:10, do.fast = TRUE,
                 tsne.method = "Rtsne", num_threads=nCores, verbose=T) #   FItSNE
+# cat(print(mem_used()))
 # note that you can set do.label=T to help label individual clusters
 TSNEPlot(object = pbmc, do.label=T, label.size = labSize, do.return=T) 
 # ifelse(interactive, tp %>% ggplotly() %>% toWebGL() %>% print(), print(tp))
@@ -466,22 +489,17 @@ TSNEPlot(object = pbmc, do.label=T, label.size = labSize, do.return=T)
 tSNE_metadata_plot <- function(var){
   cat(paste("t-SNE Metadata plot for ", var))
   # Metadata plot 
-  p1 <- TSNEPlot(pbmc, do.return = T,  do.label = T,  group.by = var, pt.size=1,
+  p1 <- TSNEPlot(pbmc, do.return = T,  do.label = T,  group.by = var, #pt.size=1,
                  plot.title=paste("Color by ",var), vector.friendly=T) + theme(legend.position = "top")
      # layout(legend = list(orientation = 'h', xanchor = "center", x = 0.5, y = .999)) 
      
   # t-SNE clusters plot
-  p2 <- TSNEPlot(pbmc, do.return = T, do.label = T, pt.size=1,
+  p2 <- TSNEPlot(pbmc, do.return = T, do.label = T, #pt.size=1,
                  plot.title=paste("Color by Clusters"), vector.friendly=T)  + theme(legend.position = "top")
   # layout(legend = list(orientation = 'h', xanchor = "center", x = 0.5, y = .999))  
   #print(plot_grid(ggplotly(p1), ggplotly(p2)))
-  if(interactive==T){
-    fluidPage( 
-      fluidRow(
-        column(6, p1), column(6, p2) 
-      )
-    )
-  } else{return(plot_grid(p1,p2))}
+  print(plot_grid(p1,p2))
+     
 }   
 # metaVars <- c(dx","mut","Gender","Age")
 # 
@@ -500,30 +518,31 @@ tSNE_metadata_plot <- function(var){
 
 ### tSNE Disease
 
-```{r tSNE dx, fig.width=12}
+Default fig.height and fig.width is 7
+```{r tSNE dx, out.width="150%", out.height="150%"}
 tSNE_metadata_plot("dx") 
 ```
 
 ### Mutations
 
-```{r tSNE mut, fig.width=12}
+```{r tSNE mut, out.width="150%", out.height="150%"}
 tSNE_metadata_plot("mut") 
 ```
 
 ### Gender
 
-```{r tSNE Gender, fig.width=12}
+```{r tSNE Gender, out.width="150%", out.height="150%"}
 tSNE_metadata_plot("Gender") 
 ```
 
 ### Age
 
-```{r tSNE Age, fig.width=12}
+```{r tSNE Age, out.width="150%", out.height="150%"}
 tSNE_metadata_plot("Age") 
 ```
 ### Individual ID
 
-```{r tSNE Individual ID, fig.width=12}
+```{r tSNE Individual ID, out.width="150%", out.height="150%"}
 tSNE_metadata_plot("ID")  
 ```
 
@@ -608,6 +627,7 @@ volcanoPlot <- function(DEG_df, caption="", topFC_labeled=5){
 		        "p_val_adj>0.05"
 		)) 
   DEG_df <- arrange(DEG_df, desc(sig))
+  yMax  <- max(-log10(DEG_df$p_val_adj)) + max(-log10(DEG_df$p_val_adj))/3 #ifelse(max(-log10(DEG_df$p_val_adj))<45, 50, max(-log10(DEG_df$p_val_adj)) + 10)
   
   vol <- ggplot(data=DEG_df, aes(x=avg_logFC, y= -log10(p_val_adj))) +
     geom_point(alpha=0.5, size=3, aes(col=sig)) + 
@@ -616,7 +636,7 @@ volcanoPlot <- function(DEG_df, caption="", topFC_labeled=5){
                                    "p_val_adj>0.05" = "darkgray")) +
     theme(legend.position = "none") + 
     xlab(expression(paste("Average ",log^{2},"(fold change)"))) +
-    ylab(expression(paste(-log^{10},"(p-value)"))) + xlim(-2,2) + 
+    ylab(expression(paste(-log^{10},"(p-value)"))) + xlim(-2,2) + ylim(0, yMax) +
     ## ggrepl labels
     geom_text_repel(data= arrange(DEG_df,  p_val_adj, desc(avg_logFC))[1:topFC_labeled,], 
                     # filter(DEG_df, avg_logFC>=1.5)[1:10,],
@@ -631,9 +651,11 @@ volcanoPlot <- function(DEG_df, caption="", topFC_labeled=5){
   print(vol)
 }
 
+
+# Run plots
 for (clust in unique(pbmc.markers$cluster)){
    cat('\n')   
-   cat("### Cluster ",clust,": Volcano") 
+   cat("### Cluster ",clust,": Volcano","\n") 
    cap <- paste("Cluster",clust,"DEG Table") 
    DEG_df <- subset(pbmc.markers, cluster==as.character(clust)) %>% arrange(desc(avg_logFC))  
    volcanoPlot(DEG_df, caption = cap)
@@ -648,7 +670,7 @@ for (clust in unique(pbmc.markers$cluster)){
 
 ###  Biomarkers tSNE
 
-```{r Biomarkers tSNE} 
+```{r Biomarkers tSNE, out.height="300%"} 
 fp <- FeaturePlot(object = pbmc, features.plot = top1$gene, cols.use = c("grey", "purple"), 
     reduction.use = "tsne", nCol = nCols, do.return = T)
 ```
@@ -732,12 +754,15 @@ marker_vs_metadata <- function(markerDF, meta_var){
     cat(marker)
     title <- paste(title, "\n", ANOVAtitle(markerDF, marker))
   } 
-  
+   
+ 
   ggplot(markerDF, aes(x=eval(parse(text=meta_var)), y=Expression, fill= Gene)) + 
-    geom_boxplot() +  
+    geom_violin() + 
+      geom_point( position=position_jitterdodge(jitter.width = .2, dodge.width = .9 ),   alpha=0.6, color="turquoise3") + 
     labs(title = title, x=meta_var) +
     theme(plot.title = element_text( size=10)) +
     scale_fill_manual(values=c("brown", "slategray"))
+  
 }
 ```
 
@@ -750,7 +775,7 @@ marker_vs_metadata(markerDF, "dx")
 ### ANOVA: mut
 
 ```{r ANOVA: mut}
-marker_vs_metadata(markerDF, "mut") 
+marker_vs_metadata(markerDF, "mut")
 ```
 
 
@@ -766,7 +791,7 @@ marker_vs_metadata(markerDF, "mut")
 classify all cells within that cluster as a given cell type.
   + __Drawback__: The biomarkers that DGE identifies for each cluster will depend on the composition of the other cells. 
 So some clusters may remain unidentified simply by the fact that they didn't have the proper cells to be compared to.
-```{r Identify Cell Types By DEGs, fig.width=12} 
+```{r Identify Cell Types By DEGs, out.width="150%", out.height="150%"} 
 identify_cellTypes_by_biomarkers <- function(pbmc.markers, topN_search=5){
   top <- pbmc.markers %>% group_by(cluster) %>% top_n(topN_search, avg_logFC) 
   clust_cellTypes <- list()
@@ -801,7 +826,7 @@ tSNE_metadata_plot("CellType_DGE")
   E.g. If any cell expresses CD16 more than the average expression of CD16 across all cells, then classify it as CD16+.
   + __Drawback__: The threshold for classifying a cell as either CD16+ or CD16-- is defined rather arbitrarily
   (the average expression of CD16 in this sample isn't necessarily biologically meaningful).
-```{r Identify Cell Types By Average Expression, fig.width=12}  
+```{r Identify Cell Types By Average Expression, out.width="150%", out.height="150%"}  
 # A simplistic way of categorizing cells into CD14++/CD16+ and CD14++/CD16--, 
 ## is by splitting cells into groups based on whether their expression is 
 ## higher or lower than the average CD16 expression of all cells.
@@ -982,7 +1007,7 @@ runDGE <- function(pbmc, meta_var, group1, group2, test.use="wilcox"){
   #print(paste("DGE_allCells",meta_var,sep="_")) 
   pbmc <- SetAllIdent(pbmc, id = meta_var)
   pbmc <- StashIdent(pbmc, save.name = meta_var)  
-  DEGs <- FindMarkers(pbmc, ident.1=group1, ident.2=group2, test.use=test.use)
+  DEGs <- FindMarkers(pbmc, ident.1=group1, ident.2=group2, test.use=test.use, only.pos = F)
   DEGs$gene <- row.names(DEGs)
   
   cap <- paste("DEGs:\n",group1, "vs.", group2)
@@ -1029,7 +1054,7 @@ DGE_within_clusters <- function(pbmc, meta_var, group1, group2){
    pbmc_clustSub <- Seurat::SubsetData(pbmc, accept.value = clust, subset.raw = T) 
    cap <- paste("Cluster ",clust,": \n ",group1," vs. ", group2, sep="") 
    cat('\n')   
-   cat("### ",cap)
+   cat("### ",cap, "\n")
    DEG_df <-runDGE(pbmc_clustSub, meta_var, group1, group2 ) 
    cat('\n')   
   } 
@@ -1080,16 +1105,18 @@ pbmc <- FindClusters(object = pbmc, reduction.type = "pca", dims.use = 1:10,
 pbmc <- StashIdent(object = pbmc, save.name = "resolution_3.0") 
 
 plot1 <- TSNEPlot(object = pbmc, do.return = TRUE, no.legend = TRUE, do.label = TRUE, label.size=labSize)
-plot2 <- TSNEPlot(object = pbmc, do.return = TRUE, group.by = "ClusterNames_0.6", 
+plot2 <- TSNEPlot(object = pbmc, do.return = TRUE, group.by = "post_clustering", 
                   no.legend = TRUE, do.label = TRUE, label.size=labSize)
 plot_grid(plot1, plot2)
 ```
 
 ## Find New Biomarkers
 
-```{r Find New Biomarkers}  
+```{r Find New Biomarkers, out.height="300%"}  
 res3.0_markers <- FindAllMarkers(object = pbmc, min.pct = 0.25, thresh.use = 0.25,  only.pos = F,  test.use = "wilcox")
-FeaturePlot(object = pbmc, features.plot = top1$gene, cols.use = c("green", "blue"))
+top1_res3.0 <- res3.0_markers %>% group_by(cluster) %>% top_n(1, avg_logFC) 
+
+FeaturePlot(object = pbmc, features.plot = top1_res3.0$gene, cols.use = c("green", "blue"))
 
 # Set back to orig
 pbmc <- SetAllIdent(object = pbmc, id = orig_resolution) 
