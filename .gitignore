@@ -11,4 +11,4 @@ run_seurat_files/
 ./cd14-processed.rds
 ./Data/cd14-processed.rds
 ./Results/subsetGenes-protein_coding__subsetCells-400__Resolution-0.6/cd14-processed.rds
-./cd14-processed.rds
+*.RData
