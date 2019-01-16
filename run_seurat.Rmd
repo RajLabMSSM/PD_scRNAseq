@@ -26,7 +26,7 @@ params:
 ---
  
 
-# Setup
+# Setup 
 
 ```{r setup}
 resultsPath=file.path(getwd(),"Results")
@@ -55,6 +55,7 @@ params
  
  
 ## Load Libraries & Report Versions
+
 ```{r Load Libraries & Report Versions, message=F, warning=F}
 library(Seurat)
 library(dplyr)
