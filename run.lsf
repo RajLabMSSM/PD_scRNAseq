@@ -1,11 +1,8 @@
 #!/bin/bash
-
-nCores=2
-
-#BSUB -J PD_scRNAseq_${nCores}_mem15000    # Name of job
+#BSUB -J PD_scRNAseq_nCores2_mem15000    # Name of job
 #BSUB -P acc_ad-omics		    # Project to charge time
 #BSUB -q premium		    # Target queue for job execution
-#BSUB -n {$nCores}		    # Number of cores required
+#BSUB -n 2		    	    # Number of cores required
 #BSUB -R span[hosts=1]		    # Number of cores per host 
 #BSUB -R rusage[mem=15000]	    # Memory per core
 #BSUB -W 2:00			    # Time requested 
@@ -14,4 +11,4 @@ nCores=2
 #BSUB -L /bin/bash	 	    # Script shell language (/bin/tcsh, /bin/ksh etc.)
     
 module load R pandoc
-Rscript seurat_params.R 'protein_coding' F 0.6 $nCores
+Rscript seurat_params.R 'protein_coding' F 0.6 2
