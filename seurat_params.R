@@ -1,3 +1,5 @@
+# Also try 'argparse' package for more complex handling
+
 args = commandArgs(trailingOnly = T)
 
 subsetGenes = args[1]
