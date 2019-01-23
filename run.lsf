@@ -1,5 +1,5 @@
 #!/bin/bash
-#BSUB -J PD_scRNAseq_res0.2_nCores2_mem30000    # Name of job
+#BSUB -J PD_scRNAseq_res0.5_nCores2_mem30000    # Name of job
 #BSUB -P acc_ad-omics		    # Project to charge time
 #BSUB -q premium		    # Target queue for job execution
 #BSUB -n 2		    	    # Number of cores required
