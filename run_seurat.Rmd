@@ -505,8 +505,7 @@ for (i in c(perplexity,5,20,30,100)){
 ## t-SNE + Metadata Plots {.tabset .tabset-fade .tabset-pills}
 
 ```{r t-SNE + Metadata, warning=F, message=F, results='asis'}
-tSNE_metadata_plot <- function(var, labSize=12){
-  cat(paste("t-SNE Metadata plot for ", var))
+tSNE_metadata_plot <- function(var, labSize=12){ 
   # Metadata plot  
   p1 <- TSNEPlot(DAT, do.return = T,  do.label = T,  group.by = var,label.size = labSize,
                  plot.title=paste(var), vector.friendly=T) +
@@ -541,14 +540,6 @@ Shown here: Biomarkers of each cluster vs. all other clusters.
 
 ## Biomarkers Data {.tabset .tabset-fade .tabset-pills}
 
-### Top Biomarkers
-
-```{r Top Biomarkers} 
-topNum = 5
-topBiomarkers <- DAT.markers %>% group_by(cluster) %>% top_n(topNum, avg_logFC)
-createDT(DAT.markers, caption = paste("All Biomarkers: All Clusters"))
-```
-
 ### All Biomarkers
 
 ```{r All Biomarkers} 
@@ -570,6 +561,15 @@ createDT(markers.summary, caption = "Number of DEGs and Mean logFC per Cluster")
 
 createDT(DAT.markers, caption = paste("All Biomarkers: All Clusters"))
 ```
+
+### Top Biomarkers
+
+```{r Top Biomarkers} 
+topNum = 5
+topBiomarkers <- DAT.markers %>% group_by(cluster) %>% top_n(topNum, avg_logFC)
+createDT(DAT.markers, caption = paste("All Biomarkers: All Clusters"))
+```
+
 
 ## Cluster Biomarker: Violin Plots {.tabset .tabset-fade .tabset-pills}
 
@@ -617,7 +617,7 @@ for (clust in unique(DAT.markers$cluster)){
  
 ## Cluster Biomarker: Volcano Plots {.tabset .tabset-fade .tabset-pills}
 
-```{r Volcano Plots, fig.height=5, fig.width=5}
+```{r Volcano Plots, fig.height=5, fig.width=5, results='asis'}
 ##Construct the plot object
 volcanoPlot <- function(DEG_df, caption="", topFC_labeled=5){
   DEG_df$sig<-  ifelse( DEG_df$p_val_adj<0.05 & DEG_df$avg_logFC<1.5, "p_val_adj<0.05",
@@ -657,10 +657,9 @@ for (clust in unique(DAT.markers$cluster)){
    cap <- paste("Cluster",clust,"DEG Table") 
    DEG_df <- subset(DAT.markers, cluster==as.character(clust)) %>% arrange(desc(avg_logFC))  
    volcanoPlot(DEG_df, caption = cap)
-   createDT(DEG_df, caption = cap)
+   createDT(DEG_df, caption = cap) %>% print()
    cat('\n')   
-}
-
+} 
 ```
 
 
@@ -1022,7 +1021,7 @@ runDGE <- function(DAT, meta_var, group1, group2, test.use="wilcox"){
   DEGs$gene <- row.names(DEGs)
   
   cap <- paste("DEGs:\n",group1, "vs.", group2)
-  createDT(DEG_df, caption = cap)
+  createDT(DEG_df, caption = cap) %>% print()
   volcanoPlot(DEG_df, caption = cap)
   
   DAT <- SetAllIdent(DAT, id = "post_clustering")
@@ -1044,27 +1043,25 @@ DEG_df <-runDGE(DAT, "mut", "LRRK2", "PD")
 
 ## CellType_DGE
 
-### CellType_DGE
-
 ```{r All Cells: CellType_DGE}  
 DEG_df <-runDGE(DAT, "CellType_DGE", "CD14++/CD16+", "CD14++/CD16--") 
 ```
 
-### CellType_AvgExp
+## CellType_AvgExp
 
 ```{r All Cells: CellType_AvgExp}
 DEG_df <-runDGE(DAT, "CellType_AvgExp", "CD14++/CD16+", "CD14++/CD16--") 
 ```
 
-# DGE: Within Clusters
+# DGE: Within Clusters {.tabset .tabset-fade .tabset-pills}
 
-```{r Within Clusters: function, results='asis'} 
+```{r Within Clusters: function} 
 DGE_within_clusters <- function(DAT, meta_var, group1, group2){ 
   for (clust in unique(DAT@meta.data$post_clustering)){
-    # Subset cells by cluster 
-   DAT_clustSub <- Seurat::SubsetData(DAT, accept.value = clust, subset.raw = T)  
+    # Subset cells by cluster  
    cat('\n')   
    cat("### ",paste("Cluster ",clust,": ",group1," vs. ", group2, sep="") , "\n")
+   DAT_clustSub <- Seurat::SubsetData(DAT, accept.value = clust, subset.raw = T)  
    DEG_df <-runDGE(DAT_clustSub, meta_var, group1, group2 ) 
    cat('\n')   
   } 
@@ -1074,23 +1071,25 @@ DGE_within_clusters <- function(DAT, meta_var, group1, group2){
 
 ## Between Disease Groups {.tabset .tabset-fade .tabset-pills}
 
-```{r Within Clusters: Between Disease Groups}   
+```{r Within Clusters: Between Disease Groups, results='asis'}   
 DGE_within_clusters(DAT, "dx", "PD", "control")    
 ```
 
 ## Between Mutation Groups {.tabset .tabset-fade .tabset-pills}
 
-```{r Within Clusters: Between Mutation Groups}
+```{r Within Clusters: Between Mutation Groups, results='asis'}
 DGE_within_clusters(DAT, "mut", "LRRK2", "PD")
 ```
 
-## Between Mutation Groups {.tabset .tabset-fade .tabset-pills}
+## Between CellType_DGE {.tabset .tabset-fade .tabset-pills}
 
-```{r Within Clusters: CellType_DGE}
+```{r Within Clusters: CellType_DGE, results='asis'}
 DGE_within_clusters(DAT, "CellType_DGE", "CD14++/CD16+", "CD14++/CD16--") 
 ```
 
-```{r Within Clusters: CellType_AvgExp}
+## Between CellType_AvgExp {.tabset .tabset-fade .tabset-pills}
+
+```{r Within Clusters: CellType_AvgExp, results='asis'}
 DGE_within_clusters(DAT, "CellType_AvgExp", "CD14++/CD16+", "CD14++/CD16--")
 ```
 
@@ -1138,7 +1137,7 @@ DAT <- SetAllIdent(object = DAT, id = orig_resolution)
 
 # Enrichment
 
-```{r}
+```{r Enrichment}
 enrichr_dbs <- c("KEGG_2018", "Reactome_2016",
                  "GO_Biological_Process_2018", "GO_Molecular_Function_2018", "GO_Cellular_Component_2018", 
                  "Rare_Diseases_AutoRIF_ARCHS4_Predictions", "Human_Gene_Atlas")
@@ -1152,18 +1151,16 @@ createDT(enrichR::listEnrichrDbs(), "Enrichr Databases")
 for (clust in unique(DAT.markers.sig$cluster)){
   cat('\n')
   cat("### Cluster ",clust,"{.tabset .tabset-fade}\n")
-  geneList <- subset(DAT.markers.sig, cluster==clust)$gene
+  geneList <- subset(DAT.markers.sig, cluster==clust)$gene  %>% as.character()
   results <- enrichr(genes = geneList, databases = enrichr_dbs )
   for (db in enrichr_dbs){
     cat('\n')
     cat("#### ",db,"\n")  
-    print(createDT(subset(results[[db]], Adjusted.P.value<=0.05), paste("Enrichr Results: ",db,"Cluster ", clust)))
+    createDT(subset(results[[db]], Adjusted.P.value<=0.05), paste("Enrichr Results: ",db,"Cluster ", clust)) %>% print()
     cat('\n')
   } 
   cat('\n')
-}
-
- 
+} 
 ```
 
 ## Enrichr on WGCNA Modules {.tabset .tabset-fade .tabset-pills}
@@ -1180,12 +1177,12 @@ modules <- base::merge(eigengenes, modules,by="Ensembl" )
 for (mod in unique(modules$moduleColors)){
   cat('\n')
   cat("### Module ",mod,"{.tabset .tabset-fade}\n")
-  geneList <- subset(modules, moduleColors==mod)$symbol
+  geneList <- subset(modules, moduleColors==mod)$symbol %>% as.character()
   results <- enrichr(genes = geneList, databases = enrichr_dbs )
   for (db in enrichr_dbs){
     cat('\n')
     cat("#### ",db,"\n")  
-    createDT(subset(results[[db]], Adjusted.P.value<=0.05), paste("Enrichr Results:",db,"Module", mod))
+    createDT(subset(results[[db]], Adjusted.P.value<=0.05), paste("Enrichr Results:",db,"Module", mod))  %>% print()
     cat('\n')
   } 
   cat('\n')
@@ -1230,13 +1227,13 @@ matpoints(plotdat, col = modules, pch = 21)
 
 ### RRHO
 
-```{r, eval=F}
+```{r RRHO, eval=F}
 library(RRHO) #BiocManager::install("RRHO")
 
-list.length <- 100
- list.names <- paste('Gene',1:list.length, sep='')
-gene.list1<- data.frame(list.names, sample(100))
-gene.list2<- data.frame(list.names, sample(100))
+# list.length <- 100
+#  list.names <- paste('Gene',1:list.length, sep='')
+# gene.list1<- data.frame(list.names, sample(100))
+# gene.list2<- data.frame(list.names, sample(100))
 
 
 for (clust in unique(DAT.markers.sig)){
