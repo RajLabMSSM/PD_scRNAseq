@@ -37,7 +37,10 @@ nCores <- params$nCores #parallel::detectCores()
 subsetGenes <- params$subsetGenes 
 subsetCells <- params$subsetCells 
 resolution <-  as.numeric(params$resolution)
-interactive <- params$interactive 
+interactive <- params$interactive
+perplexity <- params$perplexity 
+
+perplexity <- ifelse(exists("perplexity"), perplexity, 30)
 
 root <- getwd()
 # Have to setwd via knitr
@@ -425,8 +428,7 @@ The clustering approach in FindClusters was heavily inspired by recent manuscrip
 * To further increase speed, you can employ an approximate nearest neighbor search via the RANN package by increasing the nn.eps + parameter. Setting this at 0 (the default) represents an exact neighbor search.
 * By default, we perform 100 random starts for clustering and select the result with highest modularity. You can lower this through the n.start parameter to reduce clustering time.
 * Algorithm for modularity optimization (1 = original Louvain algorithm; 2 = Louvain algorithm with multilevel refinement; 3 = SLM algorithm).
-```{r Cluster Cells} 
-#perplexity = 50
+```{r Cluster Cells}  
 DAT <- RunTSNE(object=DAT,  reduction.use = "pca", dims.use = 1:10, do.fast = TRUE,
                 perplexity = perplexity, tsne.method = "Rtsne", num_threads=nCores, verbose=F) #   FItSNE 
 
@@ -521,10 +523,10 @@ tSNE_metadata_plot <- function(var, labSize=12){
 # Iterate plots over metadata variables
 metaVars <- c("dx","mut","Gender","Age", "ID")
 for (var in metaVars){
-  cat("\n")
+  cat('\n')
   cat("### t-SNE Metadata plot for ",var, "\n") 
   tSNE_metadata_plot(var)
-  cat("\n") 
+  cat('\n') 
 } 
 ```
 
@@ -668,13 +670,13 @@ for (clust in unique(DAT.markers$cluster)){
 
 ```{r}
 for (clust in top1$cluster){ 
-  cat("\n")
-  cat("### Cluster",clust,"\n")
-  cat( "Biomarker\n",subClust$gene)
   subClust <- subset( top1, cluster==clust)
+  cat('\n')
+  cat("### Cluster",clust,"\n")
+  cat( "Biomarker\n",subClust$gene) 
   results <- Seurat::FindGeneTerms(QueryGene = subClust$gene) 
   print(results) #parse_html_notebook(results)
-  cat("\n")
+  cat('\n')
 }
 
 ```
@@ -878,31 +880,6 @@ tSNE_metadata_plot("CellType_AvgExp")
 
 ## Known Biomarkers: Heatmaps {.tabset .tabset-fade .tabset-pills}
 
-### Average Expression: By Clusters
-
-```{r Clusters Averaged}
-markerDF <- markerDF %>% mutate(Cluster = post_clustering)
-# Show mean exp for each marker
-avgMarker <- markerDF %>% group_by(Gene, Cluster) %>% summarise(meanExp = mean(Expression)) 
-
-p <- ggplot(data = avgMarker, aes(x=Gene, y=Cluster, fill=meanExp)) %>% + geom_tile() + scale_fill_viridis()
-p
-# ifelse(interactive, p %>% ggplotly() %>% toWebGL() %>% print(), print(p))
-```
-
-### Average Expression: By Disease
-
-```{r Average Expression: By Disease}
-# Show mean exp for each marker
-avgMarker <- markerDF %>% group_by(Gene, dx, Cluster) %>% summarise(meanExp = mean(Expression)) 
-p <- ggplot(data = avgMarker, aes(x=Gene, y=dx, fill=meanExp)) %>% + geom_tile() + scale_fill_viridis()
-p
-
-# ifelse(interactive, p %>% ggplotly() %>% toWebGL() %>% print(), print(p))
-```
-
-
-
 ### Cells Separated
 
 ```{r Cells Separated} 
@@ -966,6 +943,29 @@ if (T==F){
  
 
 } 
+```
+
+### Average Expression: By Clusters
+
+```{r Clusters Averaged}
+markerDF <- markerDF %>% mutate(Cluster = post_clustering)
+# Show mean exp for each marker
+avgMarker <- markerDF %>% group_by(Gene, Cluster) %>% summarise(meanExp = mean(Expression)) 
+
+p <- ggplot(data = avgMarker, aes(x=Gene, y=Cluster, fill=meanExp)) %>% + geom_tile() + scale_fill_viridis()
+p
+# ifelse(interactive, p %>% ggplotly() %>% toWebGL() %>% print(), print(p))
+```
+
+### Average Expression: By Disease
+
+```{r Average Expression: By Disease}
+# Show mean exp for each marker
+avgMarker <- markerDF %>% group_by(Gene, dx, Cluster) %>% summarise(meanExp = mean(Expression)) 
+p <- ggplot(data = avgMarker, aes(x=Gene, y=dx, fill=meanExp)) %>% + geom_tile() + scale_fill_viridis()
+p
+
+# ifelse(interactive, p %>% ggplotly() %>% toWebGL() %>% print(), print(p))
 ```
 
 
@@ -1063,10 +1063,9 @@ DEG_df <-runDGE(DAT, "CellType_AvgExp", "CD14++/CD16+", "CD14++/CD16--")
 DGE_within_clusters <- function(DAT, meta_var, group1, group2){ 
   for (clust in unique(DAT@meta.data$post_clustering)){
     # Subset cells by cluster 
-   DAT_clustSub <- Seurat::SubsetData(DAT, accept.value = clust, subset.raw = T) 
-   cap <- paste("Cluster ",clust,": \n ",group1," vs. ", group2, sep="") 
+   DAT_clustSub <- Seurat::SubsetData(DAT, accept.value = clust, subset.raw = T)  
    cat('\n')   
-   cat("### ",cap, "\n")
+   cat("### ",paste("Cluster ",clust,": ",group1," vs. ", group2, sep="") , "\n")
    DEG_df <-runDGE(DAT_clustSub, meta_var, group1, group2 ) 
    cat('\n')   
   } 
@@ -1152,17 +1151,17 @@ createDT(enrichR::listEnrichrDbs(), "Enrichr Databases")
 
 ```{r Enrichr on Clusters} 
 for (clust in unique(DAT.markers.sig$cluster)){
-  cat("\n")
+  cat('\n')
   cat("### Cluster ",clust,"{.tabset .tabset-fade}\n")
   geneList <- subset(DAT.markers.sig, cluster==clust)$gene
   results <- enrichr(genes = geneList, databases = enrichr_dbs )
   for (db in enrichr_dbs){
-    cat("\n")
+    cat('\n')
     cat("#### ",db,"\n")  
     print(createDT(subset(results[[db]], Adjusted.P.value<=0.05), paste("Enrichr Results: ",db,"Cluster ", clust)))
-    cat("\n")
+    cat('\n')
   } 
-  cat("\n")
+  cat('\n')
 }
 
  
@@ -1180,17 +1179,17 @@ modules <- read.delim("Data/bulkMonocytes_WGCNAmodules_geneModules.txt", row.nam
 modules <- base::merge(eigengenes, modules,by="Ensembl" )
 
 for (mod in unique(modules$moduleColors)){
-  cat("\n")
+  cat('\n')
   cat("### Module ",mod,"{.tabset .tabset-fade}\n")
   geneList <- subset(modules, moduleColors==mod)$symbol
   results <- enrichr(genes = geneList, databases = enrichr_dbs )
   for (db in enrichr_dbs){
-    cat("\n")
+    cat('\n')
     cat("#### ",db,"\n")  
     print(createDT(subset(results[[db]], Adjusted.P.value<=0.05), paste("Enrichr Results:",db,"Module", mod)))
-    cat("\n")
+    cat('\n')
   } 
-  cat("\n")
+  cat('\n')
 }
 ```
 
