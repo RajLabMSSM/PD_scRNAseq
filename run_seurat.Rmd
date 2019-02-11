@@ -796,48 +796,10 @@ marker_vs_metadata(markerDF, "mut")
 
 
 
-
-## Defining Cell-types  
-
-### Identify Cell Types By DEGs
-
-* Classification Approach 1
-  + Go through each cluster and see what biomarkers they have through DGE. 
-  + If a cluster has a known gene marker within their top N biomarkers (with the right valence +/-), 
-classify all cells within that cluster as a given cell type.
-  + __Drawback__: The biomarkers that DGE identifies for each cluster will depend on the composition of the other cells. 
-So some clusters may remain unidentified simply by the fact that they didn't have the proper cells to be compared to.
-```{r Identify Cell Types By DEGs, out.width="150%", out.height="150%"} 
-identify_cellTypes_by_biomarkers <- function(DAT.markers, topN_search=5){
-  top <- DAT.markers %>% group_by(cluster) %>% top_n(topN_search, avg_logFC) 
-  clust_cellTypes <- list()
-  for (clust in top$cluster){ 
-    clustSub <- top[top5$cluster==clust, ]
-    CD16_logFC <- subset(clustSub, gene=="CFD")$avg_logFC 
-    
-    cellType <- ifelse(sum(markerList %in% clustSub$gene), # Both CD14 and CD16? Great, keep going
-           ifelse(CD16_logFC == abs(CD16_logFC), "CD14++/CD16+",  # But does CD16 have pos logfC? If so, then it's "CD14++/CD16+"
-                  "CD14++/CD16--"), # Otherwise, it means it means CD16 logFC is neg, meaning "CD14++/CD16--"
-           NA) # If it's none of these, it's an undefined cell type 
-     clust_cellTypes[clust] <- as.factor(cellType)
-  }
-  newMeta <- DAT@meta.data
-  newMeta["CellType_DGE"] <- plyr::mapvalues(newMeta$post_clustering, names(clust_cellTypes), as.character(clust_cellTypes) )  
-  DAT <- AddMetaData(DAT, metadata = newMeta)
-  return(DAT)
-} 
-DAT <- identify_cellTypes_by_biomarkers(DAT.markers, 5)
-
-# (Doesn't make sense to do bar plot because whole clusters are defined by their biomarkers)
-
-tSNE_metadata_plot("CellType_DGE")
-```
-
  
+# Identify Cell Types with Garnett + Monocle
 
-## Identify Cell Types with Garnett + Monocle
-
-### Pre-trained PBMC Classifer
+## Pre-trained PBMC Classifer
 
 ```{r Identify Cell Types with Garnett}
 # Convert Seurat objt to CDS object
@@ -879,9 +841,12 @@ plot_cell_clusters(mDAT, 1, 2, color = "Cluster",  markers = c("CD14", "FCGR3A")
 plot_cell_clusters(mDAT, 1, 2, color = "Cluster") + facet_wrap(~dx)
 plot_cell_clusters(mDAT, 1, 2, color = "Cluster") + facet_wrap(~mut)
 plot_cell_clusters(mDAT, 1, 2, color = "Cluster") + facet_wrap(~cell_type) 
+
+DAT <- Seurat::AddMetaData(DAT, pData(mDAT)[c("garnett_cluster","cell_type","cluster_ext_type","Cluster")])
+ 
 ```
 
-### Train Classifier on Data
+## Train Classifier on Data
 
 ```{r, include=F}
 
@@ -934,7 +899,7 @@ plot_cell_trajectory(HSMM_myo, color_by = "cell_type") +
 ```{r Cells Separated} 
 markerDF <- get_markerDF(DAT, markerList, 
              meta_vars =c("barcode", "dx", "mut","ID","post_clustering", "percent.mito","nGene", "nUMI",
-                          "CellType_DGE"))
+                          "cell_type"))
 Spectral <- grDevices::colorRampPalette(RColorBrewer::brewer.pal(length(unique(DAT@meta.data$mut)), "Spectral"))
 
 # DAT <- DoKMeans(DAT, k.genes = 3) 
@@ -946,15 +911,15 @@ if (T==F){
   heatmaply::heatmaply(markerMelt,  key.title="Expression",#plot_method= "ggplot",
         k_row = dim(markerMelt)[2], dendrogram = "row",
         showticklabels = c(T, F), xlab = "Known Markers", ylab = "Cells", column_text_angle = 45, 
-        row_side_colors =  DAT@meta.data[,c("dx","mut", "CellType_DGE")], row_side_palette = Spectral
+        row_side_colors =  DAT@meta.data[,c("dx","mut", "cell_type")], row_side_palette = Spectral
         )  %>%  colorbar(tickfont = list(size = 12), titlefont = list(size = 14), which = 2)  %>% 
         colorbar(tickfont = list(size = 12), titlefont = list(size = 14), which = 1)
  }else{ 
   # markerDF_sub <-subset(markerDF, Gene==markerList[1])  
   # var_to_colors(markerDF_sub, "post_clustering")  
   # library(pheatmap)
-  # pheatmap(markerMelt, annotation_row = markerDF_sub[c("dx","mut","CellType_DGE")])
-  # pheatmap(markerMelt, kmeans_k = NA, annotation_row = markerDF_sub[c("dx","mut","CellType_DGE")],
+  # pheatmap(markerMelt, annotation_row = markerDF_sub[c("dx","mut","cell_type")])
+  # pheatmap(markerMelt, kmeans_k = NA, annotation_row = markerDF_sub[c("dx","mut","cell_type")],
   #         cluster_cols = F, cutree_rows = length(unique(markerDF$post_clustering)),  angle_col=45 )
   library(RColorBrewer) 
   var_to_colors <- function(markerDF, metaVar){
@@ -978,16 +943,16 @@ if (T==F){
   
   
   markerDF <- markerDF %>%    
-    mutate_at(vars(post_clustering, dx, mut, ID, CellType_DGE), as.factor) %>% 
+    mutate_at(vars(post_clustering, dx, mut, ID, cell_type), as.factor) %>% 
     mutate(Cluster = post_clustering) %>%
     arrange(post_clustering) 
   # markerMelt <- reshape2::acast(markerDF, Cell~Gene, value.var="Expression", fun.aggregate = mean, drop = F, fill = 0) 
-  markerMelt <- dcast(markerDF,  Cell + post_clustering + dx + mut + ID + CellType_DGE ~ Gene,
+  markerMelt <- dcast(markerDF,  Cell + post_clustering + dx + mut + ID + cell_type ~ Gene,
                       fun.aggregate = mean, value.var = "Expression") %>% arrange(post_clustering)
   marker.matrix <- markerMelt[markerList] %>%as.matrix()
   row.names(marker.matrix) <- markerMelt$Cell
   
-  ha = HeatmapAnnotation(df = markerDF[c("dx","mut","ID","CellType_DGE","post_clustering")], which = "row") 
+  ha = HeatmapAnnotation(df = markerDF[c("dx","mut","ID","cell_type","post_clustering")], which = "row") 
   
   ComplexHeatmap::Heatmap(marker.matrix, col=viridis(300), column_title = "Biomarker", row_title = "Cell",  
                           row_dend_reorder = F,show_row_names = F, show_column_dend = F,show_row_dend =T,
@@ -1095,10 +1060,10 @@ DEG_df <-runDGE(DAT, "dx", group1 = "PD", group2="control")
 DEG_df <-runDGE(DAT, "mut", "LRRK2", "PD")
 ```
 
-## CellType_DGE
+## cell_type
 
-```{r All Cells: CellType_DGE}  
-DEG_df <-runDGE(DAT, "CellType_DGE", "CD14++/CD16+", "CD14++/CD16--") 
+```{r All Cells: cell_type}  
+DEG_df <-runDGE(DAT, "cell_type", "Monocytes", "Dendritic cells") 
 ```
 
 # DGE: Within Clusters {.tabset .tabset-fade .tabset-pills}
@@ -1129,10 +1094,11 @@ DGE_within_clusters(DAT, "dx", "PD", "control")
 DGE_within_clusters(DAT, "mut", "LRRK2", "PD")
 ```
 
-## Between CellType_DGE {.tabset .tabset-fade .tabset-pills}
+## Between cell_type {.tabset .tabset-fade .tabset-pills}
 
-```{r Within Clusters: CellType_DGE, results='asis'}
-DGE_within_clusters(DAT, "CellType_DGE", "CD14++/CD16+", "CD14++/CD16--") 
+```{r Within Clusters: cell_type, results='asis'}
+DGE_within_clusters(DAT, "cell_type", "Monocytes", "Dendritic cells") 
+DAT@meta.data$cell_type %>% table()
 ```
 
 
