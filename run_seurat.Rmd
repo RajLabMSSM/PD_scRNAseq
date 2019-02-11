@@ -29,7 +29,7 @@ params:
 
 # Setup 
 
-```{r setup}
+```{r setup,  dpi = 600}
 resultsPath=file.path(getwd(),"Results")
 # Gather parameters from command line  
 #dir.create(file.path(resultsPath,"cache"), showWarnings=F, recursive=T)
@@ -73,22 +73,22 @@ library(shiny)
 library(ggrepel)
 library(DT) 
 library(ComplexHeatmap); #BiocManager::install("ComplexHeatmap") 
- 
-# install.packages('devtools')
-# devtools::install_github('talgalili/heatmaply')
+  
 ## Install Bioconductor
 #  if (!requireNamespace("BiocManager"))
-#     install.packages("BiocManager")
-# BiocManager::install(c("biomaRt"))
-library(biomaRt)
-# BiocManager::install(c("DESeq2"))
-library(DESeq2)
-# library(snow); #BiocManager::install("Rmpi") #NOTE: different lib name than install name (snow vs Rmpi)
+#     install.packages("BiocManager") 
+library(biomaRt) # BiocManager::install(c("biomaRt"))
+library(DESeq2) # BiocManager::install(c("DESeq2"))
 library(enrichR) #BiocManager::install("enrichR")
 
-# Useful Seurat functions
-## Seurat::FindGeneTerms() # Enrichr API
-## Seurat::MultiModal_CCA() # Integrates data from disparate datasets (CIA version too)
+library(monocle) #BiocManager::install("monocle")
+# BiocManager::install("DelayedMatrixStats")
+# BiocManager::install("org.Mm.eg.db") 
+library(org.Hs.eg.db)
+library(garnett) # devtools::install_github("cole-trapnell-lab/garnett")
+
+# Useful Seurat functions 
+## Seurat::MultiModal_CCA() # Integrates data from disparate datasets (CIA version too) 
 
 sessionInfo()
 print(paste("Seurat ", packageVersion("Seurat")))
@@ -106,6 +106,10 @@ createDT <- function(DF, caption="", scrollY=500){
     )
   ) 
    return(data)
+}
+# Need to wrap inside tagList when rendering DTs within a for loop
+createDT_html <- function(DF, caption="", scrollY=400){
+  print( htmltools::tagList( createDT(DF, caption, scrollY)) ) 
 }
 ```
 
@@ -277,9 +281,10 @@ subsetBiotypes <- function(DAT, subsetGenes){
     DAT <- DAT_sub
     rm(list = c("DAT_sub","geneSubset", "subset.matrix", "orig.ident")) 
   } 
+  return(DAT)
 }
 
-subsetBiotypes(DAT, subsetGenes)
+DAT <- subsetBiotypes(DAT, subsetGenes)
 ```
 
 ### Subset Cells
@@ -547,7 +552,6 @@ Shown here: Biomarkers of each cluster vs. all other clusters.
 # Set arg 'only.pos=F' to capture negative biomarkers
 # DAT <- SetIdent(DAT, ident.use = "post_clustering") 
 
-
 DAT.markers <- FindAllMarkers(object = DAT, min.pct = 0.25, thresh.use = 0.25,  only.pos = F,  test.use = "wilcox")
 DAT.markers <- DAT.markers %>% mutate(FC = 2^avg_logFC)
 
@@ -657,7 +661,7 @@ for (clust in unique(DAT.markers$cluster)){
    cap <- paste("Cluster",clust,"DEG Table") 
    DEG_df <- subset(DAT.markers, cluster==as.character(clust)) %>% arrange(desc(avg_logFC))  
    volcanoPlot(DEG_df, caption = cap)
-   createDT(DEG_df, caption = cap) %>% print()
+   createDT_html(DEG_df, caption = cap)
    cat('\n')   
 } 
 ```
@@ -829,46 +833,93 @@ DAT <- identify_cellTypes_by_biomarkers(DAT.markers, 5)
 tSNE_metadata_plot("CellType_DGE")
 ```
 
-
-
-## Identify Cell Types By Average Expression
-
-* Classification Approach 2
-  + Alternatively, you could classify cells by their absolute expression values. 
-  E.g. If any cell expresses CD16 more than the average expression of CD16 across all cells, then classify it as CD16+.
-  + __Drawback__: The threshold for classifying a cell as either CD16+ or CD16-- is defined rather arbitrarily
-  (the average expression of CD16 in this sample isn't necessarily biologically meaningful).
-```{r Identify Cell Types By Average Expression, out.width="150%", out.height="150%"}  
-# A simplistic way of categorizing cells into CD14++/CD16+ and CD14++/CD16--, 
-## is by splitting cells into groups based on whether their expression is 
-## higher or lower than the average CD16 expression of all cells.
-identify_cellTypes_by_avgExpression <- function(DAT, markerDF){
-  avgMarkerExp <-markerDF %>% group_by(Gene) %>% dplyr::summarise(meanExp = mean(Expression))
-  avgMarkerExp <- setNames(avgMarkerExp$meanExp, avgMarkerExp$Gene)
-  CD16 <- markerDF[markerDF$Gene=="FCGR3A",]
-  CD16_group <- ifelse(CD16$Expression >= avgMarkerExp["FCGR3A"], "CD14++/CD16+", "CD14++/CD16--")
-  CD16["CellType_AvgExp"]  <- as.factor(CD16_group)
-  # Make sure row order is same before putting back into meta.data
-  metaD <- DAT@meta.data
-  newMeta <- merge(metaD, CD16[,c("Cell","CellType_AvgExp")], by.x="barcode", by.y="Cell")
-  row.names(newMeta) <- row.names(metaD)
-  DAT <- AddMetaData(DAT, metadata = newMeta)
-  return(DAT)
-}
-DAT <- identify_cellTypes_by_avgExpression(DAT, markerDF)
  
-# Get proportions of cell types in each cluster
-cluster_proportions <- DAT@meta.data %>% group_by(CellType_AvgExp, post_clustering) %>% 
-  tally() %>%
-  group_by(post_clustering, CellType_AvgExp) %>%
-  mutate(percentTotal = n/sum(n)*100)
 
-ggplot(cluster_proportions, aes(x=post_clustering, y=percentTotal, fill=CellType_AvgExp)) + geom_col(position = "fill") +  
-  labs(title="Proportions of Cell-types per Cluster: \n CellType_AvgExp", 
-       x="Cluster", y="Cell Type / Total Cells") +
-  scale_fill_manual(values=c("brown", "slategray")) 
- 
-tSNE_metadata_plot("CellType_AvgExp")
+## Identify Cell Types with Garnett + Monocle
+
+### Pre-trained PBMC Classifer
+
+```{r Identify Cell Types with Garnett}
+# Convert Seurat objt to CDS object
+mDAT <- monocle::importCDS(DAT,  import_all = T) 
+# generate size factors for normalization later
+mDAT <- estimateSizeFactors(mDAT)
+
+# Get pre-trained PBMC classifer 
+load("hsPBMC") # Download from: https://cole-trapnell-lab.github.io/garnett/classifiers/hsPBMC 
+# Get feature genes for each cell type
+feature_genes <- get_feature_genes(hsPBMC,
+                                   node = "root",
+                                   db = org.Hs.eg.db, 
+                                   convert_ids = T)
+head(feature_genes)
+mDAT <- classify_cells(mDAT, hsPBMC,
+                           db = org.Hs.eg.db,
+                           cluster_extend = TRUE,
+                           cds_gene_id_type = "SYMBOL")
+head(pData(mDAT))
+table(pData(mDAT)$cell_type)
+table(pData(mDAT)$cluster_ext_type) 
+
+
+
+# Run tSNE: Plot Clusters and Cell Types 
+mDAT <- reduceDimension(mDAT, max_components = 3, reduction_method = "tSNE") 
+commonGeoms <- labs(x="tSNE1",y="tSNE2")
+plot_grid(nrow = 2,
+  qplot(data = pData(mDAT), mDAT@reducedDimA[1,], mDAT@reducedDimA[2,], color = cell_type) + theme_bw() + commonGeoms,
+  qplot(data = pData(mDAT), mDAT@reducedDimA[1,], mDAT@reducedDimA[2,], color = cluster_ext_type) + theme_bw() + commonGeoms
+)
+
+
+# Unsupervised Clustering
+mDAT <- clusterCells(mDAT, num_clusters = 5)
+pData(mDAT)
+plot_cell_clusters(mDAT, 1, 2, color = "Cluster",  markers = c("CD14", "FCGR3A"))
+plot_cell_clusters(mDAT, 1, 2, color = "Cluster") + facet_wrap(~dx)
+plot_cell_clusters(mDAT, 1, 2, color = "Cluster") + facet_wrap(~mut)
+plot_cell_clusters(mDAT, 1, 2, color = "Cluster") + facet_wrap(~cell_type) 
+```
+
+### Train Classifier on Data
+
+```{r, include=F}
+
+# marker_file_path <- system.file("extdata", "pbmc_test.txt",
+#                                 package = "garnett")
+# # Plot chosen markers
+# marker_check <- check_markers(mDAT, marker_file_path,
+#                               db=org.Hs.eg.db,
+#                               cds_gene_id_type = "SYMBOL",
+#                               marker_file_gene_id_type = "SYMBOL")
+#
+# plot_markers(marker_check)
+
+# Classify Cells
+## Get classifier from
+# write.table( RCurl::getURL("https://cole-trapnell-lab.github.io/garnett/marker_files/hsPBMC_markers.txt"),
+#              file = "pbmc_markerFile.txt",row.names = F, col.names = F, quote = F, )
+# Train Classifier
+# classifier <- train_cell_classifier(cds = mDAT,
+#                                          marker_file = "pbmc_markerFile.txt",
+#                                          db=org.Hs.eg.db,
+#                                          cds_gene_id_type = "SYMBOL",
+#                                          num_unknown = 50,
+#                                          marker_file_gene_id_type = "SYMBOL")
+#get_classifier_references(classifier) 
+```
+
+
+# Pseudo-time
+
+WARNING: _Very_ computationally expensive!
+```{r Pseudo-time, eval=F}
+mDAT <- reduceDimension(mDAT, max_components = 2, method = 'DDRTree')
+mDAT <- orderCells(mDAT)
+plot_cell_trajectory(mDAT, color_by = "dx")
+plot_cell_trajectory(mDAT, color_by = "cell_type")
+plot_cell_trajectory(HSMM_myo, color_by = "cell_type") +
+    facet_wrap(~mut, nrow = 2)
 ```
 
 
@@ -883,8 +934,11 @@ tSNE_metadata_plot("CellType_AvgExp")
 ```{r Cells Separated} 
 markerDF <- get_markerDF(DAT, markerList, 
              meta_vars =c("barcode", "dx", "mut","ID","post_clustering", "percent.mito","nGene", "nUMI",
-                          "CellType_DGE","CellType_AvgExp"))
+                          "CellType_DGE"))
 Spectral <- grDevices::colorRampPalette(RColorBrewer::brewer.pal(length(unique(DAT@meta.data$mut)), "Spectral"))
+
+# DAT <- DoKMeans(DAT, k.genes = 3) 
+# KMeansHeatmap(DAT)
 
 if (T==F){
   # Spectral <- heatmaply::Spectral(length(unique(DAT@meta.data$mut)))
@@ -895,12 +949,12 @@ if (T==F){
         row_side_colors =  DAT@meta.data[,c("dx","mut", "CellType_DGE")], row_side_palette = Spectral
         )  %>%  colorbar(tickfont = list(size = 12), titlefont = list(size = 14), which = 2)  %>% 
         colorbar(tickfont = list(size = 12), titlefont = list(size = 14), which = 1)
-}else{ 
+ }else{ 
   # markerDF_sub <-subset(markerDF, Gene==markerList[1])  
   # var_to_colors(markerDF_sub, "post_clustering")  
   # library(pheatmap)
-  # pheatmap(markerMelt, annotation_row = markerDF_sub[c("dx","mut","CellType_DGE", "CellType_AvgExp")])
-  # pheatmap(markerMelt, kmeans_k = NA, annotation_row = markerDF_sub[c("dx","mut","CellType_DGE", "CellType_AvgExp")],
+  # pheatmap(markerMelt, annotation_row = markerDF_sub[c("dx","mut","CellType_DGE")])
+  # pheatmap(markerMelt, kmeans_k = NA, annotation_row = markerDF_sub[c("dx","mut","CellType_DGE")],
   #         cluster_cols = F, cutree_rows = length(unique(markerDF$post_clustering)),  angle_col=45 )
   library(RColorBrewer) 
   var_to_colors <- function(markerDF, metaVar){
@@ -924,16 +978,16 @@ if (T==F){
   
   
   markerDF <- markerDF %>%    
-    mutate_at(vars(post_clustering, dx, mut, ID, CellType_DGE, CellType_AvgExp), as.factor) %>% 
+    mutate_at(vars(post_clustering, dx, mut, ID, CellType_DGE), as.factor) %>% 
     mutate(Cluster = post_clustering) %>%
     arrange(post_clustering) 
   # markerMelt <- reshape2::acast(markerDF, Cell~Gene, value.var="Expression", fun.aggregate = mean, drop = F, fill = 0) 
-  markerMelt <- dcast(markerDF,  Cell + post_clustering + dx + mut + ID + CellType_DGE + CellType_AvgExp ~ Gene,
+  markerMelt <- dcast(markerDF,  Cell + post_clustering + dx + mut + ID + CellType_DGE ~ Gene,
                       fun.aggregate = mean, value.var = "Expression") %>% arrange(post_clustering)
   marker.matrix <- markerMelt[markerList] %>%as.matrix()
   row.names(marker.matrix) <- markerMelt$Cell
   
-  ha = HeatmapAnnotation(df = markerDF[c("dx","mut","ID","CellType_DGE","CellType_AvgExp","post_clustering")], which = "row") 
+  ha = HeatmapAnnotation(df = markerDF[c("dx","mut","ID","CellType_DGE","post_clustering")], which = "row") 
   
   ComplexHeatmap::Heatmap(marker.matrix, col=viridis(300), column_title = "Biomarker", row_title = "Cell",  
                           row_dend_reorder = F,show_row_names = F, show_column_dend = F,show_row_dend =T,
@@ -1021,7 +1075,7 @@ runDGE <- function(DAT, meta_var, group1, group2, test.use="wilcox"){
   DEGs$gene <- row.names(DEGs)
   
   cap <- paste("DEGs:\n",group1, "vs.", group2)
-  createDT(DEG_df, caption = cap) %>% print()
+  createDT_html(DEG_df, caption = cap)
   volcanoPlot(DEG_df, caption = cap)
   
   DAT <- SetAllIdent(DAT, id = "post_clustering")
@@ -1045,12 +1099,6 @@ DEG_df <-runDGE(DAT, "mut", "LRRK2", "PD")
 
 ```{r All Cells: CellType_DGE}  
 DEG_df <-runDGE(DAT, "CellType_DGE", "CD14++/CD16+", "CD14++/CD16--") 
-```
-
-## CellType_AvgExp
-
-```{r All Cells: CellType_AvgExp}
-DEG_df <-runDGE(DAT, "CellType_AvgExp", "CD14++/CD16+", "CD14++/CD16--") 
 ```
 
 # DGE: Within Clusters {.tabset .tabset-fade .tabset-pills}
@@ -1086,13 +1134,6 @@ DGE_within_clusters(DAT, "mut", "LRRK2", "PD")
 ```{r Within Clusters: CellType_DGE, results='asis'}
 DGE_within_clusters(DAT, "CellType_DGE", "CD14++/CD16+", "CD14++/CD16--") 
 ```
-
-## Between CellType_AvgExp {.tabset .tabset-fade .tabset-pills}
-
-```{r Within Clusters: CellType_AvgExp, results='asis'}
-DGE_within_clusters(DAT, "CellType_AvgExp", "CD14++/CD16+", "CD14++/CD16--")
-```
-
 
 
 # Try Different Cluster Resolutions {.tabset .tabset-fade .tabset-pills}
@@ -1156,7 +1197,7 @@ for (clust in unique(DAT.markers.sig$cluster)){
   for (db in enrichr_dbs){
     cat('\n')
     cat("#### ",db,"\n")  
-    createDT(subset(results[[db]], Adjusted.P.value<=0.05), paste("Enrichr Results: ",db,"Cluster ", clust)) %>% print()
+    createDT_html(subset(results[[db]], Adjusted.P.value<=0.05), paste("Enrichr Results: ",db,"Cluster ", clust))
     cat('\n')
   } 
   cat('\n')
@@ -1182,7 +1223,7 @@ for (mod in unique(modules$moduleColors)){
   for (db in enrichr_dbs){
     cat('\n')
     cat("#### ",db,"\n")  
-    createDT(subset(results[[db]], Adjusted.P.value<=0.05), paste("Enrichr Results:",db,"Module", mod))  %>% print()
+    createDT_html(subset(results[[db]], Adjusted.P.value<=0.05), paste("Enrichr Results:",db,"Module", mod))
     cat('\n')
   } 
   cat('\n')
