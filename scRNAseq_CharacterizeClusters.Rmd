@@ -36,14 +36,14 @@ load(file.path(resultsPath, "scRNAseq_results.RData"))
  
 ## Load Libraries
 
-```{r Load Libraries & Report Versions, message=F, warning=F}
+```{r Load Libraries & Report Versions, message=F, warning=F, error=T}
 library(Seurat)
 library(dplyr)
 library(gridExtra)
 # library(knitr)
 library(plotly)
 library(ggplot2)
-library(viridis)
+# library(viridis)
 library(reshape2) 
 library(ggrepel)
 library(DT)
@@ -325,7 +325,7 @@ marker_vs_metadata(markerDF, "mut")
 
 ## Pre-trained PBMC Classifer
 
-```{r Identify Cell Types with Garnett, eval=F}
+```{r Identify Cell Types with Garnett}
 library(monocle) # BiocManager::install("monocle") 
 # BiocManager::install(c('DelayedArray', 'DelayedMatrixStats', 'org.Hs.eg.db', 'org.Mm.eg.db'))
 library(org.Hs.eg.db)
@@ -336,7 +336,7 @@ mDAT <- monocle::importCDS(DAT,  import_all = T)
 # generate size factors for normalization later
 mDAT <-  DESeq2::estimateSizeFactors(mDAT)
 # Get pre-trained PBMC classifer 
-load("./Data/Garnett/hsPBMC") # Download from: https://cole-trapnell-lab.github.io/garnett/classifiers/hsPBMC 
+load(file.path(root, "Data/Garnett/hsPBMC")) # Download from: https://cole-trapnell-lab.github.io/garnett/classifiers/hsPBMC 
 # Get feature genes for each cell type
 feature_genes <- garnett::get_feature_genes(classifier = hsPBMC,
                                    node = "root",
