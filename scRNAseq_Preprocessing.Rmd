@@ -220,7 +220,7 @@ DAT <- NormalizeData(object = DAT, normalization.method = "LogNormalize",
 
 __Important!__:
 * In ScaleData...
-  + Specify do.par = F ("If set to TRUE, will use __half__ of the machine's available cores")
+  + __IMPORTANT!__: _Must_ specify do.par = F ("If set to TRUE, will use _half_ of the machine's available cores")
   + Specify num.cores = nCores (to use all available cores, determined by parallel::detectCores())
 
 Regress out: number of unique transcripts (nUMI), % mitochondrial transcripts (percent.mito) 
@@ -231,7 +231,6 @@ DAT <- FindVariableGenes(object = DAT, mean.function = ExpMean, dispersion.funct
 cat("Total Genes:", length(row.names(DAT@raw.data)), "\n")
 cat("Highly Variable Genes:", length(DAT@var.genes))
 
-# IMPORTANT!: Must set do.par=T and num.cors = n for large datasets being processed on computing clusters
 # IMPORTANT!: Use only the var.genes identified by 'FindVariableGenes' as the 'gene.use' arg in 'ScaleData'
 ## This will greatly reduced the computational load.
 
@@ -372,7 +371,9 @@ PCAPlot(object = DAT, dim.1 = 1, dim.2 = 2, group.by="post_clustering")#, do.hov
 Additional UMAP arguments detailed here: https://umap-learn.readthedocs.io/en/latest/api.html#module-umap.umap_ 
 ```{r UMAP, results = 'asis'} 
 # cat(print(mem_used()))
-DAT <- RunUMAP(object = DAT, reduction.use = "pca", dims.use = 1:10, verbose=TRUE, num_threads=params$nCores) # , num_threads=0
+DAT <- RunUMAP(object = DAT, reduction.use = "pca", dims.use = 1:10, verbose=TRUE, 
+               num_threads=params$nCores, 
+               genes.use = DAT@var.genes)
 # cat(print(mem_used()))
 # Plot results
 DimPlot(object = DAT, reduction.use = 'umap')
@@ -407,8 +408,11 @@ customColors <- function(var="post_clustering", palette="Set1"){
 for (i in c(perplexity,5,20,30,100)){
    cat('\n')   
    cat("### t-SNE: perplexity =",i,"\n") 
-   DAT <- RunTSNE(object=DAT,  reduction.use = "pca", dims.use = 1:10, do.fast = TRUE,
-                perplexity = i, tsne.method = "Rtsne", num_threads=params$nCores, verbose=F) #   FItSNE
+   DAT <- RunTSNE(object=DAT,  reduction.use = "pca", dims.use = 1:10, do.fast = TRUE,  
+                perplexity = i, tsne.method = "Rtsne", 
+                num_threads=params$nCores,
+                 genes.use = DAT@var.genes,
+                verbose=F) #   FItSNE
   tsnePlot <- TSNEPlot(object = DAT, do.label=T, label.size = labSize, do.return=T) + 
     scale_color_brewer( palette = "Set1", aesthetics = aes(alpha=.5))
   print(tsnePlot)

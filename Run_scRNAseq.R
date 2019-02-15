@@ -48,4 +48,26 @@ rmarkdown::render(input = 'index.Rmd',
                   # output_dir = resultsPath,
                   output_file = file.path(resultsPath, paste("index.html",sep=""))
 )
+
+# 
+# ### Combine into website 
+# library(markdown)
+# library(shiny) 
+# 
+# ui <- navbarPage("PD_scRNAseq",
+#            tabPanel("About", 
+#                     includeHTML("index.html") 
+#            ),
+#            tabPanel("Preprocessing",
+#                     includeHTML("scRNAseq_Preprocessing.html") 
+#            ),
+#            tabPanel("Characterize Clusters",
+#                     includeHTML("scRNAseq_CharacterizeClusters.html") 
+#            ),
+#            tabPanel("Enrichment",
+#                     includeHTML("scRNAseq_Enrichment.html") 
+#            )
+# )
+# renderUI(ui)
  
+#  
