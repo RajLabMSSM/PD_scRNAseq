@@ -1,0 +1,207 @@
+---
+title: "Enrichment" 
+author: "<h3>Author</h3>Brian M. Schilder, Bioinformatician II"
+date: "`r Sys.Date()`"
+output: 
+  rmarkdown::html_document: 
+    theme: spacelab
+    highlight: zenburn 
+    code_folding: show 
+    toc: true 
+    toc_float: true
+    smooth_scroll: true
+    number_sections: false 
+    self_contained: true
+params:
+  subsetGenes: "protein_coding" #FALSE
+  subsetCells: 500 #FALSE
+  resolution: 0.6
+  resultsPath: "./Results"
+  nCores: 2
+  perplexity: 30  
+---
+
+# Setup 
+
+```{r setup}
+root = "./"
+# Import functions
+source(file.path(root, "./general_functions.R"))
+import_parameters(params)
+load(file.path(resultsPath, "scRNAseq_results.RData")) 
+```
+
+__`r resultsPath`__
+ 
+## Load Libraries
+
+```{r Load Libraries & Report Versions, message=F, warning=F}
+library(Seurat)
+library(dplyr)
+library(gridExtra)
+library(knitr) 
+library(plotly)
+library(ggplot2)
+library(viridis)
+library(reshape2)
+library(shiny) 
+library(ggrepel)
+library(DT) 
+library(ComplexHeatmap); #BiocManager::install("ComplexHeatmap") 
+  
+## Install Bioconductor
+#  if (!requireNamespace("BiocManager"))
+#     install.packages("BiocManager") 
+library(biomaRt) # BiocManager::install(c("biomaRt"))
+library(DESeq2) # BiocManager::install(c("DESeq2"))
+library(enrichR) #BiocManager::install("enrichR")
+
+library(monocle) #BiocManager::install("monocle")
+# BiocManager::install("DelayedMatrixStats")
+# BiocManager::install("org.Mm.eg.db") 
+library(org.Hs.eg.db)
+library(garnett) # devtools::install_github("cole-trapnell-lab/garnett") 
+sessionInfo()
+print(paste("Seurat ", packageVersion("Seurat")))
+```
+
+
+# Enrichment
+
+```{r Enrichment}
+enrichr_dbs <- c("KEGG_2018", "Reactome_2016",
+                 "GO_Biological_Process_2018", "GO_Molecular_Function_2018", "GO_Cellular_Component_2018", 
+                 "Rare_Diseases_AutoRIF_ARCHS4_Predictions", "Human_Gene_Atlas")
+createDT(enrichR::listEnrichrDbs(), "Enrichr Databases")
+```
+
+
+## Enrichr on Clusters {.tabset .tabset-fade .tabset-pills}
+
+```{r Enrichr on Clusters, results='asis'} 
+for (clust in unique(DAT.markers.sig$cluster)){
+  cat('\n')
+  cat("### Cluster ",clust,"{.tabset .tabset-fade}\n")
+  geneList <- subset(DAT.markers.sig, cluster==clust)$gene  %>% as.character()
+  results <- enrichr(genes = geneList, databases = enrichr_dbs )
+  for (db in enrichr_dbs){
+    cat('\n')
+    cat("#### ",db,"\n")  
+    createDT_html(subset(results[[db]], Adjusted.P.value<=0.05), paste("Enrichr Results: ",db,"Cluster ", clust))
+    cat('\n')
+  } 
+  cat('\n')
+} 
+```
+
+## Enrichr on WGCNA Modules {.tabset .tabset-fade .tabset-pills}
+
+* __Background__: Bulk RNA-seq was conducted on monocytes extracted from the blood of controls and PD patients. Katia Lopes conducted Weighted Correlation Network Analysis (WGCNA) on these sameples and identified co-expression modules.
+* __Objective__: Determine whether any of these modules are representative of cell groups in our scRNA-seq monocytes data.
+
+```{r Enrichr on WGCNA Modules, results='asis'}
+eigengenes <- read.delim(file.path(root,"Data/bulkMonocytes_WGCNAmodules_geneMembership.txt"), row.names = NULL)
+modules <- read.delim(file.path(root,"Data/bulkMonocytes_WGCNAmodules_geneModules.txt"), row.names = NULL, sep = "", 
+                      col.names = c("Ensembl","moduleColors")) 
+modules <- base::merge(eigengenes, modules,by="Ensembl" )
+
+for (mod in unique(modules$moduleColors)){
+  cat('\n')
+  cat("### Module ",mod,"{.tabset .tabset-fade}\n")
+  geneList <- subset(modules, moduleColors==mod)$symbol %>% as.character()
+  results <- enrichr(genes = geneList, databases = enrichr_dbs )
+  for (db in enrichr_dbs){
+    cat('\n')
+    cat("#### ",db,"\n")  
+    createDT_html(subset(results[[db]], Adjusted.P.value<=0.05), paste("Enrichr Results:",db,"Module", mod))
+    cat('\n')
+  } 
+  cat('\n')
+}
+```
+
+## WGCNA Eigengenes
+
+Determine whether each of the clusters in scRNA-seq data are enriched for WGCNA eigengenes (a weighted vector of all genes representing each co-expression module).
+ 
+https://ucdavis-bioinformatics-training.github.io/2017_2018-single-cell-RNA-sequencing-Workshop-UCD_UCB_UCSF/day3/scRNA_Workshop-PART6.html
+```{r WGCNA Eigengenes, eval=F}
+#Get the average expression of every gene in each cluster
+allGenes <- get_markerDF(DAT, markerList = row.names(DAT@scale.data), meta_vars = c("post_clustering", "barcode") )
+
+clusterGeneAvg <- allGenes %>% group_by(post_clustering, Gene) %>% summarise(meanExp = mean(Expression))
+eigengenes_filt <-  subset(eigengenes,symbol %in%  unique(clusterGeneAvg$Gene))
+
+
+clusts_by_mods <- base::merge(clusterGeneAvg[c("Gene","meanExp")], eigengenes_filt[c("symbol", modName)], 
+                              by.x="Gene", by.y="symbol")
+
+
+cor.test()
+corrplot()
+heatmap.2
+ 
+
+f <- function(module){
+  eigengene <-  eigengenes[paste0("MM", mod)]
+  means <- tapply(eigengenes, DAT@meta.data$post_clustering, mean, na.rm = T)
+  return(means)
+}
+modules <- c("blue", "brown", "green", "turquoise", "yellow")
+plotdat <- sapply(modules, f)
+matplot(plotdat, col = modules, type = "l", lwd = 2, xaxt = "n", xlab = "Seurat Cluster",
+        ylab = "WGCNA Module Eigengene")
+axis(1, at = 1:16, labels = 0:15)
+matpoints(plotdat, col = modules, pch = 21)
+```
+
+### RRHO
+
+```{r RRHO, eval=F}
+library(RRHO) #BiocManager::install("RRHO")
+
+# list.length <- 100
+#  list.names <- paste('Gene',1:list.length, sep='')
+# gene.list1<- data.frame(list.names, sample(100))
+# gene.list2<- data.frame(list.names, sample(100))
+
+
+for (clust in unique(DAT.markers.sig)){
+  # Compare each cluster
+  subClust <- subset(DAT.markers.sig, cluster==clust)  %>% arrange(desc(avg_logFC))
+  
+  for (mod in unique(modules$moduleColors)){ 
+    # Sort genes by module membership
+    modName <-paste("MM",mod,sep="")
+    subMod <- subset(modules, moduleColors==mod) %>% arrange(desc(eval(parse(text = modName))))
+    maxGenes <- min(length(subClust$gene), subMod$symbol) %>% as.numeric()
+    
+    list1 <- subClust[1:maxGenes, c("gene","FC")] %>% dplyr::rename(value=FC)
+    list2 <- subMod[1:maxGenes, c("symbol",modName)] %>% dplyr::rename(gene=symbol, value=modName)
+    
+    RRHO_path <-file.path("RRHO_results",paste(paste("Cluster",clust,sep=""),"vs",modName,sep="_"))
+    dir.create(RRHO_path,recursive = T, showWarnings = F)
+    
+    RRHO_results <- RRHO(list1=list1, list2=list2,
+         labels = c(paste("Cluster",clust,sep="_"), paste("Module",mod,sep="_")), 
+         plots = T, alternative = "enrichment", outputdir = RRHO_path, BY=TRUE
+         )
+    lattice::levelplot(RRHO_results$hypermat) 
+    # Pval testing
+    pval.testing <- pvalRRHO(RRHO_results, 50)
+    pval.testing$pval
+    xs<- seq(0, 10, length=100)
+    plot(Vectorize(pval.testing$FUN.ecdf)(xs)~xs, xlab='-log(pvalue)', ylab='ECDF', type='S')
+    lattice::levelplot(RRHO_results$hypermat.by)
+  } 
+} 
+```
+
+
+# Save Results
+
+```{r Save Results}  
+save.image(file.path(resultsPath, "scRNAseq_results.RData"))   
+```
+
+  

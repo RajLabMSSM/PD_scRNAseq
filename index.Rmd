@@ -1,0 +1,33 @@
+---
+title: "About" 
+author: |
+  <h2>Author</h2>
+  | Brian M. Schilder, Bioinformatician II
+  | Raj Lab
+  | Department of Neuroscience
+  | Icahn School of Medicine at Mount Sinai
+  | NYC, New York
+date: "`r Sys.Date()`"
+output: 
+  rmarkdown::html_document: 
+    theme: spacelab
+    highlight: zenburn
+params:
+  subsetGenes: "protein_coding" #FALSE
+  subsetCells: 500 #FALSE
+  resolution: 0.6
+  resultsPath: "./Results"
+  nCores: 2
+  perplexity: 30
+---
+
+<h2>Summary</h2>
+<h3>Analyses and results of single-cell RNA sequencing data from CD14-enriched peripheral blood cells (primarily monocytes) from Parkinson's Disease patients and age-matched controls.</h3>
+<br><br>
+
+```{r setup}
+shiny::h3("Results Directory: ", params$resultsPath)
+```
+
+
+ 
