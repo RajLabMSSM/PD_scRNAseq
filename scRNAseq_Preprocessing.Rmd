@@ -220,7 +220,7 @@ DAT <- NormalizeData(object = DAT, normalization.method = "LogNormalize",
 
 __Important!__:
 * In ScaleData...
-  + Specify do.par = F (unless you have parallel processing set up properly, this will cause your script to crash)
+  + Specify do.par = F ("If set to TRUE, will use __half__ of the machine's available cores")
   + Specify num.cores = nCores (to use all available cores, determined by parallel::detectCores())
 
 Regress out: number of unique transcripts (nUMI), % mitochondrial transcripts (percent.mito) 
@@ -238,7 +238,8 @@ cat("Highly Variable Genes:", length(DAT@var.genes))
 # Ensure CD14 and CD16 are included
 appendedGenes <- c(DAT@var.genes, "CD14", "FCGR3A")
 DAT <- ScaleData(object = DAT, genes.use = appendedGenes , vars.to.regress = c("nUMI", "percent.mito"), 
-                  do.par = T, num.cores = params$nCores)
+                  do.par = F, num.cores = params$nCores)
+
 ```
 
 ### Filtered Dimensions
