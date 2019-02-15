@@ -392,37 +392,39 @@ As input to the tSNE, we suggest using the same PCs as input to the clustering a
 "FItSNE", a new fast implementation of t-SNE, is also available through RunTSNE. However FItSNE must first be setup on your computer.
 ```{r t-SNE, results = 'asis'} 
 labSize <- 12 
-
-customColors <- function(var="post_clustering", palette="Set1"){
-  add.alpha <- function(col, alpha=1){ 
-    if(missing(col))
-      stop("Please provide a vector of colours.")
-     apply(sapply(col, col2rgb)/255, 2, 
-                       function(x) 
-                         rgb(x[1], x[2], x[3], alpha=alpha))  
-  } 
-  cluster_colors  <- RColorBrewer::brewer.pal( length(unique(DAT@meta.data[var])), palette)
-  cluster_colors_transparent <- add.alpha(cluster_colors, .5) %>% as.character()
-  return(cluster_colors_transparent)
-}
-
 tsnePlot <- TSNEPlot(object = DAT, do.label=T, label.size = labSize, do.return=T) + 
   scale_color_brewer( palette = "Set1", aesthetics = aes(alpha=.5))
 
-# Try t-SNE at different perplexities
-for (i in c(5,20,30,100)){
-   cat('\n')   
-   cat("### t-SNE: perplexity =",i,"\n") 
-   DAT <- RunTSNE(object=DAT,  reduction.use = "pca", dims.use = 1:10, do.fast = TRUE,  
-                perplexity = i, tsne.method = "Rtsne", 
-                num_threads=params$nCores,
-                 genes.use = DAT@var.genes,
-                verbose=F) #   FItSNE
-  tsnePlot <- TSNEPlot(object = DAT, do.label=T, label.size = labSize, do.return=T) + 
-    scale_color_brewer( palette = "Set1", aesthetics = aes(alpha=.5))
-  print(tsnePlot)
-  cat('\n')   
-} 
+
+# 
+# customColors <- function(var="post_clustering", palette="Set1"){
+#   add.alpha <- function(col, alpha=1){ 
+#     if(missing(col))
+#       stop("Please provide a vector of colours.")
+#      apply(sapply(col, col2rgb)/255, 2, 
+#                        function(x) 
+#                          rgb(x[1], x[2], x[3], alpha=alpha))  
+#   } 
+#   cluster_colors  <- RColorBrewer::brewer.pal( length(unique(DAT@meta.data[var])), palette)
+#   cluster_colors_transparent <- add.alpha(cluster_colors, .5) %>% as.character()
+#   return(cluster_colors_transparent)
+# }
+
+
+# # Try t-SNE at different perplexities
+# for (i in c(5,20,30,100)){
+#    cat('\n')   
+#    cat("### t-SNE: perplexity =",i,"\n") 
+#    DAT <- RunTSNE(object=DAT,  reduction.use = "pca", dims.use = 1:10, do.fast = TRUE,  
+#                 perplexity = i, tsne.method = "Rtsne", 
+#                 num_threads=params$nCores,
+#                  genes.use = DAT@var.genes,
+#                 verbose=F) #   FItSNE
+#   tsnePlot <- TSNEPlot(object = DAT, do.label=T, label.size = labSize, do.return=T) + 
+#     scale_color_brewer( palette = "Set1", aesthetics = aes(alpha=.5))
+#   print(tsnePlot)
+#   cat('\n')   
+# } 
 ```
 
 
