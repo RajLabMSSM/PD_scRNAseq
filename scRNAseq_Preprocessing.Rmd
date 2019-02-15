@@ -370,7 +370,7 @@ PCAPlot(object = DAT, dim.1 = 1, dim.2 = 2, group.by="post_clustering")#, do.hov
 ## UMAP
 
 Additional UMAP arguments detailed here: https://umap-learn.readthedocs.io/en/latest/api.html#module-umap.umap_ 
-```{r UMAP, results = 'asis'} 
+```{r UMAP, results = 'asis', eval=F} 
 # cat(print(mem_used()))
 DAT <- RunUMAP(object = DAT, reduction.use = "pca", dims.use = 1:10, verbose=TRUE, 
                num_threads=params$nCores, 
