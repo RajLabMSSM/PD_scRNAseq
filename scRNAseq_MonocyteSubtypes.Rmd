@@ -1,0 +1,127 @@
+---
+title: "Monocyte Subtypes" 
+author: "<h3>Author</h3>Brian M. Schilder, Bioinformatician II"
+date: "`r Sys.Date()`"
+output: 
+  rmarkdown::html_document: 
+    theme: spacelab
+    highlight: zenburn 
+    code_folding: show 
+    toc: true 
+    toc_float: true
+    smooth_scroll: true
+    number_sections: false 
+    self_contained: true  
+params:
+  subsetGenes: "protein_coding" #FALSE
+  subsetCells: 500 #FALSE
+  resolution: 0.6
+  resultsPath: "./Results"
+  nCores: 2
+  perplexity: 30
+---
+
+# Setup 
+
+```{r setup, dpi = 600}
+# Import functions
+root = "./"
+source(file.path(root,"general_functions.R"))
+import_parameters(params)
+load(file.path(resultsPath, "scRNAseq_results.RData"))
+# load(file.path("Results","subsetGenes-protein_coding__subsetCells-F__Resolution-0.5__perplexity-30__nCores-64","scRNAseq_results.RData"))
+```
+
+
+# Identify Cell Types with Garnett + Monocle
+
+## Pre-trained PBMC Classifer
+
+```{r Identify Cell Types with Garnett}
+library(monocle) # BiocManager::install("monocle") 
+# BiocManager::install(c('DelayedArray', 'DelayedMatrixStats', 'org.Hs.eg.db', 'org.Mm.eg.db'))
+library(org.Hs.eg.db)
+library(garnett) # devtools::install_github("cole-trapnell-lab/garnett")
+ 
+# Convert Seurat objt to CDS object 
+mDAT <- monocle::importCDS(DAT,  import_all = T) 
+# generate size factors for normalization later
+mDAT <-  DESeq2::estimateSizeFactors(mDAT)
+# Get pre-trained PBMC classifer 
+load(file.path(root, "Data/Garnett/hsPBMC")) # Download from: https://cole-trapnell-lab.github.io/garnett/classifiers/hsPBMC 
+# Get feature genes for each cell type
+feature_genes <- garnett::get_feature_genes(classifier = hsPBMC,
+                                   node = "root",
+                                   db = org.Hs.eg.db,
+                                   convert_ids = F)
+# head(feature_genes)
+mDAT <- garnett::classify_cells(mDAT, hsPBMC,
+                           db = org.Hs.eg.db,
+                           cluster_extend = TRUE,
+                           cds_gene_id_type = "SYMBOL")
+head(pData(mDAT))
+table(pData(mDAT)$cell_type)
+table(pData(mDAT)$cluster_ext_type) 
+
+# 
+# 
+# # Run tSNE: Plot Clusters and Cell Types 
+# mDAT <- reduceDimension(mDAT, max_components = 3, reduction_method = "tSNE") 
+# commonGeoms <- labs(x="tSNE1",y="tSNE2")
+# plot_grid(nrow = 2,
+#   qplot(data = pData(mDAT), mDAT@reducedDimA[1,], mDAT@reducedDimA[2,], color = cell_type) + theme_bw() + commonGeoms,
+#   qplot(data = pData(mDAT), mDAT@reducedDimA[1,], mDAT@reducedDimA[2,], color = cluster_ext_type) + theme_bw() + commonGeoms
+# )
+
+# Unsupervised Clustering
+# mDAT <- clusterCells(mDAT, num_clusters = 5)
+# pData(mDAT)
+# plot_cell_clusters(mDAT, 1, 2, color = "Cluster",  markers = c("CD14", "FCGR3A"))
+# plot_cell_clusters(mDAT, 1, 2, color = "Cluster") + facet_wrap(~dx)
+# plot_cell_clusters(mDAT, 1, 2, color = "Cluster") + facet_wrap(~mut)
+# plot_cell_clusters(mDAT, 1, 2, color = "Cluster") + facet_wrap(~cell_type) 
+
+DAT <- Seurat::AddMetaData(DAT, pData(mDAT)[c("garnett_cluster","cell_type","cluster_ext_type")])
+write.csv(DAT@meta.data, file.path(resultsPath, "garnett_results.csv"), quote = F,row.names = F)
+```
+
+## Plot tSNE
+
+```{r}
+labSize <- 12 
+var <- "cell_type"
+ p1 <- TSNEPlot(DAT, do.return = T, do.label = T,label.size = labSize,
+                  group.by = var,
+                 plot.title=var, vector.friendly=T)  +
+    theme(legend.position = "top") + 
+    scale_color_brewer( palette = "Set1", aesthetics = aes(alpha=.5))  
+```
+
+
+## Train Classifier on Data
+
+```{r, include=F}
+
+# marker_file_path <- system.file("extdata", "pbmc_test.txt",
+#                                 package = "garnett")
+# # Plot chosen markers
+# marker_check <- check_markers(mDAT, marker_file_path,
+#                               db=org.Hs.eg.db,
+#                               cds_gene_id_type = "SYMBOL",
+#                               marker_file_gene_id_type = "SYMBOL")
+#
+# plot_markers(marker_check)
+
+# Classify Cells
+## Get classifier from
+# write.table( RCurl::getURL("https://cole-trapnell-lab.github.io/garnett/marker_files/hsPBMC_markers.txt"),
+#              file = "pbmc_markerFile.txt",row.names = F, col.names = F, quote = F, )
+# Train Classifier
+# classifier <- train_cell_classifier(cds = mDAT,
+#                                          marker_file = "pbmc_markerFile.txt",
+#                                          db=org.Hs.eg.db,
+#                                          cds_gene_id_type = "SYMBOL",
+#                                          num_unknown = 50,
+#                                          marker_file_gene_id_type = "SYMBOL")
+#get_classifier_references(classifier) 
+```

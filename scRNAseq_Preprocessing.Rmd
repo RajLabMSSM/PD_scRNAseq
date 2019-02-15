@@ -346,7 +346,8 @@ PCElbowPlot(object = DAT)
 
 ```{r Cluster Cells}  
 DAT <- RunTSNE(object=DAT,  reduction.use = "pca", dims.use = 1:10, do.fast = TRUE,
-                perplexity = params$perplexity, tsne.method = "Rtsne", num_threads=params$nCores, verbose=F) #   FItSNE 
+                 tsne.method = "Rtsne", num_threads=params$nCores, verbose=F) #   FItSNE 
+  #perplexity = as.numeric(params$perplexity),
 
 # TRY DIFFERENT RESOLUTIONS
 DAT <- StashIdent(object = DAT, save.name = "pre_clustering") 
@@ -405,8 +406,11 @@ customColors <- function(var="post_clustering", palette="Set1"){
   return(cluster_colors_transparent)
 }
 
+tsnePlot <- TSNEPlot(object = DAT, do.label=T, label.size = labSize, do.return=T) + 
+  scale_color_brewer( palette = "Set1", aesthetics = aes(alpha=.5))
+
 # Try t-SNE at different perplexities
-for (i in c( params$perplexity,5,20,30,100)){
+for (i in c(5,20,30,100)){
    cat('\n')   
    cat("### t-SNE: perplexity =",i,"\n") 
    DAT <- RunTSNE(object=DAT,  reduction.use = "pca", dims.use = 1:10, do.fast = TRUE,  

@@ -28,11 +28,11 @@ rmarkdown::render(input = 'scRNAseq_Preprocessing.Rmd',
                   output_file = file.path(resultsPath, paste("Preprocessing.html",sep=""))
                   )
 # 2) Characterize Clusters
-rmarkdown::render(input = 'scRNAseq_CharacterizeClusters.Rmd', 
+rmarkdown::render(input = 'scRNAseq_MonocyteSubtypes.Rmd', 
                   params = params_list, 
                   # knit_root_dir = resultsPath,
                   # output_dir = resultsPath,
-                  output_file = file.path(resultsPath, paste("CharacterizeClusters.html",sep=""))
+                  output_file = file.path(resultsPath, paste("MonocyteSubtypes.html",sep=""))
                   )
 # 3) Enrichment
 rmarkdown::render(input = 'scRNAseq_Enrichment.Rmd', 
@@ -48,26 +48,3 @@ rmarkdown::render(input = 'index.Rmd',
                   # output_dir = resultsPath,
                   output_file = file.path(resultsPath, paste("index.html",sep=""))
 )
-
-# 
-# ### Combine into website 
-# library(markdown)
-# library(shiny) 
-# 
-# ui <- navbarPage("PD_scRNAseq",
-#            tabPanel("About", 
-#                     includeHTML("index.html") 
-#            ),
-#            tabPanel("Preprocessing",
-#                     includeHTML("scRNAseq_Preprocessing.html") 
-#            ),
-#            tabPanel("Characterize Clusters",
-#                     includeHTML("scRNAseq_CharacterizeClusters.html") 
-#            ),
-#            tabPanel("Enrichment",
-#                     includeHTML("scRNAseq_Enrichment.html") 
-#            )
-# )
-# renderUI(ui)
- 
-#  

@@ -29,7 +29,7 @@ root = "./"
 source(file.path(root,"general_functions.R"))
 import_parameters(params)
 load(file.path(resultsPath, "scRNAseq_results.RData"))
-# load(file.path('Results","scRNAseq_results.RData"))
+# load(file.path("Results","subsetGenes-protein_coding__subsetCells-F__Resolution-0.5__perplexity-30__nCores-64","scRNAseq_results.RData"))
 ```
 
 <!-- __`r resultsPath`__ -->
@@ -349,27 +349,25 @@ head(pData(mDAT))
 table(pData(mDAT)$cell_type)
 table(pData(mDAT)$cluster_ext_type) 
 
-
-
-# Run tSNE: Plot Clusters and Cell Types 
-mDAT <- reduceDimension(mDAT, max_components = 3, reduction_method = "tSNE") 
-commonGeoms <- labs(x="tSNE1",y="tSNE2")
-
-plot_grid(nrow = 2,
-  qplot(data = pData(mDAT), mDAT@reducedDimA[1,], mDAT@reducedDimA[2,], color = cell_type) + theme_bw() + commonGeoms,
-  qplot(data = pData(mDAT), mDAT@reducedDimA[1,], mDAT@reducedDimA[2,], color = cluster_ext_type) + theme_bw() + commonGeoms
-)
-
+# 
+# 
+# # Run tSNE: Plot Clusters and Cell Types 
+# mDAT <- reduceDimension(mDAT, max_components = 3, reduction_method = "tSNE") 
+# commonGeoms <- labs(x="tSNE1",y="tSNE2")
+# plot_grid(nrow = 2,
+#   qplot(data = pData(mDAT), mDAT@reducedDimA[1,], mDAT@reducedDimA[2,], color = cell_type) + theme_bw() + commonGeoms,
+#   qplot(data = pData(mDAT), mDAT@reducedDimA[1,], mDAT@reducedDimA[2,], color = cluster_ext_type) + theme_bw() + commonGeoms
+# )
 
 # Unsupervised Clustering
-mDAT <- clusterCells(mDAT, num_clusters = 5)
-pData(mDAT)
-plot_cell_clusters(mDAT, 1, 2, color = "Cluster",  markers = c("CD14", "FCGR3A"))
-plot_cell_clusters(mDAT, 1, 2, color = "Cluster") + facet_wrap(~dx)
-plot_cell_clusters(mDAT, 1, 2, color = "Cluster") + facet_wrap(~mut)
-plot_cell_clusters(mDAT, 1, 2, color = "Cluster") + facet_wrap(~cell_type) 
+# mDAT <- clusterCells(mDAT, num_clusters = 5)
+# pData(mDAT)
+# plot_cell_clusters(mDAT, 1, 2, color = "Cluster",  markers = c("CD14", "FCGR3A"))
+# plot_cell_clusters(mDAT, 1, 2, color = "Cluster") + facet_wrap(~dx)
+# plot_cell_clusters(mDAT, 1, 2, color = "Cluster") + facet_wrap(~mut)
+# plot_cell_clusters(mDAT, 1, 2, color = "Cluster") + facet_wrap(~cell_type) 
 
-DAT <- Seurat::AddMetaData(DAT, pData(mDAT)[c("garnett_cluster","cell_type","cluster_ext_type","Cluster")])
+DAT <- Seurat::AddMetaData(DAT, pData(mDAT)[c("garnett_cluster","cell_type","cluster_ext_type")])
 write.csv(DAT@meta.data, file.path(resultsPath, "garnett_results.csv"), quote = F,row.names = F)
 ```
 

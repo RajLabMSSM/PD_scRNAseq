@@ -6,7 +6,7 @@ import_parameters <- function(params){
      subsetGenes=params$subsetGenes,
      subsetCells=params$subsetCells,
      resolution=params$resolution,
-     perplexity=params$perplexity
+     perplexity=as.numeric(params$perplexity)
      )
   # Have to setwd via knitr 
   knitr::opts_chunk$set(echo=T, error=T, root.dir = params$resultsPath 
