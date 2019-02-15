@@ -17,7 +17,7 @@ params:
   subsetCells: 500 #FALSE
   resolution: 0.6
   resultsPath: "./Results"
-  nCores: 2
+  nCores: 4
   perplexity: 30
 ---
 
@@ -29,6 +29,7 @@ params:
 root <- "./"  
 source(file.path(root,"general_functions.R"))
 import_parameters(params)
+nCores <-
 ```
 
 __`r resultsPath`__
@@ -238,7 +239,7 @@ cat("Highly Variable Genes:", length(DAT@var.genes))
 # Ensure CD14 and CD16 are included
 appendedGenes <- c(DAT@var.genes, "CD14", "FCGR3A")
 DAT <- ScaleData(object = DAT, genes.use = appendedGenes , vars.to.regress = c("nUMI", "percent.mito"), 
-                  do.par = F, num.cores = params$nCores)
+                  do.par = F, num.cores = nCores)
 
 ```
 
@@ -346,7 +347,7 @@ PCElbowPlot(object = DAT)
 
 ```{r Cluster Cells}  
 DAT <- RunTSNE(object=DAT,  reduction.use = "pca", dims.use = 1:10, do.fast = TRUE,
-                 tsne.method = "Rtsne", num_threads=params$nCores, verbose=F) #   FItSNE 
+                 tsne.method = "Rtsne", num_threads=nCores, verbose=F) #   FItSNE 
   #perplexity = as.numeric(params$perplexity),
 
 # TRY DIFFERENT RESOLUTIONS
@@ -374,7 +375,7 @@ Additional UMAP arguments detailed here: https://umap-learn.readthedocs.io/en/la
 ```{r UMAP, results = 'asis', eval=F} 
 # cat(print(mem_used()))
 DAT <- RunUMAP(object = DAT, reduction.use = "pca", dims.use = 1:10, verbose=TRUE, 
-               num_threads=params$nCores, 
+               num_threads=nCores, 
                genes.use = DAT@var.genes)
 # cat(print(mem_used()))
 # Plot results

@@ -6,7 +6,7 @@ subsetGenes <- ifelse(args[1]==F, 'all', args[1])
 subsetCells = args[2]
 resolution = args[3] 
 perplexity = args[4]
-nCores = parallel::detectCores()
+nCores = args[5] #parallel::detectCores()
 
 #nCores <-args[4] #ifelse(is.null(args[4]), parallel::detectCores(), args[4]) 
 
@@ -27,24 +27,25 @@ rmarkdown::render(input = 'scRNAseq_Preprocessing.Rmd',
                   # output_dir = resultsPath,
                   output_file = file.path(resultsPath, paste("Preprocessing.html",sep=""))
                   )
-# 2) Characterize Clusters
-rmarkdown::render(input = 'scRNAseq_MonocyteSubtypes.Rmd', 
-                  params = params_list, 
-                  # knit_root_dir = resultsPath,
-                  # output_dir = resultsPath,
-                  output_file = file.path(resultsPath, paste("MonocyteSubtypes.html",sep=""))
-                  )
-# 3) Enrichment
-rmarkdown::render(input = 'scRNAseq_Enrichment.Rmd', 
-                  params = params_list, 
-                  # knit_root_dir = resultsPath, 
-                  # output_dir = resultsPath,
-                  output_file = file.path(resultsPath, paste("Enrichment.html",sep=""))
-                  )
-# 4) About page
-rmarkdown::render(input = 'index.Rmd', 
-                  params = params_list, 
-                  # knit_root_dir = resultsPath, 
-                  # output_dir = resultsPath,
-                  output_file = file.path(resultsPath, paste("index.html",sep=""))
-)
+# 
+# # 2) Characterize Clusters
+# rmarkdown::render(input = 'scRNAseq_MonocyteSubtypes.Rmd',
+#                   params = params_list, 
+#                   # knit_root_dir = resultsPath,
+#                   # output_dir = resultsPath,
+#                   output_file = file.path(resultsPath, paste("MonocyteSubtypes.html",sep=""))
+#                   )
+# # 3) Enrichment
+# rmarkdown::render(input = 'scRNAseq_Enrichment.Rmd', 
+#                   params = params_list, 
+#                   # knit_root_dir = resultsPath, 
+#                   # output_dir = resultsPath,
+#                   output_file = file.path(resultsPath, paste("Enrichment.html",sep=""))
+#                   )
+# # 4) About page
+# rmarkdown::render(input = 'index.Rmd', 
+#                   params = params_list, 
+#                   # knit_root_dir = resultsPath, 
+#                   # output_dir = resultsPath,
+#                   output_file = file.path(resultsPath, paste("index.html",sep=""))
+# )

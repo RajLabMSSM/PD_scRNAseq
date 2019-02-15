@@ -2,7 +2,7 @@
 import_parameters <- function(params){    
   params_list <- list(
   resultsPath=params$resultsPath,
-     nCores=params$nCores,
+     # nCores=as.numeric(params$nCores),
      subsetGenes=params$subsetGenes,
      subsetCells=params$subsetCells,
      resolution=params$resolution,
