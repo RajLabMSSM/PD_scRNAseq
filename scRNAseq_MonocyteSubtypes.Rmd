@@ -28,9 +28,31 @@ params:
 root = "./"
 source(file.path(root,"general_functions.R"))
 import_parameters(params)
-load(file.path(resultsPath, "scRNAseq_results.RData"))
-# load(file.path("Results","subsetGenes-protein_coding__subsetCells-F__Resolution-0.5__perplexity-30__nCores-64","scRNAseq_results.RData"))
+# load(file.path(resultsPath, "scRNAseq_results.RData"))
+load(file.path("Results","subsetGenes-protein_coding__subsetCells-F__Resolution-1.0__perplexity-50__nCores-4","scRNAseq_results.RData"))
 ```
+
+## Load Libraries
+
+```{r Load Libraries, message=F, warning=F}
+library(Seurat)
+library(cowplot)
+library(ggplot2)
+library(dplyr)
+library(reshape2)
+```
+
+# Biomarker Expression
+
+```{r Biomarker Expression}
+markerList <- c("CD14", "FCGR3A")
+markerData <- DAT@scale.data[row.names(DAT@scale.data) %in% markerList,] %>% t() %>% 
+  melt(variable.name="Gene", measure.vars=markerList, value.name="Expression" )
+head(markerData)
+
+ggplot(data = markerData, aes(x=))
+```
+
 
 
 # Identify Cell Types with Garnett + Monocle
@@ -48,39 +70,23 @@ mDAT <- monocle::importCDS(DAT,  import_all = T)
 # generate size factors for normalization later
 mDAT <-  DESeq2::estimateSizeFactors(mDAT)
 # Get pre-trained PBMC classifer 
-load(file.path(root, "Data/Garnett/hsPBMC")) # Download from: https://cole-trapnell-lab.github.io/garnett/classifiers/hsPBMC 
+load(file.path(root, "Data/Garnett/hsPBMC")) # Download from: https://cole-trapnell-lab.github.io/garnett/classifiers/hsPBMC  
+
+mDAT <- garnett::classify_cells(mDAT, hsPBMC,
+                           db = org.Hs.eg.db,
+                           cluster_extend = TRUE,
+                           cds_gene_id_type = "SYMBOL")
+table(pData(mDAT)$cell_type)
+table(pData(mDAT)$cluster_ext_type) 
 # Get feature genes for each cell type
 feature_genes <- garnett::get_feature_genes(classifier = hsPBMC,
                                    node = "root",
                                    db = org.Hs.eg.db,
                                    convert_ids = F)
-# head(feature_genes)
-mDAT <- garnett::classify_cells(mDAT, hsPBMC,
-                           db = org.Hs.eg.db,
-                           cluster_extend = TRUE,
-                           cds_gene_id_type = "SYMBOL")
-head(pData(mDAT))
-table(pData(mDAT)$cell_type)
-table(pData(mDAT)$cluster_ext_type) 
+head(feature_genes)
 
-# 
-# 
-# # Run tSNE: Plot Clusters and Cell Types 
-# mDAT <- reduceDimension(mDAT, max_components = 3, reduction_method = "tSNE") 
-# commonGeoms <- labs(x="tSNE1",y="tSNE2")
-# plot_grid(nrow = 2,
-#   qplot(data = pData(mDAT), mDAT@reducedDimA[1,], mDAT@reducedDimA[2,], color = cell_type) + theme_bw() + commonGeoms,
-#   qplot(data = pData(mDAT), mDAT@reducedDimA[1,], mDAT@reducedDimA[2,], color = cluster_ext_type) + theme_bw() + commonGeoms
-# )
 
-# Unsupervised Clustering
-# mDAT <- clusterCells(mDAT, num_clusters = 5)
-# pData(mDAT)
-# plot_cell_clusters(mDAT, 1, 2, color = "Cluster",  markers = c("CD14", "FCGR3A"))
-# plot_cell_clusters(mDAT, 1, 2, color = "Cluster") + facet_wrap(~dx)
-# plot_cell_clusters(mDAT, 1, 2, color = "Cluster") + facet_wrap(~mut)
-# plot_cell_clusters(mDAT, 1, 2, color = "Cluster") + facet_wrap(~cell_type) 
-
+# Convert back to Seurat object & save results
 DAT <- Seurat::AddMetaData(DAT, pData(mDAT)[c("garnett_cluster","cell_type","cluster_ext_type")])
 write.csv(DAT@meta.data, file.path(resultsPath, "garnett_results.csv"), quote = F,row.names = F)
 ```
@@ -88,14 +94,33 @@ write.csv(DAT@meta.data, file.path(resultsPath, "garnett_results.csv"), quote = 
 ## Plot tSNE
 
 ```{r}
-labSize <- 12 
-var <- "cell_type"
- p1 <- TSNEPlot(DAT, do.return = T, do.label = T,label.size = labSize,
-                  group.by = var,
-                 plot.title=var, vector.friendly=T)  +
+tSNE_metadata_plot <- function(var, labSize=12){ 
+  # Metadata plot  
+  p1 <- Seurat::TSNEPlot(DAT, do.return = T,  do.label = T,  group.by = var,label.size = labSize,
+                 plot.title=paste(var), vector.friendly=T) +
+    theme(legend.position = "top") + 
+    scale_color_brewer( palette = "Dark2",  aesthetics = aes(alpha=.5)) 
+     
+  # t-SNE clusters plot
+  p2 <- Seurat::TSNEPlot(DAT, do.return = T, do.label = T,label.size = labSize,
+                 plot.title=paste("Unsupervised Clusters"), vector.friendly=T)  +
     theme(legend.position = "top") + 
     scale_color_brewer( palette = "Set1", aesthetics = aes(alpha=.5))  
+  print(cowplot::plot_grid(p1,p2))
+}   
 ```
+### Garnett cell_type
+
+```{r Garnett cell_type}
+tSNE_metadata_plot("cell_type")
+```
+
+### Garnett cell_type
+
+```{r Garnett cell_type}
+tSNE_metadata_plot("cluster_ext_type")
+```
+
 
 
 ## Train Classifier on Data
