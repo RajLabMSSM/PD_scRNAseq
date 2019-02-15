@@ -40,16 +40,17 @@ load(file.path(resultsPath, "scRNAseq_results.RData"))
 library(Seurat)
 library(dplyr)
 library(gridExtra)
-library(knitr) 
+# library(knitr)
 library(plotly)
 library(ggplot2)
 library(viridis)
-library(reshape2)
-library(shiny) 
+library(reshape2) 
 library(ggrepel)
-library(DT) 
-library(ComplexHeatmap); #BiocManager::install("ComplexHeatmap") 
+library(DT)
+# library(ComplexHeatmap); #BiocManager::install("ComplexHeatmap") # NOT on Minerva currently
    
+library(enrichR) #BiocManager::install("enrichR")
+
 # library(biomaRt) # BiocManager::install(c("biomaRt"))
 # library(DESeq2) # BiocManager::install(c("DESeq2"))
 
@@ -324,28 +325,25 @@ marker_vs_metadata(markerDF, "mut")
 
 ## Pre-trained PBMC Classifer
 
-```{r Identify Cell Types with Garnett, eval=F} 
-library(enrichR) #BiocManager::install("enrichR")
-library(monocle) #BiocManager::install("monocle") 
-BiocManager::install(c('DelayedArray', 'DelayedMatrixStats', 'org.Hs.eg.db', 'org.Mm.eg.db'))
-
+```{r Identify Cell Types with Garnett, eval=F}
+library(monocle) # BiocManager::install("monocle") 
+# BiocManager::install(c('DelayedArray', 'DelayedMatrixStats', 'org.Hs.eg.db', 'org.Mm.eg.db'))
 library(org.Hs.eg.db)
 library(garnett) # devtools::install_github("cole-trapnell-lab/garnett")
-
-# load("DAT.R")    
-# Convert Seurat objt to CDS object
+ 
+# Convert Seurat objt to CDS object 
 mDAT <- monocle::importCDS(DAT,  import_all = T) 
 # generate size factors for normalization later
-mDAT <- estimateSizeFactors(mDAT)
+mDAT <-  DESeq2::estimateSizeFactors(mDAT)
 # Get pre-trained PBMC classifer 
 load("./Data/Garnett/hsPBMC") # Download from: https://cole-trapnell-lab.github.io/garnett/classifiers/hsPBMC 
 # Get feature genes for each cell type
-feature_genes <- get_feature_genes(classifier = hsPBMC,
+feature_genes <- garnett::get_feature_genes(classifier = hsPBMC,
                                    node = "root",
-                                   db = org.Hs.eg.db, 
-                                   convert_ids = T)
-head(feature_genes)
-mDAT <- classify_cells(mDAT, hsPBMC,
+                                   db = org.Hs.eg.db,
+                                   convert_ids = F)
+# head(feature_genes)
+mDAT <- garnett::classify_cells(mDAT, hsPBMC,
                            db = org.Hs.eg.db,
                            cluster_extend = TRUE,
                            cds_gene_id_type = "SYMBOL")
@@ -427,7 +425,7 @@ plot_cell_trajectory(HSMM_myo, color_by = "cell_type") +
 
 ### Cells Separated
 
-```{r Cells Separated} 
+```{r Cells Separated, eval=F} 
 markerDF <- get_markerDF(DAT, markerList, 
              meta_vars =c("barcode", "dx", "mut","ID","post_clustering", "percent.mito","nGene", "nUMI" )) #cell_type
 Spectral <- grDevices::colorRampPalette(RColorBrewer::brewer.pal(length(unique(DAT@meta.data$mut)), "Spectral"))
