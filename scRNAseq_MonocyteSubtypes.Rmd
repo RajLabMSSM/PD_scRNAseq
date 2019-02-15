@@ -38,20 +38,29 @@ load(file.path("Results","subsetGenes-protein_coding__subsetCells-F__Resolution-
 library(Seurat)
 library(cowplot)
 library(ggplot2)
-library(dplyr)
-library(reshape2)
+library(dplyr) 
+library(data.table)
+
+library(monocle) # BiocManager::install("monocle") 
+# BiocManager::install(c('DelayedArray', 'DelayedMatrixStats', 'org.Hs.eg.db', 'org.Mm.eg.db'))
+library(org.Hs.eg.db)
+library(garnett) # devtools::install_github("cole-trapnell-lab/garnett")
 ```
 
 # Biomarker Expression
 
 ```{r Biomarker Expression}
 markerList <- c("CD14", "FCGR3A")
-markerData <- DAT@scale.data[row.names(DAT@scale.data) %in% markerList,] %>% t() %>% data.frame()
-# %>%   melt(measure.vars=markerList, value.name="Expression",factorsAsStrings=F) %>% rename(Cell=Var1, Gene=Var2)
-head(markerData)
-
-ggplot(data = markerData, aes(x=CD14, y=FCGR3A) ) + 
-  stat_density_2d(aes(fill = ..level..), geom = "polygon", colour="purple", bins = 30, size=.3)
+markerData <- DAT@scale.data[row.names(DAT@scale.data) %in% markerList,] %>% t() %>% data.frame()  
+## Efficiently merge using data.table
+dt1 <- data.table(markerData, keep.rownames = "Cell", key = "Cell") %>% copy()
+dt2 <- data.table(DAT@meta.data[c("cell_type","post_clustering")], keep.rownames = "Cell", key = "Cell") %>% copy()
+markerDT <- dt1[dt2]
+ 
+ggplot(data = markerDT, aes(x=CD14, y=FCGR3A) ) + 
+  stat_density_2d(aes(fill = ..level..), geom = "polygon", colour="purple", bins = 100, size=.1) +
+  geom_point(aes(color=as.factor(cell_type)), shape=16, stroke=0, size=2, alpha=.1) + 
+  guides(colour = guide_legend(title="cell_type",override.aes = list(alpha = 1)))  
 ```
 
 
@@ -60,12 +69,7 @@ ggplot(data = markerData, aes(x=CD14, y=FCGR3A) ) +
 
 ## Pre-trained PBMC Classifer
 
-```{r Identify Cell Types with Garnett}
-library(monocle) # BiocManager::install("monocle") 
-# BiocManager::install(c('DelayedArray', 'DelayedMatrixStats', 'org.Hs.eg.db', 'org.Mm.eg.db'))
-library(org.Hs.eg.db)
-library(garnett) # devtools::install_github("cole-trapnell-lab/garnett")
- 
+```{r Identify Cell Types with Garnett} 
 # Convert Seurat objt to CDS object 
 mDAT <- monocle::importCDS(DAT,  import_all = T) 
 # generate size factors for normalization later
@@ -110,18 +114,37 @@ tSNE_metadata_plot <- function(var, labSize=12){
   print(cowplot::plot_grid(p1,p2))
 }   
 ```
+
 ### Garnett cell_type
 
 ```{r Garnett cell_type}
 tSNE_metadata_plot("cell_type")
 ```
 
-### Garnett cell_type
+### Garnett cluster_ext_type
 
 ```{r Garnett cell_type}
 tSNE_metadata_plot("cluster_ext_type")
 ```
 
+### tSNE Heatmaps
+
+```{r}
+FeaturePlot(DAT,features.plot =  c("CD14","FCGR3A"),  cols.use = c("grey","purple","magenta"), dark.theme = T, nCol = 2 )
+FeatureHeatmap(DAT,  c("CD14","FCGR3A"), pt.size = 0.5, cols.use = c("grey","purple"), plot.horiz =T) 
+```
+
+### Average Expression: By Clusters
+
+```{r Clusters Averaged}
+markerDF <- markerDT %>% mutate(Cluster = post_clustering)
+# Show mean exp for each marker
+avgMarker <- markerDF %>% group_by(Gene, Cluster) %>% summarise(meanExp = mean(Expression)) 
+
+p <- ggplot(data = avgMarker, aes(x=Gene, y=Cluster, fill=meanExp)) %>% + geom_tile() #+ scale_fill_viridis()
+p
+# ifelse(interactive, p %>% ggplotly() %>% toWebGL() %>% print(), print(p))
+```
 
 
 ## Train Classifier on Data
