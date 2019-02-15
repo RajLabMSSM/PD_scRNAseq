@@ -36,7 +36,7 @@ load(file.path(resultsPath, "scRNAseq_results.RData"))
  
 ## Load Libraries
 
-```{r Load Libraries & Report Versions, message=F, warning=F, error=T}
+```{r Load Libraries, message=F, warning=F, error=T}
 library(Seurat)
 library(dplyr)
 library(gridExtra)
@@ -49,8 +49,6 @@ library(ggrepel)
 library(DT)
 # library(ComplexHeatmap); #BiocManager::install("ComplexHeatmap") # NOT on Minerva currently
    
-library(enrichR) #BiocManager::install("enrichR")
-
 # library(biomaRt) # BiocManager::install(c("biomaRt"))
 # library(DESeq2) # BiocManager::install(c("DESeq2"))
 
@@ -372,7 +370,7 @@ plot_cell_clusters(mDAT, 1, 2, color = "Cluster") + facet_wrap(~mut)
 plot_cell_clusters(mDAT, 1, 2, color = "Cluster") + facet_wrap(~cell_type) 
 
 DAT <- Seurat::AddMetaData(DAT, pData(mDAT)[c("garnett_cluster","cell_type","cluster_ext_type","Cluster")])
- 
+write.csv(DAT@meta.data, file.path(resultsPath, "garnett_results.csv"), quote = F,row.names = F)
 ```
 
 ## Train Classifier on Data
@@ -498,7 +496,7 @@ markerDF <- markerDF %>% mutate(Cluster = post_clustering)
 # Show mean exp for each marker
 avgMarker <- markerDF %>% group_by(Gene, Cluster) %>% summarise(meanExp = mean(Expression)) 
 
-p <- ggplot(data = avgMarker, aes(x=Gene, y=Cluster, fill=meanExp)) %>% + geom_tile() + scale_fill_viridis()
+p <- ggplot(data = avgMarker, aes(x=Gene, y=Cluster, fill=meanExp)) %>% + geom_tile() #+ scale_fill_viridis()
 p
 # ifelse(interactive, p %>% ggplotly() %>% toWebGL() %>% print(), print(p))
 ```
@@ -508,7 +506,7 @@ p
 ```{r Average Expression: By Disease}
 # Show mean exp for each marker
 avgMarker <- markerDF %>% group_by(Gene, dx, Cluster) %>% summarise(meanExp = mean(Expression)) 
-p <- ggplot(data = avgMarker, aes(x=Gene, y=dx, fill=meanExp)) %>% + geom_tile() + scale_fill_viridis()
+p <- ggplot(data = avgMarker, aes(x=Gene, y=dx, fill=meanExp)) %>% + geom_tile() #+ scale_fill_viridis()
 p 
 # ifelse(interactive, p %>% ggplotly() %>% toWebGL() %>% print(), print(p))
 ```
