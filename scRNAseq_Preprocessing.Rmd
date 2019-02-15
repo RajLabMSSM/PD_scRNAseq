@@ -149,13 +149,14 @@ makeAgeGroups <- function(){
 
 DAT <- AddMetaData(object = DAT, metadata = metadata)  
 # Get rid of any NAs (cells that don't match up with the metadata) 
-if(subsetCells==F){
+if(params$subsetCells==F){
   DAT <- FilterCells(object = DAT,  subset.names = "nGene", low.thresholds = 0)
 } else {DAT <- FilterCells(object = DAT,  subset.names = "nGene", low.thresholds = 0,
                     # Subset for testing 
-                    cells.use = DAT@cell.names[0:subsetCells]
+                    cells.use = DAT@cell.names[0:params$subsetCells ]
                     )
 }  
+DAT
 ```
 
 ## Filter & Normalize Data
@@ -200,12 +201,12 @@ subsetBiotypes <- function(DAT, subsetGenes){
   return(DAT)
 }
 
-DAT <- subsetBiotypes(DAT, subsetGenes)
+DAT <- subsetBiotypes(DAT, params$subsetGenes)
 ```
 
 ### Subset Cells
 
-Filter by cells, normalize , filter by gene variability.
+Filter cells and normalize
 ```{r Subset Cells }
 cat("Total Cells:", length(DAT@cell.names), "\n")
 DAT <- FilterCells(object = DAT, subset.names = c("nGene", "percent.mito"), 
