@@ -23,12 +23,13 @@ params:
 
 # Setup 
 
-```{r setup,  dpi = 600}
+```{r setup, dpi = 600}
 # Import functions
 root = "./"
 source(file.path(root,"general_functions.R"))
 import_parameters(params)
 load(file.path(resultsPath, "scRNAseq_results.RData"))
+# load(file.path('Results","scRNAseq_results.RData"))
 ```
 
 <!-- __`r resultsPath`__ -->
@@ -48,19 +49,19 @@ library(shiny)
 library(ggrepel)
 library(DT) 
 library(ComplexHeatmap); #BiocManager::install("ComplexHeatmap") 
-  
-## Install Bioconductor
-#  if (!requireNamespace("BiocManager"))
-#     install.packages("BiocManager") 
-library(biomaRt) # BiocManager::install(c("biomaRt"))
-# library(DESeq2) # BiocManager::install(c("DESeq2"))
-library(enrichR) #BiocManager::install("enrichR")
+   
+# 
+# library(biomaRt) # BiocManager::install(c("biomaRt"))
+# # library(DESeq2) # BiocManager::install(c("DESeq2"))
+# library(enrichR) #BiocManager::install("enrichR")
+# 
+# library(monocle) #BiocManager::install("monocle")
+# # BiocManager::install("DelayedMatrixStats")
+# # BiocManager::install("org.Mm.eg.db") 
+# library(org.Hs.eg.db)
+# library(garnett) # devtools::install_github("cole-trapnell-lab/garnett") 
 
-library(monocle) #BiocManager::install("monocle")
-# BiocManager::install("DelayedMatrixStats")
-# BiocManager::install("org.Mm.eg.db") 
-library(org.Hs.eg.db)
-library(garnett) # devtools::install_github("cole-trapnell-lab/garnett") 
+
 sessionInfo()
 print(paste("Seurat ", packageVersion("Seurat")))
 ```

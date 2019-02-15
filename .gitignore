@@ -1,6 +1,7 @@
 ./*.RData
 Results/**/*.rds
 Results/**/*.RData
+Results/*.RData
 /**/*.rds
 /**/*.rds
 ./*.rds 
