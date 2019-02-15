@@ -28,8 +28,7 @@ params:
 # Import functions
 root <- "./"  
 source(file.path(root,"general_functions.R"))
-import_parameters(params)
-nCores <-
+import_parameters(params) 
 ```
 
 __`r resultsPath`__
