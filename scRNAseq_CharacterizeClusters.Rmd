@@ -50,17 +50,8 @@ library(ggrepel)
 library(DT) 
 library(ComplexHeatmap); #BiocManager::install("ComplexHeatmap") 
    
-# 
 # library(biomaRt) # BiocManager::install(c("biomaRt"))
-# # library(DESeq2) # BiocManager::install(c("DESeq2"))
-# library(enrichR) #BiocManager::install("enrichR")
-# 
-# library(monocle) #BiocManager::install("monocle")
-# # BiocManager::install("DelayedMatrixStats")
-# # BiocManager::install("org.Mm.eg.db") 
-# library(org.Hs.eg.db)
-# library(garnett) # devtools::install_github("cole-trapnell-lab/garnett") 
-
+# library(DESeq2) # BiocManager::install(c("DESeq2"))
 
 sessionInfo()
 print(paste("Seurat ", packageVersion("Seurat")))
@@ -333,14 +324,21 @@ marker_vs_metadata(markerDF, "mut")
 
 ## Pre-trained PBMC Classifer
 
-```{r Identify Cell Types with Garnett, eval=F}
+```{r Identify Cell Types with Garnett, eval=F} 
+library(enrichR) #BiocManager::install("enrichR")
+library(monocle) #BiocManager::install("monocle") 
+BiocManager::install(c('DelayedArray', 'DelayedMatrixStats', 'org.Hs.eg.db', 'org.Mm.eg.db'))
+
+library(org.Hs.eg.db)
+library(garnett) # devtools::install_github("cole-trapnell-lab/garnett")
+
 # load("DAT.R")    
 # Convert Seurat objt to CDS object
 mDAT <- monocle::importCDS(DAT,  import_all = T) 
 # generate size factors for normalization later
 mDAT <- estimateSizeFactors(mDAT)
 # Get pre-trained PBMC classifer 
-load("./Garnet/hsPBMC") # Download from: https://cole-trapnell-lab.github.io/garnett/classifiers/hsPBMC 
+load("./Data/Garnett/hsPBMC") # Download from: https://cole-trapnell-lab.github.io/garnett/classifiers/hsPBMC 
 # Get feature genes for each cell type
 feature_genes <- get_feature_genes(classifier = hsPBMC,
                                    node = "root",
