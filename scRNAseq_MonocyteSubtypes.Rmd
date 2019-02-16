@@ -158,7 +158,6 @@ enrichr_dbs <- c("KEGG_2018", "Reactome_2016",
                  "Rare_Diseases_AutoRIF_ARCHS4_Predictions", "Human_Gene_Atlas")
 # createDT(enrichR::listEnrichrDbs(), "Enrichr Databases")
  
- 
 geneList <- data.frame(Gene=row.names(MonocyteSubtype.markers), 
      Weight=scales::rescale(length(MonocyteSubtype.markers$p_val_adj):1))
 
