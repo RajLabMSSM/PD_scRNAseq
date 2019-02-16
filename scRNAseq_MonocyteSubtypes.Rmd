@@ -99,7 +99,7 @@ ggplot(data = markerDT, aes(x=CD14, y=FCGR3A) ) +
 
 ## Plot tSNE
 
-```{r}
+```{r Plot tSNE}
 tSNE_metadata_plot <- function(var, labSize=12){ 
   # Metadata plot  
   p1 <- Seurat::TSNEPlot(DAT, do.return = T,  do.label = T,  group.by = var,label.size = labSize,
@@ -134,9 +134,6 @@ tSNE_metadata_plot("cluster_ext_type")
 tSNE_metadata_plot("mut")
 ```
 
-
-
-
 ### tSNE Heatmaps
 
 ```{r tSNE Heatmaps}
@@ -146,7 +143,18 @@ FeatureHeatmap(DAT,  c("CD14","FCGR3A","LRRK2", "GBA"), pt.size = 0.5,
                cols.use = c("grey","purple"), plot.horiz =T) 
 ```
 
- 
+
+# DGE: CD16+ vs. CD16- Monocytes
+
+```{r DGE: CD16+ vs. CD16- Monocytes}
+# library("BiocParallel") 
+# register(MulticoreParam(4))
+MonocyteSubtype.markers <- FindMarkers(DAT, min.pct = 0.25, only.pos = F,
+                                ident.1 = 1, ident.2 = 0, test.use = "wilcox"
+                                )
+createDT(MonocyteSubtype.markers, caption="DEGs between cluster 0 (CD16- monocytes) and cluster 1 (CD16+ monocytes")
+write.csv(MonocyteSubtype.markers, file.path(resultsPath, "MonocyteSubtype.markers.csv"), quote = F,row.names = T)
+```
 
 
 
@@ -167,7 +175,7 @@ for (db in enrichr_dbs){
   cat('\n')
   cat("### ",db,"\n")  
   # res <- subset(results[[db]], Adjusted.P.value<=0.05)
-  createDT_html(results, paste("Enrichr Results:",db))
+  createDT_html(results[[db]], paste("Enrichr Results:",db))
   cat('\n')
 }  
 ```
