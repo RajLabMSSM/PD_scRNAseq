@@ -29,7 +29,7 @@ root = "./"
 source(file.path(root,"general_functions.R"))
 import_parameters(params)
 # load(file.path(resultsPath, "scRNAseq_results.RData"))
-load(file.path("Results","subsetGenes-protein_coding__subsetCells-F__Resolution-1.0__perplexity-50__nCores-4","scRNAseq_results.RData"))
+load(file.path("Results","subsetGenes-protein_coding__subsetCells-F__Resolution-0.2__perplexity-40__nCores-4","scRNAseq_results.RData"))
 ```
 
 ## Load Libraries
@@ -45,25 +45,8 @@ library(monocle) # BiocManager::install("monocle")
 # BiocManager::install(c('DelayedArray', 'DelayedMatrixStats', 'org.Hs.eg.db', 'org.Mm.eg.db'))
 library(org.Hs.eg.db)
 library(garnett) # devtools::install_github("cole-trapnell-lab/garnett")
+library(enrichR) #BiocManager::install("enrichR")
 ```
-
-# Biomarker Expression
-
-```{r Biomarker Expression}
-markerList <- c("CD14", "FCGR3A")
-markerData <- DAT@scale.data[row.names(DAT@scale.data) %in% markerList,] %>% t() %>% data.frame()  
-## Efficiently merge using data.table
-dt1 <- data.table(markerData, keep.rownames = "Cell", key = "Cell") %>% copy()
-dt2 <- data.table(DAT@meta.data[c("cell_type","post_clustering")], keep.rownames = "Cell", key = "Cell") %>% copy()
-markerDT <- dt1[dt2]
- 
-ggplot(data = markerDT, aes(x=CD14, y=FCGR3A) ) + 
-  stat_density_2d(aes(fill = ..level..), geom = "polygon", colour="purple", bins = 100, size=.1) +
-  geom_point(aes(color=as.factor(cell_type)), shape=16, stroke=0, size=2, alpha=.1) + 
-  guides(colour = guide_legend(title="cell_type",override.aes = list(alpha = 1)))  
-```
-
-
 
 # Identify Cell Types with Garnett + Monocle
 
@@ -88,13 +71,31 @@ feature_genes <- garnett::get_feature_genes(classifier = hsPBMC,
                                    node = "root",
                                    db = org.Hs.eg.db,
                                    convert_ids = F)
-head(feature_genes)
-
-
+head(feature_genes) 
 # Convert back to Seurat object & save results
 DAT <- Seurat::AddMetaData(DAT, pData(mDAT)[c("garnett_cluster","cell_type","cluster_ext_type")])
 write.csv(DAT@meta.data, file.path(resultsPath, "garnett_results.csv"), quote = F,row.names = F)
 ```
+
+
+
+# Biomarker Expression
+
+```{r Biomarker Expression}
+markerList <- c("CD14", "FCGR3A")
+markerData <- DAT@scale.data[row.names(DAT@scale.data) %in% markerList,] %>% t() %>% data.frame()  
+## Efficiently merge using data.table
+dt1 <- data.table(markerData, keep.rownames = "Cell", key = "Cell") %>% copy()
+dt2 <- data.table(DAT@meta.data[c("cell_type","post_clustering")], keep.rownames = "Cell", key = "Cell") %>% copy()
+markerDT <- dt1[dt2]
+ 
+ggplot(data = markerDT, aes(x=CD14, y=FCGR3A) ) + 
+  stat_density_2d(aes(fill = ..level..), geom = "polygon", colour="purple", bins = 100, size=.1) +
+  geom_point(aes(color=as.factor(cell_type)), shape=16, stroke=0, size=2, alpha=.1) + 
+  guides(colour = guide_legend(title="cell_type",override.aes = list(alpha = 1))) 
+```
+
+
 
 ## Plot tSNE
 
@@ -123,33 +124,76 @@ tSNE_metadata_plot("cell_type")
 
 ### Garnett cluster_ext_type
 
-```{r Garnett cell_type}
+```{r Garnett cluster_ext_type}
 tSNE_metadata_plot("cluster_ext_type")
 ```
 
-### tSNE Heatmaps
+### mut
 
-```{r}
-FeaturePlot(DAT,features.plot =  c("CD14","FCGR3A"),  cols.use = c("grey","purple","magenta"), dark.theme = T, nCol = 2 )
-FeatureHeatmap(DAT,  c("CD14","FCGR3A"), pt.size = 0.5, cols.use = c("grey","purple"), plot.horiz =T) 
+```{r mut}
+tSNE_metadata_plot("mut")
 ```
 
-### Average Expression: By Clusters
 
-```{r Clusters Averaged}
-markerDF <- markerDT %>% mutate(Cluster = post_clustering)
-# Show mean exp for each marker
-avgMarker <- markerDF %>% group_by(Gene, Cluster) %>% summarise(meanExp = mean(Expression)) 
 
-p <- ggplot(data = avgMarker, aes(x=Gene, y=Cluster, fill=meanExp)) %>% + geom_tile() #+ scale_fill_viridis()
-p
-# ifelse(interactive, p %>% ggplotly() %>% toWebGL() %>% print(), print(p))
+
+### tSNE Heatmaps
+
+```{r tSNE Heatmaps}
+FeaturePlot(DAT,features.plot =  c("CD14","FCGR3A", "LRRK2", "GBA"),  
+            cols.use = c("grey","purple","magenta"), dark.theme = T, nCol = 2 )
+FeatureHeatmap(DAT,  c("CD14","FCGR3A","LRRK2", "GBA"), pt.size = 0.5,
+               cols.use = c("grey","purple"), plot.horiz =T) 
+```
+
+ 
+# DGE: CD16+ vs. CD16- Monocytes
+
+```{r DGE: CD16+ vs. CD16- Monocytes}
+# library("BiocParallel")
+# register(MulticoreParam(4))
+# MonocyteSubtype.markers <- FindMarkers(DAT, min.pct = 0.25,
+#                                 ident.1 = 2, ident.2 = c(0:1), test.use = "DESeq2", 
+#                                 print.bar = T, only.pos = F, parallel=TRUE
+#                                 )
+MonocyteSubtype.markers <- FindMarkers(DAT, min.pct = 0.25, only.pos = F, 
+                                ident.1 = 1, ident.2 = 0, test.use = "wilcox"
+                                )
+ 
+createDT(MonocyteSubtype.markers, caption="DEGs between cluster 0 (CD16- monocytes) and cluster 1 (CD16+ monocytes")
+print(x = head(x = MonocyteSubtype.markers, n = 5))
+
+write.csv(MonocyteSubtype.markers, file.path(resultsPath, "MonocyteSubtype.markers.csv"), quote = F,row.names = T)
+```
+
+
+## Run Enrichment of DGEs {.tabset .tabset-fade .tabset-pills}
+
+```{r Run Enrichment of DGEs, results='asis'}
+enrichr_dbs <- c("KEGG_2018", "Reactome_2016",
+                 "GO_Biological_Process_2018", "GO_Molecular_Function_2018", "GO_Cellular_Component_2018", 
+                 "Rare_Diseases_AutoRIF_ARCHS4_Predictions", "Human_Gene_Atlas")
+# createDT(enrichR::listEnrichrDbs(), "Enrichr Databases")
+ 
+ 
+geneList <- data.frame(Gene=row.names(MonocyteSubtype.markers), 
+     Weight=scales::rescale(length(MonocyteSubtype.markers$p_val_adj):1))
+
+results <- enrichr(genes = geneList, databases = enrichr_dbs ) 
+
+for (db in enrichr_dbs){
+  cat('\n')
+  cat("### ",db,"\n")  
+  # res <- subset(results[[db]], Adjusted.P.value<=0.05)
+  createDT_html(results, paste("Enrichr Results:",db))
+  cat('\n')
+}  
 ```
 
 
 ## Train Classifier on Data
 
-```{r, include=F}
+```{r Train Classifier on Data, include=F}
 
 # marker_file_path <- system.file("extdata", "pbmc_test.txt",
 #                                 package = "garnett")

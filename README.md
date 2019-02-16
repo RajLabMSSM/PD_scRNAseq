@@ -5,15 +5,9 @@ Seurat analysis pipelines for Parkinson's Disease scRNA-seq data from CD14+ cell
 
 ## Full Dataset Rmarkdown
 ### Protein-Coding Genes
-['FindClusters' resolution = 0.6](https://rajlabmssm.github.io/PD_scRNAseq/Results/subsetGenes-protein_coding__subsetCells-all__Resolution-0.6/subsetGenes-protein_coding__subsetCells-all__Resolution-0.6)  
-['FindClusters' resolution = 1.0](https://rajlabmssm.github.io/PD_scRNAseq/Results/subsetGenes-protein_coding__subsetCells-all__Resolution-1.0/subsetGenes-protein_coding__subsetCells-all__Resolution-1.0)  
-['FindClusters' resolution = 2.0](https://rajlabmssm.github.io/PD_scRNAseq/Results/subsetGenes-protein_coding__subsetCells-all__Resolution-2.0/subsetGenes-protein_coding__subsetCells-all__Resolution-2.0)  
-### All Genes
-
-## Test Subset Rmarkdown 
-### Protein-Coding Genes
-['FindClusters' resolution = 0.6](https://rajlabmssm.github.io/PD_scRNAseq/Results/subsetGenes-protein_coding__subsetCells-400__Resolution-0.6/subsetGenes-protein_coding__subsetCells-400__Resolution-0.6)  
-
+['FindClusters' resolution = 0.2: Preprocessing](https://rajlabmssm.github.io/PD_scRNAseq/Results/subsetGenes-protein_coding__subsetCells-F__Resolution-0.2__perplexity-40__nCores-4/Preprocessing.html)  
+['FindClusters' resolution = 0.2: Monocyte Subtypes](https://rajlabmssm.github.io/PD_scRNAseq/Results/subsetGenes-protein_coding__subsetCells-F__Resolution-0.2__perplexity-40__nCores-4/scRNAseq_MonocyteSubtypes.html)  
+ 
  
 
 ---
