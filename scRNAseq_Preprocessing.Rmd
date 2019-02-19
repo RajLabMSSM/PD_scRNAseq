@@ -43,6 +43,7 @@ library(plotly)
 library(ggplot2)
 library(shiny) 
 library(DT) 
+library(BiocParallel)
 
 sessionInfo()
 print(paste("Seurat ", packageVersion("Seurat")))
@@ -464,6 +465,20 @@ for (var in metaVars){
   tSNE_metadata_plot(var)
   cat('\n') 
 } 
+```
+
+
+```{r DGE: CD16+ vs. CD16- Monocytes} 
+register(MulticoreParam(as.numeric(params$nCores)))
+
+# subDAT <- SubsetData(DAT, cells.use = 1:500) 
+MonocyteSubtype.markers <- FindMarkers(DAT, min.pct = 0.25, only.pos = F,
+                                ident.1 = 1, ident.2 = 0, test.use = "DESeq2",
+                                parallel = T
+                                )
+
+createDT(MonocyteSubtype.markers, caption="DEGs between cluster 0 (CD16- monocytes) and cluster 1 (CD16+ monocytes")
+write.csv(MonocyteSubtype.markers, file.path(resultsPath, "MonocyteSubtype.markers.csv"), quote = F,row.names = T)
 ```
 
 

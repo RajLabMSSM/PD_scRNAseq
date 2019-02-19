@@ -20,20 +20,20 @@ dir.create(file.path("Data"), showWarnings=F)
 params_list <- list(subsetGenes= subsetGenes, subsetCells=subsetCells, resolution=resolution, 
                     resultsPath=resultsPath, nCores=nCores, perplexity=perplexity)
  
-# # 1) Preprocessing
-# rmarkdown::render(input = 'scRNAseq_Preprocessing.Rmd', 
-#                   params = params_list,  
-#                   output_file = file.path(resultsPath, paste("Preprocessing.html",sep=""))
-#                   )
-
-# 1.5) DGE
-rmarkdown::render(input = 'scRNAseq_DGE.Rmd', 
-                  params = params_list,  
-                  output_file = file.path(resultsPath, paste("DGE.html",sep=""))
-)
-
-
+# 1) Preprocessing
+rmarkdown::render(input = 'scRNAseq_Preprocessing.Rmd',
+                  params = params_list,
+                  output_file = file.path(resultsPath, paste("Preprocessing.html",sep=""))
+                  )
 # 
+# # 1.5) DGE
+# rmarkdown::render(input = 'scRNAseq_DGE.Rmd', 
+#                   params = params_list,  
+#                   output_file = file.path(resultsPath, paste("DGE.html",sep=""))
+# )
+
+# test
+#  
 # # 2) Characterize Clusters
 # rmarkdown::render(input = 'scRNAseq_MonocyteSubtypes.Rmd',
 #                   params = params_list,  
