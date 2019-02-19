@@ -32,7 +32,7 @@ rmarkdown::render(input = 'scRNAseq_Preprocessing.Rmd',
 #                   output_file = file.path(resultsPath, paste("DGE.html",sep=""))
 # )
 
-# test
+
 #  
 # # 2) Characterize Clusters
 # rmarkdown::render(input = 'scRNAseq_MonocyteSubtypes.Rmd',

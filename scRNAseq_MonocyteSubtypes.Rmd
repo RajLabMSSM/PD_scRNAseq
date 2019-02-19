@@ -39,7 +39,9 @@ library(Seurat)
 library(cowplot)
 library(ggplot2)
 library(dplyr) 
-library(data.table)
+library(data.table) 
+library(readxl) 
+library(reshape2)
 
 library(monocle) # BiocManager::install("monocle") 
 # BiocManager::install(c('DelayedArray', 'DelayedMatrixStats', 'org.Hs.eg.db', 'org.Mm.eg.db'))
@@ -144,17 +146,73 @@ FeatureHeatmap(DAT,  c("CD14","FCGR3A","LRRK2", "GBA"), pt.size = 0.5,
 ```
 
 
+## AD Gene Expression per Cluster
+
+
+Create a bar chart of cell type % expressed or show log10 Pvalue for the following genes. What I’d like to see if the AD-related genes more expressed in intermediate vs. classical subset. You can plot “pct.1” and “pct.2” for the following genes and p-value. Then do a simple stat to see if they are enriched for intermediate vs. classical.  Thanks! 
+
+Q: Are AD-related genes more concentered in classical, intermediate or non-classical monocyte subset? 
+
+```{r}
+ADgenes <- read_excel(file.path(root, "Data/AD_genes.xlsx"))
+  
+percent_cells_expressing <- function(DAT, ADgenes, clusterList){ 
+  for(clust in clusterList){
+    cat("\nProcessing cluster",clust)
+    clustDAT <- SubsetData(DAT, subset.name = "post_clustering", accept.value = clust) 
+    # Seurat:::PercentAbove(x = DAT@data, threshold = 0) # Very inefficient
+    subDAT <- clustDAT@data[row.names(clustDAT@data ) %in% ADgenes$Gene,] 
+    for(gene in row.names(subDAT)){
+      cat(".")
+      ADgenes[ADgenes$Gene==gene,paste("cluster",clust,sep="")] <- mean(ifelse(subDAT[gene,] > 0, 1, 0))
+    }  
+  } 
+  ADgenes <- melt(ADgenes, id.vars = c("Gene","Category"), measure.vars = paste("cluster",clusterList,sep=""), 
+     variable.name = "Cluster",
+     value.name = "cellsExpressing")
+  return(ADgenes)
+}
+
+ADgenes <- percent_cells_expressing(DAT, ADgenes, clusterList=c(0,1))
+
+
+ggplot(data=ADgenes, aes(x=Cluster, y=cellsExpressing, fill=Gene)) + geom_col() + 
+  labs(title = "Fraction of Cells Expressing AD-associated Genes", y="Fraction of Cells")
+ 
+```
+
+
+## Expression Heatmap
+
+```{r Expression Heatmap}
+clustDAT <- SubsetData(DAT, subset.name = "post_clustering", accept.value = c(0,1)) 
+ 
+library(GMD)
+heatmap.3(DAT)
+DoHeatmap(clustDAT, genes.use = ADgenes$Gene, slim.col.label = T, use.scaled = F)
+```
+
+
+
 # DGE: CD16+ vs. CD16- Monocytes
 
 ```{r DGE: CD16+ vs. CD16- Monocytes}
 # library("BiocParallel") 
 # register(MulticoreParam(4))
-MonocyteSubtype.markers <- FindMarkers(DAT, min.pct = 0.25, only.pos = F,
-                                ident.1 = 1, ident.2 = 0, test.use = "wilcox"
-                                )
-createDT(MonocyteSubtype.markers, caption="DEGs between cluster 0 (CD16- monocytes) and cluster 1 (CD16+ monocytes")
-write.csv(MonocyteSubtype.markers, file.path(resultsPath, "MonocyteSubtype.markers.csv"), quote = F,row.names = T)
+# MonocyteSubtype.markers <- FindMarkers(DAT, min.pct = 0.25, only.pos = F,
+#                                 ident.1 = 1, ident.2 = 0, test.use = "wilcox"
+#                                 )
+# createDT(MonocyteSubtype.markers, caption="DEGs between cluster 0 (CD16- monocytes) and cluster 1 (CD16+ monocytes")
+# write.csv(MonocyteSubtype.markers, file.path(resultsPath, "MonocyteSubtype.markers_wilcox.csv"), quote = F,row.names = T)
 ```
+
+
+
+
+```{r}
+
+```
+
 
 
 

@@ -394,7 +394,7 @@ DimPlot(object = DAT, reduction.use = 'umap')
 
 
 
-## t-SNE {.tabset .tabset-fade .tabset-pills}
+## Plot t-SNE {.tabset .tabset-fade .tabset-pills}
 
 As input to the tSNE, we suggest using the same PCs as input to the clustering analysis, although computing the tSNE based on scaled gene expression is also supported using the genes.use argument.  
 
@@ -406,8 +406,6 @@ labSize <- 12
 tsnePlot <- TSNEPlot(object = DAT, do.label=T, label.size = labSize, do.return=T) + 
   scale_color_brewer( palette = "Set1", aesthetics = aes(alpha=.5))
 
-
-# 
 # customColors <- function(var="post_clustering", palette="Set1"){
 #   add.alpha <- function(col, alpha=1){ 
 #     if(missing(col))
@@ -439,7 +437,7 @@ tsnePlot <- TSNEPlot(object = DAT, do.label=T, label.size = labSize, do.return=T
 ```
 
 
-## t-SNE & Metadata Plots {.tabset .tabset-fade .tabset-pills}
+## Plot t-SNE & Metadata Plots {.tabset .tabset-fade .tabset-pills}
 
 ```{r t-SNE and Metadata, results='asis'}
 tSNE_metadata_plot <- function(var, labSize=12){ 
@@ -467,14 +465,14 @@ for (var in metaVars){
 } 
 ```
 
+# DGE: CD16+ vs. CD16- Monocytes
 
 ```{r DGE: CD16+ vs. CD16- Monocytes} 
-register(MulticoreParam(as.numeric(params$nCores)))
+# register(MulticoreParam(as.numeric(params$nCores)))
 
 # subDAT <- SubsetData(DAT, cells.use = 1:500) 
 MonocyteSubtype.markers <- FindMarkers(DAT, min.pct = 0.25, only.pos = F,
-                                ident.1 = 1, ident.2 = 0, test.use = "DESeq2",
-                                parallel = T
+                                ident.1 = 1, ident.2 = 0, test.use = "DESeq2"
                                 )
 
 createDT(MonocyteSubtype.markers, caption="DEGs between cluster 0 (CD16- monocytes) and cluster 1 (CD16+ monocytes")
