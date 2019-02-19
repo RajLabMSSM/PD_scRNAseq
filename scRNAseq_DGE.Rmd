@@ -28,6 +28,8 @@ params:
 root <- "./"  
 source(file.path(root,"general_functions.R"))
 import_parameters(params) 
+# load(file.path(resultsPath, "scRNAseq_results.RData"))
+load(file.path("Results","subsetGenes-protein_coding__subsetCells-F__Resolution-0.2__perplexity-40__nCores-4","scRNAseq_results.RData"))
 ```
 
 __`r resultsPath`__
@@ -46,16 +48,6 @@ library(DT)
 
 sessionInfo()
 print(paste("Seurat ", packageVersion("Seurat")))
-```
-
-## Load Data
-
-```{r Load Data }   
-## ! IMPORTANT! Must not setwd to local path when launching on cluster
-# setwd("~/Desktop/PD_scRNAseq/") 
-load(file.path(root, "Data/seurat_object_add_HTO_ids.Rdata"))
-DAT <- seurat.obj  
-rm(seurat.obj)
 ```
 
 # DGE: CD16+ vs. CD16- Monocytes
