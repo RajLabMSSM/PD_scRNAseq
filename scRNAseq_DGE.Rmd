@@ -28,8 +28,8 @@ params:
 root <- "./"  
 source(file.path(root,"general_functions.R"))
 import_parameters(params) 
-# load(file.path(resultsPath, "scRNAseq_results.RData"))
-load(file.path("Results","subsetGenes-protein_coding__subsetCells-F__Resolution-0.2__perplexity-40__nCores-4","scRNAseq_results.RData"))
+load(file.path(resultsPath, "scRNAseq_results.RData"))
+# load(file.path("Results","subsetGenes-protein_coding__subsetCells-F__Resolution-0.2__perplexity-40__nCores-4","scRNAseq_results.RData"))
 ```
 
 __`r resultsPath`__
