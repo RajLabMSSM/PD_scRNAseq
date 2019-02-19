@@ -1,0 +1,75 @@
+---  
+title: "scRNAseq_DGE"  
+author: "<h3>Author</h3>Brian M. Schilder, Bioinformatician II"
+date: "`r Sys.Date()`"
+output: 
+  rmarkdown::html_document: 
+    theme: spacelab
+    highlight: zenburn 
+    code_folding: show 
+    toc: true 
+    toc_float: true
+    smooth_scroll: true
+    number_sections: false 
+    self_contained: true  
+params:
+  subsetGenes: "protein_coding" #FALSE
+  subsetCells: 500 #FALSE
+  resolution: 0.6
+  resultsPath: "./Results"
+  nCores: 4
+  perplexity: 30
+---
+
+# Setup 
+
+```{r setup,  dpi = 600}
+# Import functions
+root <- "./"  
+source(file.path(root,"general_functions.R"))
+import_parameters(params) 
+```
+
+__`r resultsPath`__
+ 
+## Load Libraries
+
+```{r Load Libraries, message=F, warning=F}
+library(Seurat)
+library(dplyr)
+library(gridExtra)
+library(knitr) 
+library(plotly)
+library(ggplot2)
+library(shiny) 
+library(DT) 
+
+sessionInfo()
+print(paste("Seurat ", packageVersion("Seurat")))
+```
+
+## Load Data
+
+```{r Load Data }   
+## ! IMPORTANT! Must not setwd to local path when launching on cluster
+# setwd("~/Desktop/PD_scRNAseq/") 
+load(file.path(root, "Data/seurat_object_add_HTO_ids.Rdata"))
+DAT <- seurat.obj  
+rm(seurat.obj)
+```
+
+# DGE: CD16+ vs. CD16- Monocytes
+
+```{r DGE: CD16+ vs. CD16- Monocytes}
+library("BiocParallel")
+register(MulticoreParam(as.numeric(params$nCores)))
+
+MonocyteSubtype.markers <- FindMarkers(DAT, min.pct = 0.25, only.pos = F,
+                                ident.1 = 1, ident.2 = 0, test.use = "DESeq2",
+                                parallel = T
+                                )
+
+createDT(MonocyteSubtype.markers, caption="DEGs between cluster 0 (CD16- monocytes) and cluster 1 (CD16+ monocytes")
+write.csv(MonocyteSubtype.markers, file.path(resultsPath, "MonocyteSubtype.markers.csv"), quote = F,row.names = T)
+```
+

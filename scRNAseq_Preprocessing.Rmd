@@ -32,7 +32,6 @@ import_parameters(params)
 
 __`r resultsPath`__
  
- 
 ## Load Libraries
 
 ```{r Load Libraries, message=F, warning=F}
@@ -316,7 +315,7 @@ VizPCA(object = DAT, pcs.use = 1:2)
 
 ```{r PCHeatmap, message=F, warning=F}  
 # 'PCHeatmap' is a wrapper for heatmap.2  
-PCHeatmap(object = DAT, pc.use = 1:12, do.balanced=T, label.columns=F, use.full=F)   # cells.use = 500, 
+PCHeatmap(object = DAT, pc.use = 1:12, do.balanced=T, label.columns=F, use.full=F)
 ```
 
 
@@ -465,22 +464,6 @@ for (var in metaVars){
   tSNE_metadata_plot(var)
   cat('\n') 
 } 
-```
-
-
-# DGE: CD16+ vs. CD16- Monocytes
-
-```{r DGE: CD16+ vs. CD16- Monocytes}
-# library("BiocParallel") 
-# register(MulticoreParam(4))
-MonocyteSubtype.markers <- FindMarkers(DAT, min.pct = 0.25, only.pos = F,
-                                ident.1 = 1, ident.2 = 0, test.use = "DESeq2"
-                                )
-# MonocyteSubtype.markers <- FindMarkers(DAT, min.pct = 0.25, only.pos = F, 
-#                                 ident.1 = 1, ident.2 = 0, test.use = "wilcox"
-#                                 )
-createDT(MonocyteSubtype.markers, caption="DEGs between cluster 0 (CD16- monocytes) and cluster 1 (CD16+ monocytes")
-write.csv(MonocyteSubtype.markers, file.path(resultsPath, "MonocyteSubtype.markers.csv"), quote = F,row.names = T)
 ```
 
 
