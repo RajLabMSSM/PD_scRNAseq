@@ -53,3 +53,46 @@ raise_memory_limit <- function(){
   ## Set new memory limit 
   ulimit::memory_limit(RAM_Mib)  
 }
+
+
+volcanoPlot <- function(DEG_df, caption="", topFC_labeled=5){
+  DEG_df$sig<-  ifelse( DEG_df$p_val_adj<0.05 & DEG_df$avg_logFC<1.5, "p_val_adj<0.05",
+                        ifelse( DEG_df$p_val_adj<0.05  & DEG_df$avg_logFC>1.5, "p_val_adj<0.05 & avg_logFC>1.5",
+                                "p_val_adj>0.05"
+                        )) 
+  DEG_df <- arrange(DEG_df, desc(sig))
+  yMax  <- max(-log10(DEG_df$p_val_adj)) + max(-log10(DEG_df$p_val_adj))/3 #ifelse(max(-log10(DEG_df$p_val_adj))<45, 50, max(-log10(DEG_df$p_val_adj)) + 10)
+  
+  vol <- ggplot(data=DEG_df, aes(x=avg_logFC, y= -log10(p_val_adj))) +
+    geom_point(alpha=0.5, size=3, aes(col=sig)) + 
+    scale_color_manual(values=list("p_val_adj<0.05"="turquoise3",
+                                   "p_val_adj<0.05 & avg_logFC>1.5"="purple", 
+                                   "p_val_adj>0.05" = "darkgray")) +
+    theme(legend.position = "none") + 
+    xlab(expression(paste("Average ",log^{2},"(fold change)"))) +
+    ylab(expression(paste(-log^{10},"(p-value)"))) + xlim(-2,2) + ylim(0, yMax) +
+    ## ggrepl labels
+    geom_text_repel(data= arrange(DEG_df,  p_val_adj, desc(avg_logFC))[1:topFC_labeled,], 
+                    # filter(DEG_df, avg_logFC>=1.5)[1:10,],
+                    aes(label=gene),  color="black", alpha=.5,
+                    segment.color="black", segment.alpha=.5  
+    ) +  
+    # Lines
+    geom_vline(xintercept= -1.5,lty=4, lwd=.3, alpha=.5) + 
+    geom_vline(xintercept= 1.5,lty=4, lwd=.3, alpha=.5) +
+    geom_hline(yintercept= -log10(0.05),lty=4, lwd=.3, alpha=.5) + 
+    ggtitle(caption) 
+  print(vol)
+}
+ 
+
+get_markerDT <- function(DAT, markerList, rawData=T, meta_vars =c("barcode", "dx", "mut","post_clustering", "percent.mito","nGene", "nUMI")){
+  if(rawData==T){
+    exp <- DAT@raw.data 
+  }else{exp <- DAT@scale.data} 
+  marker.matrix <- exp[row.names(exp) %in% markerList, ] 
+  markerMelt <- reshape2:::melt.matrix(marker.matrix, varnames = c("Gene", "Cell"), value.name = "Expression")  
+  markerMeta <- DAT@meta.data[meta_vars] %>% copy()  
+  markerDT <- base::merge(markerMelt,markerMeta, by.x="Cell", by.y="barcode")  
+  return(markerDT)
+}

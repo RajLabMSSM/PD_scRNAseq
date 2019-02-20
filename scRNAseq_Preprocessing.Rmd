@@ -476,7 +476,7 @@ MonocyteSubtype.markers <- FindMarkers(DAT, min.pct = 0.25, only.pos = F,
                                 )
 
 createDT(MonocyteSubtype.markers, caption="DEGs between cluster 0 (CD16- monocytes) and cluster 1 (CD16+ monocytes")
-write.csv(MonocyteSubtype.markers, file.path(resultsPath, "MonocyteSubtype.markers.csv"), quote = F,row.names = T)
+write.csv(MonocyteSubtype.markers, file.path(resultsPath, "MonocyteSubtype.markers.csv"), quote = F, row.names = T)
 ```
 
 

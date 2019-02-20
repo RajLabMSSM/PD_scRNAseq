@@ -11,7 +11,7 @@ output:
     toc_float: true
     smooth_scroll: true
     number_sections: false 
-    self_contained: true  
+    self_contained: no
 params:
   subsetGenes: "protein_coding" #FALSE
   subsetCells: 500 #FALSE
@@ -29,7 +29,8 @@ root = "./"
 source(file.path(root,"general_functions.R"))
 import_parameters(params)
 # load(file.path(resultsPath, "scRNAseq_results.RData"))
-load(file.path("Results","subsetGenes-protein_coding__subsetCells-F__Resolution-0.2__perplexity-40__nCores-4","scRNAseq_results.RData"))
+resultsPath <- "Results/subsetGenes-protein_coding__subsetCells-F__Resolution-0.2__perplexity-40__nCores-4"
+load(file.path(resultsPath,"scRNAseq_results.RData"))
 ```
 
 ## Load Libraries
@@ -43,6 +44,7 @@ library(data.table)
 library(readxl) 
 library(reshape2)
 
+library(GeneOverlap) # BiocManager::install("GeneOverlap")
 library(monocle) # BiocManager::install("monocle") 
 # BiocManager::install(c('DelayedArray', 'DelayedMatrixStats', 'org.Hs.eg.db', 'org.Mm.eg.db'))
 library(org.Hs.eg.db)
@@ -146,79 +148,98 @@ FeatureHeatmap(DAT,  c("CD14","FCGR3A","LRRK2", "GBA"), pt.size = 0.5,
 ```
 
 
-## AD Gene Expression per Cluster
 
+# AD Gene Expression per Cluster
 
-Create a bar chart of cell type % expressed or show log10 Pvalue for the following genes. What I’d like to see if the AD-related genes more expressed in intermediate vs. classical subset. You can plot “pct.1” and “pct.2” for the following genes and p-value. Then do a simple stat to see if they are enriched for intermediate vs. classical.  Thanks! 
-
-Q: Are AD-related genes more concentered in classical, intermediate or non-classical monocyte subset? 
-
-```{r}
+Q: Is AD-related gene expression more prevalent in classical, intermediate or non-classical monocyte subtypes? 
+```{r AD Gene Expression per Cluster}
 ADgenes <- read_excel(file.path(root, "Data/AD_genes.xlsx"))
-  
-percent_cells_expressing <- function(DAT, ADgenes, clusterList){ 
-  for(clust in clusterList){
-    cat("\nProcessing cluster",clust)
-    clustDAT <- SubsetData(DAT, subset.name = "post_clustering", accept.value = clust) 
-    # Seurat:::PercentAbove(x = DAT@data, threshold = 0) # Very inefficient
-    subDAT <- clustDAT@data[row.names(clustDAT@data ) %in% ADgenes$Gene,] 
-    for(gene in row.names(subDAT)){
-      cat(".")
-      ADgenes[ADgenes$Gene==gene,paste("cluster",clust,sep="")] <- mean(ifelse(subDAT[gene,] > 0, 1, 0))
-    }  
-  } 
-  ADgenes <- melt(ADgenes, id.vars = c("Gene","Category"), measure.vars = paste("cluster",clusterList,sep=""), 
-     variable.name = "Cluster",
-     value.name = "cellsExpressing")
-  return(ADgenes)
-}
-
-ADgenes <- percent_cells_expressing(DAT, ADgenes, clusterList=c(0,1))
-
-
-ggplot(data=ADgenes, aes(x=Cluster, y=cellsExpressing, fill=Gene)) + geom_col() + 
-  labs(title = "Fraction of Cells Expressing AD-associated Genes", y="Fraction of Cells")
+MonocyteSubtype.markers <- read.csv(file.path(root, resultsPath, "MonocyteSubtype.markers.csv"), row.names = 1)
+MonocyteSubtype.markers_sig <- subset(MonocyteSubtype.markers, p_val_adj <= 0.05)
+```
+## Test Gene Overlap
+* _"The GeneOverlap class formulates the problem as testing whether two variables are independent, which can be represented as a contingency table, and then uses Fisher’s exact test to find the statistical significance."_
+* Low p-value means the overlap is highly significant. 
+* [Documentation](http://bioconductor.org/packages/release/bioc/vignettes/GeneOverlap/inst/doc/GeneOverlap.pdf)
+```{r Test Gene Overlap} 
+genomeSize <- dim(DAT@raw.data)[1]
+list1 <- row.names(MonocyteSubtype.markers_sig)
+list2 <- ADgenes$Gene
+go.obj <- newGeneOverlap(listA = list1, listB = list2, genome.size = genomeSize )
+go.obj <- testGeneOverlap(go.obj)
+print(go.obj)
  
+
+overlappingGenes <- getIntersection(go.obj)
+percent_of_ADgenes <-  length(overlappingGenes) / length(ADgenes$Gene)*100
+percent_of_DEGs <- length(overlappingGenes) / length(row.names(MonocyteSubtype.markers_sig))*100
+AD_DEGs <- subset(ADgenes, Gene %in% overlappingGenes)
+
+cat("\n",round(percent_of_ADgenes, 2),"% of the AD-risk genes (",length(overlappingGenes),"/",length(ADgenes$Gene),") are differentially expressed between Canonical vs. Intermediate monocyte subtypes.")
+ 
+cat("\n",round(percent_of_DEGs, 2),"% of the DEGs between Canonical vs. Intermediate  monocyte subtypes (",
+    length(overlappingGenes),"/",length(row.names(MonocyteSubtype.markers_sig)),") are in the AD-risk gene list.")
+```
+
+
+## Percent of Cells that Express AD Genes
+
+```{r Percent of Cells that Express AD Genes}   
+# percent_cells_expressing <- function(DAT, ADgenes, clusterList){ 
+#   for(clust in clusterList){
+#     cat("\nProcessing cluster",clust)
+#     clustDAT <- SubsetData(DAT, subset.name = "post_clustering", accept.value = clust) 
+#     # Seurat:::PercentAbove(x = DAT@data, threshold = 0) # Very inefficient
+#     subDAT <- clustDAT@data[row.names(clustDAT@data ) %in% ADgenes$Gene,] 
+#     for(gene in row.names(subDAT)){
+#       cat(".")
+#       ADgenes[ADgenes$Gene==gene,paste("cluster",clust,sep="")] <- mean(ifelse(subDAT[gene,] > 0, 1, 0))
+#     }  
+#   } 
+#   ADgenes <- melt(ADgenes, id.vars = c("Gene","Category"), measure.vars = paste("cluster",clusterList,sep=""), 
+#      variable.name = "Cluster",
+#      value.name = "cellsExpressing")
+#   ggplot(data=AD_DEGs, aes(x=Cluster, y=cellsExpressing, fill=Gene)) + geom_col(position="dodge") + 
+#     labs(title = "Fraction of Cells Expressing AD-associated Genes", y="Fraction of Cells") +
+#      scale_x_discrete(labels=c("Cluster0\n(Canonical)", "Cluster1\n(Intermediate)")) 
+#   return(ADgenes)
+# } 
+
+MonocyteSubtype.markers_sig$Gene <- row.names(MonocyteSubtype.markers_sig)
+AD_pct <- melt(subset(MonocyteSubtype.markers_sig, Gene%in%ADgenes$Gene), 
+               id.vars = c("Gene","avg_logFC"), measure.vars = c("pct.2", "pct.1"), 
+               variable.name = "Group", value.name = "pct") 
+# Fraction Cells
+ggplot(data=AD_pct, aes(x=Group, y=pct, fill=Gene)) + geom_col(position="dodge") + 
+  labs(title = "Fraction of Cells Expressing AD-associated Genes", y="Fraction of Cells", x="Monocyte Subtype") +
+   scale_x_discrete(labels=c("Cluster0\n(Canonical)", "Cluster1\n(Intermediate)")) 
+# LogFC
+ggplot(data=AD_pct, aes(x=Gene, y=avg_logFC, fill=Gene)) + geom_col(position="dodge") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none") +
+   labs(title = "logFC of AD-associated DEGs:\nCanonical vs. Intermediate Monocytes", y="avg_logFC", x="Monocyte Subtype") 
 ```
 
 
 ## Expression Heatmap
 
 ```{r Expression Heatmap}
-clustDAT <- SubsetData(DAT, subset.name = "post_clustering", accept.value = c(0,1)) 
+
+clustDAT <- SubsetData(DAT, subset.name = "post_clustering", accept.value = c(0,1), do.scale = F) 
+markerDF  <- get_markerDT(clustDAT, markerList = ADgenes$Gene, rawData = T) 
+markerMatrix <- reshape2::acast(markerDF, Gene~post_clustering, value.var="Expression",
+                                fun.aggregate = mean, drop = F, fill = 0)
+# Heatmap.2
+my_palette <- colorRampPalette(c("purple", "black", "cyan"))(n = 1000)
+gplots::heatmap.2(markerMatrix, xlab = "Cluster", dendrogram = "row",
+                  col = my_palette, tracecol = "gray", srtCol = 0, offsetCol=1.5, vline=T, 
+                  trace='none', key.title=NA, key.ylab = "Expression", colsep=T, sepwidth = 0.01) 
+```
+
  
-library(GMD)
-heatmap.3(DAT)
-DoHeatmap(clustDAT, genes.use = ADgenes$Gene, slim.col.label = T, use.scaled = F)
-```
+ 
+# DEG Enrichment {.tabset .tabset-fade .tabset-pills}
 
-
-
-# DGE: CD16+ vs. CD16- Monocytes
-
-```{r DGE: CD16+ vs. CD16- Monocytes}
-# library("BiocParallel") 
-# register(MulticoreParam(4))
-# MonocyteSubtype.markers <- FindMarkers(DAT, min.pct = 0.25, only.pos = F,
-#                                 ident.1 = 1, ident.2 = 0, test.use = "wilcox"
-#                                 )
-# createDT(MonocyteSubtype.markers, caption="DEGs between cluster 0 (CD16- monocytes) and cluster 1 (CD16+ monocytes")
-# write.csv(MonocyteSubtype.markers, file.path(resultsPath, "MonocyteSubtype.markers_wilcox.csv"), quote = F,row.names = T)
-```
-
-
-
-
-```{r}
-
-```
-
-
-
-
-## Run Enrichment of DGEs {.tabset .tabset-fade .tabset-pills}
-
-```{r Run Enrichment of DGEs, results='asis'}
+```{r DEG Enrichment, results='asis'}
 enrichr_dbs <- c("KEGG_2018", "Reactome_2016",
                  "GO_Biological_Process_2018", "GO_Molecular_Function_2018", "GO_Cellular_Component_2018", 
                  "Rare_Diseases_AutoRIF_ARCHS4_Predictions", "Human_Gene_Atlas")
@@ -236,33 +257,4 @@ for (db in enrichr_dbs){
   createDT_html(results[[db]], paste("Enrichr Results:",db))
   cat('\n')
 }  
-```
-
-
-## Train Classifier on Data
-
-```{r Train Classifier on Data, include=F}
-
-# marker_file_path <- system.file("extdata", "pbmc_test.txt",
-#                                 package = "garnett")
-# # Plot chosen markers
-# marker_check <- check_markers(mDAT, marker_file_path,
-#                               db=org.Hs.eg.db,
-#                               cds_gene_id_type = "SYMBOL",
-#                               marker_file_gene_id_type = "SYMBOL")
-#
-# plot_markers(marker_check)
-
-# Classify Cells
-## Get classifier from
-# write.table( RCurl::getURL("https://cole-trapnell-lab.github.io/garnett/marker_files/hsPBMC_markers.txt"),
-#              file = "pbmc_markerFile.txt",row.names = F, col.names = F, quote = F, )
-# Train Classifier
-# classifier <- train_cell_classifier(cds = mDAT,
-#                                          marker_file = "pbmc_markerFile.txt",
-#                                          db=org.Hs.eg.db,
-#                                          cds_gene_id_type = "SYMBOL",
-#                                          num_unknown = 50,
-#                                          marker_file_gene_id_type = "SYMBOL")
-#get_classifier_references(classifier) 
 ```
