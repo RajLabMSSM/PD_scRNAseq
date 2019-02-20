@@ -43,7 +43,6 @@ library(plotly)
 library(ggplot2)
 library(shiny) 
 library(DT) 
-library(BiocParallel)
 
 sessionInfo()
 print(paste("Seurat ", packageVersion("Seurat")))

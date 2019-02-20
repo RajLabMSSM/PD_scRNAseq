@@ -11,7 +11,7 @@ output:
     toc_float: true
     smooth_scroll: true
     number_sections: false 
-    self_contained: no
+    self_contained: true
 params:
   subsetGenes: "protein_coding" #FALSE
   subsetCells: 500 #FALSE
