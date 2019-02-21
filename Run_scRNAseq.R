@@ -21,16 +21,16 @@ params_list <- list(subsetGenes= subsetGenes, subsetCells=subsetCells, resolutio
                     resultsPath=resultsPath, nCores=nCores, perplexity=perplexity)
  
 # 1) Preprocessing
-rmarkdown::render(input = 'scRNAseq_Preprocessing.Rmd',
+# rmarkdown::render(input = 'scRNAseq_Preprocessing.Rmd',
+#                   params = params_list,
+#                   output_file = file.path(resultsPath, paste("Preprocessing.html",sep=""))
+#                   )
+# # 
+# 1.5) DGE
+rmarkdown::render(input = 'scRNAseq_DGE.Rmd',
                   params = params_list,
-                  output_file = file.path(resultsPath, paste("Preprocessing.html",sep=""))
-                  )
-# 
-# # 1.5) DGE
-# rmarkdown::render(input = 'scRNAseq_DGE.Rmd', 
-#                   params = params_list,  
-#                   output_file = file.path(resultsPath, paste("DGE.html",sep=""))
-# )
+                  output_file = file.path(resultsPath, paste("DGE.html",sep=""))
+)
 
 
 #  
