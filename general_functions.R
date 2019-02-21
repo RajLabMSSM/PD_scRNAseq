@@ -106,11 +106,22 @@ replace_zero_pvals <- function(DEGs){
   return(DEGs)
 }
 
-runDGE <- function(DAT, meta_var, group1, group2, test.use="wilcox", show.table=T, show.volcano=T){
+
+
+
+runDGE <- function(DAT, meta_var, group1, group2, test.use="wilcox", show.table=T, show.volcano=T, allGenes=F){
   #print(paste("DGE_allCells",meta_var,sep="_")) 
   DAT <- SetAllIdent(DAT, id = meta_var)
   DAT <- StashIdent(DAT, save.name = meta_var)  
-  DEGs <- FindMarkers(DAT, ident.1=group1, ident.2=group2, test.use=test.use, only.pos = F)
+  if(allGenes==T){
+    # DON'T use filtering and apply FDR
+    DEGs <- FindMarkers(DAT, ident.1=group1, ident.2=group2, test.use=test.use, only.pos = F, 
+                        logfc.threshold = 0, min.pct = 0, min.cells.group = 1, 
+                        min.cells.gene = 1, min.diff.pct = -Inf)
+  } else {
+    # Use filtering and apply Bonferonni-correct p-vals
+    DEGs <- FindMarkers(DAT, ident.1=group1, ident.2=group2, test.use=test.use, only.pos = F)
+  } 
   DEGs <- replace_zero_pvals(DEGs)
   DEGs$gene <- row.names(DEGs)
   
@@ -125,13 +136,13 @@ runDGE <- function(DAT, meta_var, group1, group2, test.use="wilcox", show.table=
   return(DEGs)
 }
 
-DGE_within_clusters <- function(DAT, meta_var, group1, group2, clusterList, allClusts=F){ 
+DGE_within_clusters <- function(DAT, meta_var, group1, group2, clusterList, allClusts=F, allGenes = F){ 
   if(allClusts==T){ clusterList <- unique(DAT@meta.data$post_clustering) }
   for (clust in clusterList){ 
     cat('\n')   
     cat("### ",paste("Cluster ",clust,": ",group1," vs. ", group2, sep="") , "\n")
     DAT_clustSub <- Seurat::SubsetData(DAT, subset.name ="post_clustering", accept.value = clust, subset.raw = T)  
-    DEG_df <-runDGE(DAT_clustSub, meta_var, group1, group2 ) 
+    DEG_df <-runDGE(DAT_clustSub, meta_var, group1, group2, allGenes) 
     cat('\n')   
   } 
 }

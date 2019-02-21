@@ -30,7 +30,7 @@ source(file.path(root,"general_functions.R"))
 import_parameters(params)
 # load(file.path(resultsPath, "scRNAseq_results.RData"))
 resultsPath <- "Results/subsetGenes-protein_coding__subsetCells-F__Resolution-0.2__perplexity-40__nCores-4"
-load(file.path(resultsPath,"scRNAseq_results.RData"))
+load(file.path(resultsPath,"scRNAseq_results.RData")) 
 ```
 
 ## Load Libraries
@@ -52,6 +52,11 @@ library(monocle) # BiocManager::install("monocle")
 library(org.Hs.eg.db)
 library(garnett) # devtools::install_github("cole-trapnell-lab/garnett")
 library(enrichR) #BiocManager::install("enrichR")
+
+if(getwd()=="/Users/schilder/Desktop/PD_scRNAseq"){
+  allGenes <- F
+}else{allGenes <- T}
+allGenes
 ```
 
 # Identify Cell Types with Garnett + Monocle
@@ -320,54 +325,72 @@ overlappingGenes_PD <- enrichment_test_and_plots(clustDAT, MonocyteSubtype.marke
 # Identify Cluster-specific Biomarkers
 
 ```{r Identify Cluster-specific Biomarkers}
-clust0.markers <- FindMarkers(DAT, ident.1=0, min.pct = 0.25, only.pos = F, test.use = "wilcox")
-clust1.markers <- FindMarkers(DAT, ident.1=1, min.pct = 0.25, only.pos = F, test.use = "wilcox")
+identify_unique_markers <-function(DAT, clusterA, clusterB, allGenes=F){ 
+  if(allGenes==F){
+      clustA.markers <- FindMarkers(DAT, ident.1=clusterA, min.pct = 0.25, only.pos = F, test.use = "wilcox")
+      clustB.markers <- FindMarkers(DAT, ident.1=clusterB, min.pct = 0.25, only.pos = F, test.use = "wilcox") 
+  }else{
+      clustA.markers <- FindMarkers(DAT, ident.1=clusterA, min.pct = 0.25, only.pos = F, test.use = "wilcox", 
+                        logfc.threshold = 0, min.pct = 0, min.cells.group = 1, 
+                        min.cells.gene = 1, min.diff.pct = -Inf)
+      clustB.markers <- FindMarkers(DAT, ident.1=clusterB, min.pct = 0.25, only.pos = F, test.use = "wilcox", 
+                        logfc.threshold = 0, min.pct = 0, min.cells.group = 1, 
+                        min.cells.gene = 1, min.diff.pct = -Inf)
+  } 
+  clustA.uniqueMarkers <- clustA.markers[!(row.names(clustA.markers) %in% row.names(clustB.markers)),] %>%
+    subset(p_val_adj<=0.05)
+  clustB.uniqueMarkers <- clustB.markers[!(row.names(clustB.markers) %in% row.names(clustA.markers)),] %>%
+    subset(p_val_adj<=0.05)
+  
+  difference <- abs( length(row.names(clustA.uniqueMarkers)) - length(row.names(clustB.uniqueMarkers) ) )
+  uniqueMarkers <- data.frame(Cluster0_markers=c(row.names(clustA.uniqueMarkers), rep("",difference) ),
+                              Cluster1_markers=row.names(clustB.uniqueMarkers))
+  write.csv(uniqueMarkers,
+            file.path(resultsPath,"unique_cluster_markers.csv"), 
+            quote = F, row.names = F)
+  createDT(uniqueMarkers, "Unique/Mutually Exclusive Markers of Cluster 0 and Cluster 1") 
+}
 
-clust0.uniqueMarkers <- clust0.markers[!(row.names(clust0.markers) %in% row.names(clust1.markers)),] %>%
-  subset(p_val_adj<=0.05)
-clust1.uniqueMarkers <- clust1.markers[!(row.names(clust1.markers) %in% row.names(clust0.markers)),] %>%
-  subset(p_val_adj<=0.05)
-
-difference <- abs( length(row.names(clust0.uniqueMarkers)) - length(row.names(clust1.uniqueMarkers) ) )
-uniqueMarkers <- data.frame(Cluster0_markers=c(row.names(clust0.uniqueMarkers), rep("",difference) ),
-                            Cluster1_markers=row.names(clust1.uniqueMarkers))
-write.csv(uniqueMarkers,
-          file.path(resultsPath,"unique_cluster_markers.csv"), 
-          quote = F, row.names = F)
+identify_unique_markers(DAT, clusterA = 0, clusterA = 1, allGenes=allGenes)
 ```
  
  
-# DGE Across Clusters {.tabset .tabset-fade .tabset-pills}
+# DGE Across Clusters
 
-## DGE Across Clusters: dx
+## Disease
 
 ```{r DGE Across Clusters: dx, results='asis'}
 # clustDAT@meta.data$dx %>% unique()
-DEGs <- runDGE(clustDAT, meta_var = "dx", group1 = "PD", group2 = "control")
+# FDR <- 0.05/dim(DEGs)[1]
+# subset(DEGs, p_val<FDR)
+DEGs <- runDGE(clustDAT, meta_var = "dx", group1 = "PD", group2 = "control", 
+               allGenes = allGenes) 
 ```
 
-## DGE Across Clusters: mut
+## Mutation
 
 ```{r DGE Across Clusters: mut, results='asis'}
 # clustDAT@meta.data$dx %>% unique()
-DEGs <- runDGE(clustDAT, meta_var = "mut", group1 = "PD", group2 = "GBA")
+DEGs <- runDGE(clustDAT, meta_var = "mut", group1 = "PD", group2 = "GBA", 
+               allGenes = allGenes)
 ```
 
 
-# DGE Within Clusters {.tabset .tabset-fade .tabset-pills}
+# DGE Within Clusters 
 
-## DGE Within Clusters: dx
+## Disease {.tabset .tabset-fade .tabset-pills}
 
 ```{r Within Clusters: dx, results='asis'}  
-DGE_within_clusters(clustDAT,  meta_var = "dx", group1 = "PD", group2 = "control", clusterList = c(0,1))
+DGE_within_clusters(clustDAT,  meta_var = "dx", group1 = "PD", group2 = "control", clusterList = c(0,1), 
+               allGenes = allGenes)
 ```
 
-## DGE Within Clusters: mut
+## Mutation {.tabset .tabset-fade .tabset-pills}
 
 ```{r Within Clusters: mut, results='asis'}  
-DGE_within_clusters(DAT, meta_var = "mut", group1 = "PD", group2 = "GBA", clusterList = c(0,1))
+DGE_within_clusters(DAT, meta_var = "mut", group1 = "PD", group2 = "GBA", clusterList = c(0,1), 
+               allGenes = allGenes)
 ```
-
 
  
  
