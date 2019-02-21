@@ -44,6 +44,7 @@ library(data.table)
 library(readxl) 
 library(reshape2)
 library(ggrepel)
+library(plotly)
 
 library(GeneOverlap) # BiocManager::install("GeneOverlap")
 library(monocle) # BiocManager::install("monocle") 
@@ -237,34 +238,66 @@ overlap_heatmap <- function(clustDAT, geneList, title="Overlapping Genes:\nGene 
                     main = title) 
 }
 
-make_fractionDF <- function (MonocyteSubtype.markers_sig, geneList){
+
+make_fractionDF <- function (MonocyteSubtype.markers_sig, geneList, allGenes=F){
   MonocyteSubtype.markers_sig$Gene <- row.names(MonocyteSubtype.markers_sig)
-  pct_df <- melt(subset(MonocyteSubtype.markers_sig, Gene%in%geneList), 
-                 id.vars = c("Gene","avg_logFC"), measure.vars = c("pct.2", "pct.1"), 
-                 variable.name = "Group", value.name = "FractionCells") 
-  pct_df$Group <- ifelse(pct_df$Group=="pct.1", "Cluster0", "Cluster1") 
+ if(allGenes==F){
+   geneDF <- subset(MonocyteSubtype.markers_sig, Gene%in%geneList)    
+ } else{geneDF <- MonocyteSubtype.markers_sig}
+  pct_df <- melt(geneDF, id.vars = c("Gene","avg_logFC"), measure.vars = c("pct.2", "pct.1"), 
+                 variable.name = "Cluster", value.name = "FractionCells") 
+  pct_df$Cluster <- ifelse(pct_df$Cluster=="pct.1", "1", "0") 
   return(pct_df)
 }
 
-cellFractions_plot <- function (MonocyteSubtype.markers_sig, geneList, disease="Gene List"){ 
-  pct_df <- make_fractionDF(MonocyteSubtype.markers_sig, geneList) 
+cellFractions_plot <- function (MonocyteSubtype.markers_sig, geneList, title="", allGenes=F){ 
+  pct_df <- make_fractionDF(MonocyteSubtype.markers_sig, geneList, allGenes) 
   # Fraction Cells
-  cfp <- ggplot(data=pct_df, aes(x=Gene, y=FractionCells, fill=Group)) + geom_col(position="dodge") + 
-    labs(title = paste("Fraction of Cells Expressing ",disease,"-associated Genes", sep=""), 
-         y="Fraction of Cells", x="Gene") +  
+  cfp <- ggplot(data=pct_df, aes(x=Gene, y=FractionCells, fill=Cluster)) + geom_col(position="dodge") + 
+    labs(title = title, y="Fraction of Cells", x="Gene") +  
     theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
-  print(cfp)
+  if(allGenes==T){
+    cfp <- cfp +  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8))
+    print(ggplotly(cfp))
+  }else{print(cfp)}
 }
 
-logFC_plot <- function(MonocyteSubtype.markers_sig, geneList, disease="Gene List"){
-  pct_df <- make_fractionDF(MonocyteSubtype.markers_sig, geneList) 
+logFC_plot <- function(MonocyteSubtype.markers_sig, geneList, title="", allGenes=F){
+  pct_df <- make_fractionDF(MonocyteSubtype.markers_sig, geneList, allGenes) 
   # LogFC
   lfcp <- ggplot(data=pct_df, aes(x=Gene, y=avg_logFC, fill=Gene)) + geom_col(position="dodge") +
     theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none") +
-     labs(title = paste("logFC of ",disease,"-associated DEGs:\nCanonical vs. Intermediate Monocytes",sep=""), 
-          y="avg_logFC", x="Gene") 
-  print(lfcp)
+     labs(title = title, y="avg_logFC", x="Gene")
+   if(allGenes==T){
+    lfcp <- lfcp +  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8))
+    print(ggplotly(lfcp))
+  }else{print(lfcp)} 
 } 
+
+enrichment_test_and_plots <- function(DAT, DEG_df, geneList, disease=""){
+  overlappingGenes <- report_overlap(clustDAT, 
+                                      list1=row.names(DEG_df), 
+                                      list2=geneList)
+  ## All DEGs
+  # cellFractions_plot(DEG_df, geneList,
+  #                      title= paste("Fraction of Cells Expressing\nAll",disease,"Genes"), allGenes = T)
+  # logFC_plot(DEG_df, geneList,  title= "LogFC\nAll PD Genes", allGenes = T)
+  # Overlapping Genes
+  if(length(overlappingGenes)>0){
+    FeaturePlot(DAT, features.plot = overlappingGenes, dark.theme = T) 
+    cellFractions_plot(DEG_df, overlappingGenes,
+                       title= paste("Fraction of Cells Expressing\n",disease,"Genes Overlapping with DEGs") )
+    logFC_plot(DEG_df, overlappingGenes, title= paste("LogFC\n",disease,"Genes Overlapping with DEGs") )
+    
+  
+    if(length(overlappingGenes)>1){
+      overlap_heatmap(clustDAT, geneList=overlappingGenes, 
+                      title=paste("Overlapping Genes:\n",disease,"Genes vs. DGE Genes") )
+    } 
+  } else {cat("There were no overlapping genes between the DGE list and",disease,"genes.")} 
+  return(overlappingGenes)
+}
+
 
 clustDAT <- SubsetData(DAT, subset.name = "post_clustering", accept.value = c(0,1), do.scale = F) 
 purpleScale <-  c("grey","purple","blueviolet","magenta")
@@ -273,37 +306,14 @@ heatScale <-  c("yellow","grey","red")
 
 ### PD Genes vs. DGE Overlap
 
-```{r PD Genes vs. DGE Overlap} 
-overlappingGenes_PD <- report_overlap(clustDAT, 
-                                      list1=row.names(MonocyteSubtype.markers_sig), 
-                                      list2=PDgenes$Gene)
-if(length(overlappingGenes_PD)>0){
-  FeaturePlot(DAT, features.plot = overlappingGenes_PD, dark.theme = T)
-  cellFractions_plot(MonocyteSubtype.markers_sig, overlappingGenes_PD, disease="PD") 
-  logFC_plot(MonocyteSubtype.markers_sig, overlappingGenes_PD, disease="PD")
-
-  if(length(overlappingGenes_PD)>1){
-    overlap_heatmap(clustDAT, geneList =overlappingGenes_PD, title="Overlapping Genes:\nPD Gene List vs. DGE Genes" )
-  } 
-} else {cat("There were no overlapping genes between the DGE list and the provided gene list.")} 
+```{r PD Genes vs. DGE Overlap}  
+overlappingGenes_PD <- enrichment_test_and_plots(clustDAT, MonocyteSubtype.markers_sig, PDgenes$Gene)  
 ```
 
 ### AD Genes vs. DGE Overlap
 
 ```{r AD Genes vs. DGE Overlap}
-overlappingGenes_AD <- report_overlap(clustDAT,
-                                      list1=row.names(MonocyteSubtype.markers_sig),
-                                      list2=ADgenes$Gene)
-if(length(overlappingGenes_AD)>0){
-  FeaturePlot(DAT, features.plot = overlappingGenes_AD, dark.theme = T, nCol = 5, 
-            cols.use =  c("magenta","grey","green"))
-  cellFractions_plot(MonocyteSubtype.markers_sig, overlappingGenes_AD, disease="AD") 
-  logFC_plot(MonocyteSubtype.markers_sig, overlappingGenes_AD, disease="AD") 
-  
-  if(length(overlappingGenes_AD)>1){
-    overlap_heatmap(clustDAT, geneList = overlappingGenes_AD, title = "Overlapping Genes:\nAD Gene List vs. DGE Genes" )
-  } 
-} else {cat("There were no overlapping genes between the DGE list and the provided gene list")}  
+overlappingGenes_PD <- enrichment_test_and_plots(clustDAT, MonocyteSubtype.markers_sig, ADgenes$Gene)  
 ```
  
 
