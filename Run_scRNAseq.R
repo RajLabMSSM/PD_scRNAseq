@@ -26,19 +26,13 @@ params_list <- list(subsetGenes= subsetGenes, subsetCells=subsetCells, resolutio
 #                   output_file = file.path(resultsPath, paste("Preprocessing.html",sep=""))
 #                   )
 # # 
-# 1.5) DGE
-rmarkdown::render(input = 'scRNAseq_DGE.Rmd',
+# 2) MonocyteSubtypes (DGE)
+rmarkdown::render(input = 'scRNAseq_MonocyteSubtypes.Rmd',
                   params = params_list,
-                  output_file = file.path(resultsPath, paste("DGE.html",sep=""))
+                  output_file = file.path(resultsPath, paste("MonocyteSubtypes.html",sep=""))
 )
 
 
-#  
-# # 2) Characterize Clusters
-# rmarkdown::render(input = 'scRNAseq_MonocyteSubtypes.Rmd',
-#                   params = params_list,  
-#                   output_file = file.path(resultsPath, paste("MonocyteSubtypes.html",sep=""))
-#                   )
 # # 3) Enrichment
 # rmarkdown::render(input = 'scRNAseq_Enrichment.Rmd', 
 #                   params = params_list,  
