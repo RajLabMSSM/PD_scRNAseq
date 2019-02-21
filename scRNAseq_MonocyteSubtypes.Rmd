@@ -43,6 +43,7 @@ library(dplyr)
 library(data.table) 
 library(readxl) 
 library(reshape2)
+library(ggrepel)
 
 library(GeneOverlap) # BiocManager::install("GeneOverlap")
 library(monocle) # BiocManager::install("monocle") 
@@ -101,7 +102,7 @@ ggplot(data = markerDT, aes(x=CD14, y=FCGR3A) ) +
 
 
 
-## Plot tSNE
+## tSNE Metadata Plots
 
 ```{r Plot tSNE}
 tSNE_metadata_plot <- function(var, labSize=12){ 
@@ -138,106 +139,229 @@ tSNE_metadata_plot("cluster_ext_type")
 tSNE_metadata_plot("mut")
 ```
 
-### tSNE Heatmaps
+## tSNE FeaturePlots
 
-```{r tSNE Heatmaps}
-FeaturePlot(DAT,features.plot =  c("CD14","FCGR3A", "LRRK2", "GBA"),  
-            cols.use = c("grey","purple","magenta"), dark.theme = T, nCol = 2 )
-FeatureHeatmap(DAT,  c("CD14","FCGR3A","LRRK2", "GBA"), pt.size = 0.5,
-               cols.use = c("grey","purple"), plot.horiz =T) 
+### Monocyte Markers
+
+```{r tSNE FeaturePlots: Monocyte Markers}
+FeaturePlot(DAT,features.plot =  c("CD14","FCGR3A"),  
+            cols.use = c("grey","red","blue","purple"),
+            dark.theme = T, nCol = 2, overlay = T, no.legend = F) 
+```
+
+### PD Genes
+
+```{r tSNE FeaturePlots: PD Genes} 
+FeaturePlot(DAT,features.plot = c("LRRK2", "GBA"),  
+            cols.use = c("grey","purple","cyan","blue"),
+            dark.theme = T, nCol = 2, overlay = T, no.legend = F) 
+```
+
+### MS4A4A & MS4A6A
+
+```{r tSNE FeaturePlots: MS4A4A & MS4A6A}
+FeaturePlot(DAT, features.plot =  c("MS4A4A","MS4A6A"), 
+            cols.use = c("grey","red","green","blue"),
+            dark.theme = T, nCol = 2, overlay = T, no.legend = F)
 ```
 
 
 
-# AD Gene Expression per Cluster
+# AD/PD-related Gene Expression
 
-Q: Is AD-related gene expression more prevalent in classical, intermediate or non-classical monocyte subtypes? 
-```{r AD Gene Expression per Cluster}
-ADgenes <- read_excel(file.path(root, "Data/AD_genes.xlsx"))
+Q: Are AD/PD-related gene expression more prevalent in classical or intermediate monocyte subtypes? 
+```{r AD/PD-related Gene Expression}
+# Combine AD gene lists
+curatedGenes <- read_excel("Data/curated_AD-PDgene_lists.xlsx")
+AD_related_genes <- read_excel(file.path(root, "Data/AD-related_genes.xlsx"))
+ADgenes <- rbind(AD_related_genes, data.frame(Gene=curatedGenes$AD_panel, Category="AD") ) %>% unique()
+# Combine PD gene lists
+PDgenes <- data.frame(Gene=c("LRRK2","GBA",
+                             curatedGenes$gwas_Nearest_gene_Nalls_2019, 
+                             curatedGenes$QTL_Nominated_genes_Nalls_2019,
+                             curatedGenes$TWAS_Garrett
+                             ), Category="PD") %>% unique()
+
+
 MonocyteSubtype.markers <- read.csv(file.path(root, resultsPath, "MonocyteSubtype.markers.csv"), row.names = 1)
-MonocyteSubtype.markers_sig <- subset(MonocyteSubtype.markers, p_val_adj <= 0.05)
+MonocyteSubtype.markers_sig <- subset(MonocyteSubtype.markers, p_val_adj <= 0.05) 
+createDT(MonocyteSubtype.markers, "Full list of DEGs: Cluster 0 vs. Cluster 1")
 ```
+
 ## Test Gene Overlap
+
+### Functions
+
+#### Gene Overlap Functions
+
 * _"The GeneOverlap class formulates the problem as testing whether two variables are independent, which can be represented as a contingency table, and then uses Fisher’s exact test to find the statistical significance."_
 * Low p-value means the overlap is highly significant. 
 * [Documentation](http://bioconductor.org/packages/release/bioc/vignettes/GeneOverlap/inst/doc/GeneOverlap.pdf)
 ```{r Test Gene Overlap} 
-genomeSize <- dim(DAT@raw.data)[1]
-list1 <- row.names(MonocyteSubtype.markers_sig)
-list2 <- ADgenes$Gene
-go.obj <- newGeneOverlap(listA = list1, listB = list2, genome.size = genomeSize )
-go.obj <- testGeneOverlap(go.obj)
-print(go.obj)
- 
-
-overlappingGenes <- getIntersection(go.obj)
-percent_of_ADgenes <-  length(overlappingGenes) / length(ADgenes$Gene)*100
-percent_of_DEGs <- length(overlappingGenes) / length(row.names(MonocyteSubtype.markers_sig))*100
-AD_DEGs <- subset(ADgenes, Gene %in% overlappingGenes)
-
-cat("\n",round(percent_of_ADgenes, 2),"% of the AD-risk genes (",length(overlappingGenes),"/",length(ADgenes$Gene),") are differentially expressed between Canonical vs. Intermediate monocyte subtypes.")
- 
-cat("\n",round(percent_of_DEGs, 2),"% of the DEGs between Canonical vs. Intermediate  monocyte subtypes (",
-    length(overlappingGenes),"/",length(row.names(MonocyteSubtype.markers_sig)),") are in the AD-risk gene list.")
+report_overlap <- function(DAT, list1, list2){ 
+  genomeSize <- dim(DAT@raw.data)[1]
+  go.obj <- newGeneOverlap(listA = list1, listB = list2, genome.size = genomeSize )
+  go.obj <- testGeneOverlap(go.obj)
+  print(go.obj) 
+  
+  
+  overlappingGenes <- getIntersection(go.obj)
+  percent_of_targetGenes <- length(overlappingGenes) / length(list2)*100
+  percent_of_DEGs <- length(overlappingGenes) / length(list1)*100
+  targetGenes_DEGs <- list2[overlappingGenes %in% list2]
+  
+  cat("\n",round(percent_of_targetGenes, 2),"% of the provided genes (",length(overlappingGenes),"/",length(list2),") are differentially expressed between Canonical vs. Intermediate monocyte subtypes.")
+   
+  cat("\n",round(percent_of_DEGs, 2),"% of the DEGs between Canonical vs. Intermediate  monocyte subtypes (",
+      length(overlappingGenes),"/",length(list1),") are in the provided gene list.")
+  
+  cat("\n-------------------------------------------------------",
+      "\n\n********** Enrichment p-value =",go.obj@pval,"**********\n\n")
+  return(overlappingGenes) 
+} 
 ```
 
+#### Overlap Plot Functions
 
-## Percent of Cells that Express AD Genes
+```{r Overlap Plot Functions}
+# PLOT FUNCTIONS
+overlap_heatmap <- function(clustDAT, geneList, title="Overlapping Genes:\nGene List vs. DGE Genes"){ 
+  markerDF  <- get_markerDT(clustDAT, markerList = geneList, rawData = T)
+  markerMatrix <- reshape2::acast(markerDF, Gene~post_clustering, value.var="Expression",
+                                  fun.aggregate = mean, drop = F, fill = 0)
+  # Heatmap.2 
+  my_palette <- colorRampPalette(c("purple", "black", "cyan"))(n = 1000)
+  hmap <- gplots::heatmap.2(markerMatrix, xlab = "Cluster", dendrogram = "row",
+                    col = my_palette, tracecol = "gray", srtCol = 0, offsetCol=1.5, vline=T, 
+                    trace='none', key.title=NA, key.ylab = "Expression", colsep=T, sepwidth = 0.01, 
+                    main = title) 
+}
 
-```{r Percent of Cells that Express AD Genes}   
-# percent_cells_expressing <- function(DAT, ADgenes, clusterList){ 
-#   for(clust in clusterList){
-#     cat("\nProcessing cluster",clust)
-#     clustDAT <- SubsetData(DAT, subset.name = "post_clustering", accept.value = clust) 
-#     # Seurat:::PercentAbove(x = DAT@data, threshold = 0) # Very inefficient
-#     subDAT <- clustDAT@data[row.names(clustDAT@data ) %in% ADgenes$Gene,] 
-#     for(gene in row.names(subDAT)){
-#       cat(".")
-#       ADgenes[ADgenes$Gene==gene,paste("cluster",clust,sep="")] <- mean(ifelse(subDAT[gene,] > 0, 1, 0))
-#     }  
-#   } 
-#   ADgenes <- melt(ADgenes, id.vars = c("Gene","Category"), measure.vars = paste("cluster",clusterList,sep=""), 
-#      variable.name = "Cluster",
-#      value.name = "cellsExpressing")
-#   ggplot(data=AD_DEGs, aes(x=Cluster, y=cellsExpressing, fill=Gene)) + geom_col(position="dodge") + 
-#     labs(title = "Fraction of Cells Expressing AD-associated Genes", y="Fraction of Cells") +
-#      scale_x_discrete(labels=c("Cluster0\n(Canonical)", "Cluster1\n(Intermediate)")) 
-#   return(ADgenes)
-# } 
+make_fractionDF <- function (MonocyteSubtype.markers_sig, geneList){
+  MonocyteSubtype.markers_sig$Gene <- row.names(MonocyteSubtype.markers_sig)
+  pct_df <- melt(subset(MonocyteSubtype.markers_sig, Gene%in%geneList), 
+                 id.vars = c("Gene","avg_logFC"), measure.vars = c("pct.2", "pct.1"), 
+                 variable.name = "Group", value.name = "FractionCells") 
+  pct_df$Group <- ifelse(pct_df$Group=="pct.1", "Cluster0", "Cluster1") 
+  return(pct_df)
+}
 
-MonocyteSubtype.markers_sig$Gene <- row.names(MonocyteSubtype.markers_sig)
-AD_pct <- melt(subset(MonocyteSubtype.markers_sig, Gene%in%ADgenes$Gene), 
-               id.vars = c("Gene","avg_logFC"), measure.vars = c("pct.2", "pct.1"), 
-               variable.name = "Group", value.name = "pct") 
-# Fraction Cells
-ggplot(data=AD_pct, aes(x=Group, y=pct, fill=Gene)) + geom_col(position="dodge") + 
-  labs(title = "Fraction of Cells Expressing AD-associated Genes", y="Fraction of Cells", x="Monocyte Subtype") +
-   scale_x_discrete(labels=c("Cluster0\n(Canonical)", "Cluster1\n(Intermediate)")) 
-# LogFC
-ggplot(data=AD_pct, aes(x=Gene, y=avg_logFC, fill=Gene)) + geom_col(position="dodge") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none") +
-   labs(title = "logFC of AD-associated DEGs:\nCanonical vs. Intermediate Monocytes", y="avg_logFC", x="Monocyte Subtype") 
-```
+cellFractions_plot <- function (MonocyteSubtype.markers_sig, geneList, disease="Gene List"){ 
+  pct_df <- make_fractionDF(MonocyteSubtype.markers_sig, geneList) 
+  # Fraction Cells
+  cfp <- ggplot(data=pct_df, aes(x=Gene, y=FractionCells, fill=Group)) + geom_col(position="dodge") + 
+    labs(title = paste("Fraction of Cells Expressing ",disease,"-associated Genes", sep=""), 
+         y="Fraction of Cells", x="Gene") +  
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+  print(cfp)
+}
 
-
-## Expression Heatmap
-
-```{r Expression Heatmap}
+logFC_plot <- function(MonocyteSubtype.markers_sig, geneList, disease="Gene List"){
+  pct_df <- make_fractionDF(MonocyteSubtype.markers_sig, geneList) 
+  # LogFC
+  lfcp <- ggplot(data=pct_df, aes(x=Gene, y=avg_logFC, fill=Gene)) + geom_col(position="dodge") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none") +
+     labs(title = paste("logFC of ",disease,"-associated DEGs:\nCanonical vs. Intermediate Monocytes",sep=""), 
+          y="avg_logFC", x="Gene") 
+  print(lfcp)
+} 
 
 clustDAT <- SubsetData(DAT, subset.name = "post_clustering", accept.value = c(0,1), do.scale = F) 
-markerDF  <- get_markerDT(clustDAT, markerList = ADgenes$Gene, rawData = T) 
-markerMatrix <- reshape2::acast(markerDF, Gene~post_clustering, value.var="Expression",
-                                fun.aggregate = mean, drop = F, fill = 0)
-# Heatmap.2
-my_palette <- colorRampPalette(c("purple", "black", "cyan"))(n = 1000)
-gplots::heatmap.2(markerMatrix, xlab = "Cluster", dendrogram = "row",
-                  col = my_palette, tracecol = "gray", srtCol = 0, offsetCol=1.5, vline=T, 
-                  trace='none', key.title=NA, key.ylab = "Expression", colsep=T, sepwidth = 0.01) 
+purpleScale <-  c("grey","purple","blueviolet","magenta")
+heatScale <-  c("yellow","grey","red") 
 ```
+
+### PD Genes vs. DGE Overlap
+
+```{r PD Genes vs. DGE Overlap} 
+overlappingGenes_PD <- report_overlap(clustDAT, 
+                                      list1=row.names(MonocyteSubtype.markers_sig), 
+                                      list2=PDgenes$Gene)
+if(length(overlappingGenes_PD)>0){
+  FeaturePlot(DAT, features.plot = overlappingGenes_PD, dark.theme = T)
+  cellFractions_plot(MonocyteSubtype.markers_sig, overlappingGenes_PD, disease="PD") 
+  logFC_plot(MonocyteSubtype.markers_sig, overlappingGenes_PD, disease="PD")
+
+  if(length(overlappingGenes_PD)>1){
+    overlap_heatmap(clustDAT, geneList =overlappingGenes_PD, title="Overlapping Genes:\nPD Gene List vs. DGE Genes" )
+  } 
+} else {cat("There were no overlapping genes between the DGE list and the provided gene list.")} 
+```
+
+### AD Genes vs. DGE Overlap
+
+```{r AD Genes vs. DGE Overlap}
+overlappingGenes_AD <- report_overlap(clustDAT,
+                                      list1=row.names(MonocyteSubtype.markers_sig),
+                                      list2=ADgenes$Gene)
+if(length(overlappingGenes_AD)>0){
+  FeaturePlot(DAT, features.plot = overlappingGenes_AD, dark.theme = T, nCol = 5, 
+            cols.use =  c("magenta","grey","green"))
+  cellFractions_plot(MonocyteSubtype.markers_sig, overlappingGenes_AD, disease="AD") 
+  logFC_plot(MonocyteSubtype.markers_sig, overlappingGenes_AD, disease="AD") 
+  
+  if(length(overlappingGenes_AD)>1){
+    overlap_heatmap(clustDAT, geneList = overlappingGenes_AD, title = "Overlapping Genes:\nAD Gene List vs. DGE Genes" )
+  } 
+} else {cat("There were no overlapping genes between the DGE list and the provided gene list")}  
+```
+ 
+
+# Identify Cluster-specific Biomarkers
+
+```{r Identify Cluster-specific Biomarkers}
+clust0.markers <- FindMarkers(DAT, ident.1=0, min.pct = 0.25, only.pos = F, test.use = "wilcox")
+clust1.markers <- FindMarkers(DAT, ident.1=1, min.pct = 0.25, only.pos = F, test.use = "wilcox")
+
+clust0.uniqueMarkers <- clust0.markers[!(row.names(clust0.markers) %in% row.names(clust1.markers)),] %>%
+  subset(p_val_adj<=0.05)
+clust1.uniqueMarkers <- clust1.markers[!(row.names(clust1.markers) %in% row.names(clust0.markers)),] %>%
+  subset(p_val_adj<=0.05)
+
+difference <- abs( length(row.names(clust0.uniqueMarkers)) - length(row.names(clust1.uniqueMarkers) ) )
+uniqueMarkers <- data.frame(Cluster0_markers=c(row.names(clust0.uniqueMarkers), rep("",difference) ),
+                            Cluster1_markers=row.names(clust1.uniqueMarkers))
+write.csv(uniqueMarkers,
+          file.path(resultsPath,"unique_cluster_markers.csv"), 
+          quote = F, row.names = F)
+```
+ 
+ 
+# DGE Across Clusters {.tabset .tabset-fade .tabset-pills}
+
+## DGE Across Clusters: dx
+
+```{r DGE Across Clusters: dx, results='asis'}
+# clustDAT@meta.data$dx %>% unique()
+DEGs <- runDGE(clustDAT, meta_var = "dx", group1 = "PD", group2 = "control")
+```
+
+## DGE Across Clusters: mut
+
+```{r DGE Across Clusters: mut, results='asis'}
+# clustDAT@meta.data$dx %>% unique()
+DEGs <- runDGE(clustDAT, meta_var = "mut", group1 = "PD", group2 = "GBA")
+```
+
+
+# DGE Within Clusters {.tabset .tabset-fade .tabset-pills}
+
+## DGE Within Clusters: dx
+
+```{r Within Clusters: dx, results='asis'}  
+DGE_within_clusters(clustDAT,  meta_var = "dx", group1 = "PD", group2 = "control", clusterList = c(0,1))
+```
+
+## DGE Within Clusters: mut
+
+```{r Within Clusters: mut, results='asis'}  
+DGE_within_clusters(DAT, meta_var = "mut", group1 = "PD", group2 = "GBA", clusterList = c(0,1))
+```
+
 
  
  
-# DEG Enrichment {.tabset .tabset-fade .tabset-pills}
+# DEG Enrichment w/ enrichR {.tabset .tabset-fade .tabset-pills}
 
 ```{r DEG Enrichment, results='asis'}
 enrichr_dbs <- c("KEGG_2018", "Reactome_2016",
@@ -252,9 +376,14 @@ results <- enrichr(genes = geneList, databases = enrichr_dbs )
 
 for (db in enrichr_dbs){
   cat('\n')
-  cat("### ",db,"\n")  
+  cat("##",db,"\n")  
   # res <- subset(results[[db]], Adjusted.P.value<=0.05)
   createDT_html(results[[db]], paste("Enrichr Results:",db))
   cat('\n')
 }  
 ```
+
+
+
+
+
