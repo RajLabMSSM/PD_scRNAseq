@@ -79,55 +79,33 @@ library(monocle) # BiocManager::install("monocle")
 library(org.Hs.eg.db)
 library(garnett) # devtools::install_github("cole-trapnell-lab/garnett")
  
-#  
-# if(getwd()=="/Users/schilder/Desktop/PD_scRNAseq"){
-#   allGenes <- F
-# }else{allGenes <- T}
-# allGenes
+ 
+if(getwd()=="/Users/schilder/Desktop/PD_scRNAseq"){
+  allGenes <- F
+}else{allGenes <- T}
+allGenes
 ```
 
 # Monocle 
 
-## Convert and Normalize
+## Dimensionality Reduction
 
-* Convert from Seurat object to CDS object and re-normalize the data from scratch (importCDS currently only converts the raw.data, not the scale.data).
-* Alternatively, you can do your normalization in Seurat and then construct a new CDS object manually with the scale.data from the Seurat object.
-```{r Convert and Normalize}
+```{r Convert Seurat to CDS} 
+# clustDAT <- SubsetData(DAT, subset.name = "post_clustering", accept.value = c(0,1), do.scale = F) 
+# subDAT <- SubsetData(clustDAT, cells.use = c(1:50, (dim(clustDAT@data)[2]-49):dim(clustDAT@data)[2]) )
+
 # Pass TRUE if you want to see progress output on some of Monocle 3's operations
 DelayedArray:::set_verbose_block_processing(TRUE)
 # Passing a higher value will make some computations faster but use more memory. Adjust with caution!
 options(DelayedArray.block.size=1000e6)
 
-# Construct CDS object manually
-# mDAT <- newCellDataSet(cellData = DAT@scale.data, 
-#                        featureData = AnnotatedDataFrame( data.frame(gene_short_name=row.names(DAT@scale.data), 
-#                                                                     row.names = row.names(DAT@scale.data))
-#                          ),
-#                        phenoData = AnnotatedDataFrame(DAT@meta.data))
-# mDAT <- estimateSizeFactors(mDAT) #DESeq2?
-# mDAT <- preprocessCDS(mDAT, method = "PCA", num_dim = 10, norm_method = "none")
-# 
-
-## Construct CDS object automaticaly
-### NOTE!: importCDS takes only the raw.data (not scale.data)
-mDAT <- monocle::importCDS(DAT,  import_all = T)
-mDAT <- estimateSizeFactors(mDAT) #DESeq2?
+mDAT <- monocle::importCDS(DAT,  import_all = T) 
+mDAT <- estimateSizeFactors(mDAT)
 # mDAT <- estimateDispersions(mDAT)
-mDAT <- preprocessCDS(mDAT, num_dim = 10, residualModelFormulaStr = "~ nUMI + percent.mito + ID")
-```
+mDAT <- preprocessCDS(mDAT, num_dim = 20) 
 
-
-## Dimensionality Reduction
-
-```{r Dimensionality Reduction}
-set.seed(1) # Monocle sets their seed to 2016 by default (Seurat sets it to 1)
-# Options: c("UMAP", "tSNE", "DDRTree", "ICA", "none")
-# mDAT <- reduceDimension(mDAT, reduction_method = 'UMAP', n_threads =  parallel::detectCores())
-# monocle:::UMAP( )
-mDAT <- reduceDimension(mDAT, reduction_method = 'tSNE', 
-                        perplexity = 30,
-                        scaling = F,
-                        num_threads = parallel::detectCores()) 
+mDAT <- reduceDimension(mDAT, reduction_method = 'UMAP')
+mDAT <- reduceDimension(mDAT, reduction_method = 'tSNE') 
 
 col_vector_origin <- c("#db83da",
               "#53c35d",
@@ -171,19 +149,13 @@ col_vector_origin <- c("#db83da",
               "#e08083",
               "#17becf",
               "#9edae5")
-```
 
-
-## Clustering
-
-* "Here __res__ represents the resolution parameter (range from 0-1) for the louvain clustering. Values between 0 and 1e-2 are good, __bigger values give you more clusters__. Default is set to be 1e-4. louvain_iter represents the number of iterations used for Louvain clustering. The clustering result gives the largest modularity score that will be used as the final clustering result. The default is 1."
-```{r Clustering}  
-plotDR <- function(resDAT, metavar="Cluster", title=""){ 
+plotDR <- function(mDAT, metavar="Cluster", title=""){ 
   col_vector <- col_vector_origin[1:length(unique(as.character(pData(mDAT)$dx)))]
   names(col_vector) <- unique(as.character(pData(mDAT)$dx))
-  p <- plot_cell_clusters(resDAT,
+  p <- plot_cell_clusters(mDAT,
                      color_by = metavar,
-                     cell_size = 0.75,
+                     cell_size = 0.5,
                      show_group_id = T)  +
     theme(legend.text=element_text(size=6)) +
     theme(legend.position="right")+ 
@@ -191,33 +163,31 @@ plotDR <- function(resDAT, metavar="Cluster", title=""){
   print(p)
 }
 
-test_resolutions <- function(mDAT, resolutions=seq(0, 1e-4, length.out = 10)){
+plotDR(mDAT, "dx")
+plotDR(mDAT, "mut")
+```
+
+
+## Clustering
+
+```{r Clustering}  
+test_resolutions <- function(mDAT, resolutions=seq(0, 1e-4, length.out = 10)){ 
   for(res in resolutions){
-    try({
-      res_title <- paste("Resolution =",res)
-      cat("\n",res_title,"\n")
+    res_title <- paste("Resolution =",res)
+    cat("\n",res_title,"\n")
      resDAT <- clusterCells(mDAT, res=res,
                         method = "louvain", 
-                        verbose = F, 
-                        cores = parallel::detectCores())
-    plotDR(resDAT, title=res_title)  
-    }) 
+                        verbose = F, cores = parallel::detectCores())
+    plotDR(resDAT, title=res_title) 
   } 
 }
 
-
 test_resolutions(mDAT)
-# Select final resolution
-selected_res <- 4e-05
+
+selected_res <- 
 mDAT <- clusterCells(mDAT, res=selected_res,
                         method = "louvain", 
                         verbose = T, cores = parallel::detectCores()) 
-
-plotDR(mDAT, "Cluster")
-plotDR(mDAT, "dx")
-plotDR(mDAT, "mut")
-# CLUSTERING FROM SEURAT
-plotDR(mDAT, "post_clustering")
 ```
 
 ## Identify Cell Types with Garnett
@@ -240,8 +210,7 @@ feature_genes <- garnett::get_feature_genes(classifier = hsPBMC,
                                    db = org.Hs.eg.db,
                                    convert_ids = F)
 head(feature_genes)  
-
-plotDR(mDAT, metavar = "cell_type") +  facet_wrap(~dx)
+plotDR(mDAT, metavar = "cell_type")
 ```
 
 ## Gene Expression
@@ -249,25 +218,25 @@ plotDR(mDAT, metavar = "cell_type") +  facet_wrap(~dx)
 ### Monocyte Markers
 
 ```{r Monocyte Markers}
-plot_cell_clusters(mDAT, markers = c("CD14","FCGR3A"), cell_size = 0.8)
+plot_cell_clusters(mDAT, markers = c("CD14","FCGR3A"), cell_size = 0.5)
 ```
 
 ### PD Genes
 
 ```{r PD Genes}
-plot_cell_clusters(mDAT, markers = c("LRRK2","GBA", overlappingGenes_PD), cell_size = 0.75)
+plot_cell_clusters(mDAT, markers = c("LRRK2","GBA", overlappingGenes_PD), cell_size = 0.5)
 ```
 
 ### AD Genes
 
 ```{r PD Genes} 
-plot_cell_clusters(mDAT, markers = overlappingGenes_AD, cell_size = 0.75)
+plot_cell_clusters(mDAT, markers = overlappingGenes_AD, cell_size = 0.5)
 ```
 
 ## Selected Genes
 
 ```{r}
-plot_cell_clusters(mDAT, markers = c("MS4A4A","MS4A6A"), cell_size = 0.75) 
+plot_cell_clusters(mDAT, markers = c("MS4A4A","MS4A6A"), cell_size = 0.5) 
 ```
 
 
@@ -275,12 +244,10 @@ plot_cell_clusters(mDAT, markers = c("MS4A4A","MS4A6A"), cell_size = 0.75)
 
 ## Pseudotime
 
-```{r Pseudotime}  
-# subsetCDS(mDAT, )
+```{r}
 mDAT <- partitionCells(mDAT)
 mDAT <- learnGraph(mDAT,  RGE_method = 'SimplePPT')
 
-plot_cell_trajectory(mDAT, color_by = "Cluster") 
 plot_cell_trajectory(mDAT, color_by = "dx") 
 plot_cell_trajectory(mDAT, color_by = "mut") 
 plot_cell_trajectory(mDAT, color_by = "cell_type") 
@@ -290,7 +257,7 @@ plot_3d_cell_trajectory(mDAT,
                         webGL_filename= paste(getwd(), "/trajectory_3D.html", sep=""), 
                         show_backbone=TRUE,
                         useNULL_GLdev=TRUE)
-plot_3d_cell_trajectory(mDAT, markers = c('FCGR3A'),
+plot_3d_cell_trajectory(mDAT, markers = c('CD14'),
                         webGL_filename=paste(getwd(), "/beta_globin.html", sep=""),
                         show_backbone=TRUE,
                         useNULL_GLdev=TRUE)
@@ -298,9 +265,8 @@ plot_3d_cell_trajectory(mDAT, markers = c('FCGR3A'),
 
 ## Differential Expression
 
-```{r Differential Expression}
-DEG_df <- differentialGeneTest(mDAT, fullModelFormulaStr = "~Cluster",
-                               cores = parallel::detectCores())
+```{r}
+
 ```
 
 ## Convert back to Seurat
@@ -455,8 +421,6 @@ report_overlap <- function(DAT, list1, list2){
 #### Overlap Plot Functions
 
 ```{r Overlap Plot Functions}
-clustDAT <- SubsetData(DAT, subset.name = "post_clustering", accept.value = c(0,1), do.scale = F)
-
 # PLOT FUNCTIONS
 overlap_heatmap <- function(clustDAT, geneList, title="Overlapping Genes:\nGene List vs. DGE Genes"){ 
   markerDF  <- get_markerDT(clustDAT, markerList = geneList, rawData = T)
