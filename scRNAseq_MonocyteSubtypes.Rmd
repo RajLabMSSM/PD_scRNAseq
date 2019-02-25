@@ -260,13 +260,13 @@ plot_cell_clusters(mDAT, markers = c("LRRK2","GBA", overlappingGenes_PD), cell_s
 
 ### AD Genes
 
-```{r PD Genes} 
+```{r AD Genes} 
 plot_cell_clusters(mDAT, markers = overlappingGenes_AD, cell_size = 0.75)
 ```
 
 ## Selected Genes
 
-```{r}
+```{r Selected Genes}
 plot_cell_clusters(mDAT, markers = c("MS4A4A","MS4A6A"), cell_size = 0.75) 
 ```
 
