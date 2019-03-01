@@ -52,7 +52,8 @@ if(getwd()=="/Users/schilder/Desktop/PD_scRNAseq"){
   allGenes <- F
 }else{allGenes <- T}
 allGenes
-session_info()
+# session_info() #Doesn't work on Minerva?
+
 ```
 
 
