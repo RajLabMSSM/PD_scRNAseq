@@ -140,16 +140,18 @@ FeaturePlot(DAT, features.plot =  c("MS4A4A","MS4A6A"),
 # DGE: CD16+ vs. CD16- Monocytes
 
 Remove filters to get __all__ DEGs.
-```{r DGE: CD16+ vs. CD16- Monocytes}  
+```{r DGE: CD16+ vs. CD16- Monocytes}
+clustDAT <- SubsetData(DAT, subset.name = "Cluster", accept.value = c(1,2), do.scale = F)
+
 # subDAT <- SubsetData(DAT, cells.use = 1:500) 
 DEGs_monocytes <- runDGE(DAT, meta_var = "Cluster", group1 = 1, group2 = 2, 
        test.use = "wilcox", allGenes = T)
 # DEGs_monocytes <- FindMarkers(DAT, min.pct = 0.25, only.pos = F,
 #                                 ident.1 = 1, ident.2 = 2, test.use = "wilcox"
 #                                 )
-
 createDT(DEGs_monocytes, caption="DEGs between cluster 1 (CD16- monocytes) and cluster 2 (CD16+ monocytes")
 write.csv(DEGs_monocytes, file.path(resultsPath, "MonocyteSubtype.markers.csv"), quote = F, row.names = T)
+
 ```
 
 ## Identify Cluster-specific Biomarkers
@@ -197,8 +199,10 @@ uniqueMarkers <- identify_unique_markers(clustDAT, clusterA = 1, clusterB = 2, a
 
 # AD/PD-related Gene Expression
 
-Q: Are AD/PD-related gene expression more prevalent in classical or intermediate monocyte subtypes? 
+    Q: Are AD/PD-related gene expression more prevalent in classical 
+    or intermediate monocyte subtypes? 
 ```{r AD/PD-related Gene Expression}
+
 # Combine AD gene lists
 curatedGenes <- read_excel("Data/curated_AD-PDgene_lists.xlsx")
 AD_related_genes <- read_excel(file.path(root, "Data/AD-related_genes.xlsx"))
@@ -214,7 +218,6 @@ PDgenes <- data.frame(Gene=c("LRRK2","GBA",
 
 # DEGs_monocytes <- read.csv(file.path(root, resultsPath, "MonocyteSubtype.markers.csv"), row.names = 1)
 DEGs_monocytes_sig <- subset(DEGs_monocytes, p_val_adj <= 0.05) 
-createDT(DEGs_monocytes, "Full list of DEGs: Cluster 1 vs. Cluster 2")
 ```
 
 ## Test Gene Overlap
@@ -223,9 +226,9 @@ createDT(DEGs_monocytes, "Full list of DEGs: Cluster 1 vs. Cluster 2")
 
 #### Gene Overlap Functions
 
-* _"The GeneOverlap class formulates the problem as testing whether two variables are independent, which can be represented as a contingency table, and then uses Fisher’s exact test to find the statistical significance."_
-* Low p-value means the overlap is highly significant. 
-* [Documentation](http://bioconductor.org/packages/release/bioc/vignettes/GeneOverlap/inst/doc/GeneOverlap.pdf)
+    * __"The GeneOverlap class formulates the problem as testing whether two variables are independent, which can be represented as a contingency table, and then uses Fisher’s exact test to find the statistical significance."__  
+    * Low p-value means the overlap is highly significant.  
+    * [Documentation](http://bioconductor.org/packages/release/bioc/vignettes/GeneOverlap/inst/doc/GeneOverlap.pdf)
 ```{r Test Gene Overlap} 
 report_overlap <- function(DAT, list1, list2){ 
    
@@ -254,12 +257,13 @@ report_overlap <- function(DAT, list1, list2){
 #### Overlap Plot Functions
 
 ```{r Overlap Plot Functions}
-clustDAT <- SubsetData(DAT, subset.name = "Cluster", accept.value = c(1,2), do.scale = F)
 
 ###############################################
 # PLOT FUNCTIONS
 ###############################################
-overlap_heatmap <- function(clustDAT, geneList, title="Overlapping Genes:\nGene List vs. DGE Genes"){ 
+overlap_heatmap <- function(clustDAT, geneList, 
+                            title="Overlapping Genes:\nGene List vs. DGE Genes", 
+                            interactive=F){ 
   markerDF  <- get_markerDT(clustDAT, markerList = geneList, rawData = T)
   markerMatrix <- reshape2::acast(markerDF, Gene~Cluster, value.var="Expression",
                                   fun.aggregate = mean, drop = F, fill = 0)
@@ -346,6 +350,8 @@ plot_cell_clusters(mDAT, markers = c("LRRK2","GBA", overlappingGenes_PD), cell_s
 
 ```{r AD Genes vs. DGE Overlap}
 overlappingGenes_AD <- enrichment_test_and_plots(clustDAT, DEGs_monocytes_sig, ADgenes$Gene) 
+# Show full heatmap too
+overlap_heatmap(clustDAT, geneList = ADgenes$Gene)
 # Monocle plot
 plot_cell_clusters(mDAT, markers = overlappingGenes_AD, cell_size = 0.8)
 ```

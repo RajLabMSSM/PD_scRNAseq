@@ -151,12 +151,10 @@ get_markerDT <- function(DAT, markerList, rawData=T, meta_vars =c("barcode", "dx
 
 replace_zero_pvals <- function(DEGs){
   # convert 0 to the smallest number R can represent(2.225074e-308)
-  DEGs[DEGs$p_val==0.0000000000000000000000000000,] <- 2.225074e-308  
-  DEGs[DEGs$p_val_adj==0.0000000000000000000000000000,] <- 2.225074e-308
+  DEGs[DEGs$p_val==0.0000000000000000000000000000,"p_val"] <- 2.225074e-308  
+  DEGs[DEGs$p_val_adj==0.0000000000000000000000000000,"p_val_adj"] <- 2.225074e-308
   return(DEGs)
-}
-
-
+} 
 
 
 runDGE <- function(DAT, meta_var, group1, group2, test.use="wilcox", show.table=T, show.volcano=T, allGenes=F){
@@ -190,7 +188,7 @@ DGE_within_clusters <- function(DAT, meta_var, group1, group2, clusterList, allC
   if(allClusts==T){ clusterList <- unique(DAT@meta.data$Cluster) }
   for (clust in clusterList){ 
     cat('\n')   
-    cat("### ",paste("Cluster ",clust,": ",group1," vs. ", group2, sep="") , "\n")
+    cat("###",paste("Cluster ",clust,": ",group1," vs. ", group2, sep="") , "\n")
     DAT_clustSub <- Seurat::SubsetData(DAT, subset.name ="Cluster", accept.value = clust, subset.raw = T)  
     DEG_df <-runDGE(DAT_clustSub, meta_var, group1, group2, allGenes) 
     cat('\n')   
