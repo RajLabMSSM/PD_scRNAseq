@@ -139,11 +139,14 @@ FeaturePlot(DAT, features.plot =  c("MS4A4A","MS4A6A"),
 
 # DGE: CD16+ vs. CD16- Monocytes
 
+Remove filters to get __all__ DEGs.
 ```{r DGE: CD16+ vs. CD16- Monocytes}  
 # subDAT <- SubsetData(DAT, cells.use = 1:500) 
-DEGs_monocytes <- FindMarkers(DAT, min.pct = 0.25, only.pos = F,
-                                ident.1 = 1, ident.2 = 2, test.use = "wilcox"
-                                )
+DEGs_monocytes <- runDGE(DAT, meta_var = "Cluster", group1 = 1, group2 = 2, 
+       test.use = "wilcox", allGenes = T)
+# DEGs_monocytes <- FindMarkers(DAT, min.pct = 0.25, only.pos = F,
+#                                 ident.1 = 1, ident.2 = 2, test.use = "wilcox"
+#                                 )
 
 createDT(DEGs_monocytes, caption="DEGs between cluster 1 (CD16- monocytes) and cluster 2 (CD16+ monocytes")
 write.csv(DEGs_monocytes, file.path(resultsPath, "MonocyteSubtype.markers.csv"), quote = F, row.names = T)
