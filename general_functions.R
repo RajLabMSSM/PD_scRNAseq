@@ -53,6 +53,56 @@ raise_memory_limit <- function(){
   ## Set new memory limit 
   ulimit::memory_limit(RAM_Mib)  
 }
+
+
+subsetBiotypes <- function(DAT, subsetGenes="protein_coding"){
+  if( subsetGenes!=F ){
+    cat(paste("Subsetting genes:",subsetGenes, "\n"))
+    # If the gene_biotypes file exists, import csv. Otherwise, get from biomaRt
+    if(file_test("-f", file.path(root, "Data/gene_biotypes.csv"))){
+      biotypes <- read.csv(file.path(root, "Data/gene_biotypes.csv"))
+    }
+    else {
+      ensembl <- useMart(biomart="ENSEMBL_MART_ENSEMBL", host="grch37.ensembl.org",
+                         dataset="hsapiens_gene_ensembl") 
+      ensembl <- useDataset(mart = ensembl, dataset = "hsapiens_gene_ensembl")
+      listFilters(ensembl)
+      listAttributes(ensembl)   
+      biotypes <- getBM(attributes=c("hgnc_symbol", "gene_biotype"), filters="hgnc_symbol",
+                        values=row.names(DAT@data), mart=ensembl) 
+      write.csv(biotypes, file.path(root,"Data/gene_biotypes.csv"), quote=F, row.names=F)
+    } 
+    # Subset data by creating new Seurat object (annoying but necessary)
+    geneSubset <- biotypes[biotypes$gene_biotype==subsetGenes,"hgnc_symbol"] 
+    
+    cat(paste(dim(DAT@raw.data[geneSubset, ])[1],"/", dim(DAT@raw.data)[1], 
+              "genes are", subsetGenes))
+    # Add back into DAT 
+    subset.matrix <- DAT@raw.data[geneSubset, ] # Pull the raw expression matrix from the original Seurat object containing only the genes of interest
+    DAT_sub <- CreateSeuratObject(subset.matrix) # Create a new Seurat object with just the genes of interest
+    orig.ident <- row.names(DAT@meta.data) # Pull the identities from the original Seurat object as a data.frame
+    DAT_sub <- AddMetaData(object = DAT_sub, metadata = DAT@meta.data) # Add the idents to the meta.data slot
+    DAT_sub <- SetAllIdent(object = DAT_sub, id = "ident") # Assign identities for the new Seurat object
+    DAT <- DAT_sub
+    rm(list = c("DAT_sub","geneSubset", "subset.matrix", "orig.ident")) 
+  } 
+  return(DAT)
+}
+
+remove_nonmatched_metadata <- function(DAT, subsetCells){
+  # Get rid of any NAs (cells that don't match up with the metadata) 
+  if(subsetCells==F){
+    DAT <- FilterCells(object = DAT,  subset.names = "nGene", low.thresholds = 0)
+  } else {DAT <- FilterCells(object = DAT,  subset.names = "nGene", low.thresholds = 0,
+                             # Subset for testing 
+                             cells.use = DAT@cell.names[0:as.numeric(subsetCells) ]
+    )
+  }  
+  return(DAT)
+}
+
+
+
  
 volcanoPlot <- function(DEG_df, caption="", topFC_labeled=5){
   DEG_df$sig<-  ifelse( DEG_df$p_val_adj<0.05 & DEG_df$avg_logFC<1.5, "p_val_adj<0.05",
@@ -88,7 +138,7 @@ volcanoPlot <- function(DEG_df, caption="", topFC_labeled=5){
 }
  
 
-get_markerDT <- function(DAT, markerList, rawData=T, meta_vars =c("barcode", "dx", "mut","post_clustering", "percent.mito","nGene", "nUMI")){
+get_markerDT <- function(DAT, markerList, rawData=T, meta_vars =c("barcode", "dx", "mut","Cluster", "percent.mito","nGene", "nUMI")){
   if(rawData==T){
     exp <- DAT@raw.data 
   }else{exp <- DAT@scale.data} 
@@ -132,16 +182,16 @@ runDGE <- function(DAT, meta_var, group1, group2, test.use="wilcox", show.table=
   if(show.volcano==T){ volcanoPlot(DEGs, caption = cap)
   }else(print("Not showing volcano plot")) 
   
-  DAT <- SetAllIdent(DAT, id = "post_clustering")
+  DAT <- SetAllIdent(DAT, id = "Cluster")
   return(DEGs)
 }
 
 DGE_within_clusters <- function(DAT, meta_var, group1, group2, clusterList, allClusts=F, allGenes = F){ 
-  if(allClusts==T){ clusterList <- unique(DAT@meta.data$post_clustering) }
+  if(allClusts==T){ clusterList <- unique(DAT@meta.data$Cluster) }
   for (clust in clusterList){ 
     cat('\n')   
     cat("### ",paste("Cluster ",clust,": ",group1," vs. ", group2, sep="") , "\n")
-    DAT_clustSub <- Seurat::SubsetData(DAT, subset.name ="post_clustering", accept.value = clust, subset.raw = T)  
+    DAT_clustSub <- Seurat::SubsetData(DAT, subset.name ="Cluster", accept.value = clust, subset.raw = T)  
     DEG_df <-runDGE(DAT_clustSub, meta_var, group1, group2, allGenes) 
     cat('\n')   
   } 

@@ -6,7 +6,9 @@ subsetGenes <- ifelse(args[1]==F, 'all', args[1])
 subsetCells = args[2]
 resolution = args[3] 
 perplexity = args[4]
-nCores = args[5] #parallel::detectCores()
+# detectCores() Identifies all cores on a cluster, even if you don't have access to them all. 
+# This causes an error that forces multithread-enabled functions to revert to the default
+nCores = args[5] #parallel::detectCores() 
 
 #nCores <-args[4] #ifelse(is.null(args[4]), parallel::detectCores(), args[4]) 
 
