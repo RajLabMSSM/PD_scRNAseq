@@ -27,19 +27,15 @@ params_list <- list(subsetGenes= subsetGenes, subsetCells=subsetCells, resolutio
 #                   params = params_list,
 #                   output_file = file.path(resultsPath, paste("Preprocessing.html",sep=""))
 #                   )
-# # 
-# 2) MonocyteSubtypes (DGE)
-rmarkdown::render(input = 'scRNAseq_MonocyteSubtypes.Rmd',
+# #
+
+
+# 3) DGE
+rmarkdown::render(input = 'scRNAseq_DGE.Rmd',
                   params = params_list,
-                  output_file = file.path(resultsPath, paste("MonocyteSubtypes.html",sep=""))
+                  output_file = file.path(resultsPath, paste("DGE.html",sep=""))
 )
 
-
-# # 3) Enrichment
-# rmarkdown::render(input = 'scRNAseq_Enrichment.Rmd', 
-#                   params = params_list,  
-#                   output_file = file.path(resultsPath, paste("Enrichment.html",sep=""))
-#                   )
 # # 4) About page
 # rmarkdown::render(input = 'index.Rmd', 
 #                   params = params_list,  
