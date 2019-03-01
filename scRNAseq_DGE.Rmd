@@ -52,7 +52,7 @@ if(getwd()=="/Users/schilder/Desktop/PD_scRNAseq"){
   allGenes <- F
 }else{allGenes <- T}
 allGenes
-sessioninfo::session_info()
+session_info()
 ```
 
 
