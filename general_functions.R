@@ -189,8 +189,9 @@ DGE_within_clusters <- function(DAT, meta_var, group1, group2, clusterList, allC
   for (clust in clusterList){ 
     cat('\n')   
     cat("###",paste("Cluster ",clust,": ",group1," vs. ", group2, sep="") , "\n")
-    DAT_clustSub <- Seurat::SubsetData(DAT, subset.name ="Cluster", accept.value = clust, subset.raw = T)  
+    DAT_clustSub <- Seurat::SubsetData(DAT, subset.name ="Cluster", 
+                                       accept.value = clust, subset.raw = F)
     DEG_df <-runDGE(DAT_clustSub, meta_var, group1, group2, allGenes) 
     cat('\n')   
-  } 
+  }
 }

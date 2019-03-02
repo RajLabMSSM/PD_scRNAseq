@@ -50,7 +50,10 @@ library(garnett) # devtools::install_github("cole-trapnell-lab/garnett")
 #  
 if(getwd()=="/Users/schilder/Desktop/PD_scRNAseq"){
   allGenes <- F
-}else{allGenes <- T}
+  test.use <- "wilcox"
+}else{
+  allGenes <- T
+  test.use <- "MAST"}
 allGenes
 # session_info() #Doesn't work on Minerva?
 
@@ -145,7 +148,7 @@ clustDAT <- SubsetData(DAT, subset.name = "Cluster", accept.value = c(1,2), do.s
 
 # subDAT <- SubsetData(DAT, cells.use = 1:500) 
 DEGs_monocytes <- runDGE(DAT, meta_var = "Cluster", group1 = 1, group2 = 2, 
-       test.use = "wilcox", allGenes = T)
+       allGenes = allGenes, test.use = test.use)
 # DEGs_monocytes <- FindMarkers(DAT, min.pct = 0.25, only.pos = F,
 #                                 ident.1 = 1, ident.2 = 2, test.use = "wilcox"
 #                                 )
@@ -157,20 +160,20 @@ write.csv(DEGs_monocytes, file.path(resultsPath, "MonocyteSubtype.markers.csv"),
 ## Identify Cluster-specific Biomarkers
 
 ```{r Identify Cluster-specific Biomarkers}
-identify_unique_markers <-function(DAT, clusterA, clusterB, allGenes=F){ 
+identify_unique_markers <-function(DAT, clusterA, clusterB, allGenes=F, test.use="wilcox"){ 
   DAT <- SetIdent(DAT, ident.use = DAT@meta.data$Cluster) 
   if(allGenes==F){
       clustA.markers <- FindMarkers(DAT, ident.1=clusterA, min.pct = 0.25, 
-                                    only.pos = F, test.use = "wilcox")
+                                    only.pos = F, test.use = test.use)
       clustB.markers <- FindMarkers(DAT, ident.1=clusterB, min.pct = 0.25, 
-                                    only.pos = F, test.use = "wilcox") 
+                                    only.pos = F, test.use = test.use) 
   }else{
-      clustA.markers <- FindMarkers(DAT, ident.1=clusterA, min.pct = 0.25, 
-                                    only.pos = F, test.use = "wilcox",
+      clustA.markers <- FindMarkers(DAT, ident.1=clusterA, 
+                                    only.pos = F, test.use = test.use,
                                     logfc.threshold = 0, min.pct = 0, min.cells.group = 1,
                                     min.cells.gene = 1, min.diff.pct = -Inf)
-      clustB.markers <- FindMarkers(DAT, ident.1=clusterB, min.pct = 0.25, 
-                                    only.pos = F, test.use = "wilcox",
+      clustB.markers <- FindMarkers(DAT, ident.1=clusterB,  
+                                    only.pos = F, test.use = test.use,
                                     logfc.threshold = 0, min.pct = 0, min.cells.group = 1,
                                     min.cells.gene = 1, min.diff.pct = -Inf)
   } 
@@ -189,12 +192,9 @@ identify_unique_markers <-function(DAT, clusterA, clusterB, allGenes=F){
   return(uniqueMarkers)
 }
 
- 
-uniqueMarkers <- identify_unique_markers(clustDAT, clusterA = 1, clusterB = 2, allGenes=allGenes)
+uniqueMarkers <- identify_unique_markers(clustDAT, clusterA = 1, clusterB = 2, 
+                                         allGenes=allGenes, test.use = test.use)
 ```
- 
- 
-
 
 
 # AD/PD-related Gene Expression
@@ -264,7 +264,7 @@ report_overlap <- function(DAT, list1, list2){
 overlap_heatmap <- function(clustDAT, geneList, 
                             title="Overlapping Genes:\nGene List vs. DGE Genes", 
                             interactive=F){ 
-  markerDF  <- get_markerDT(clustDAT, markerList = geneList, rawData = T)
+  markerDF  <- get_markerDT(clustDAT, markerList = geneList, rawData = F)
   markerMatrix <- reshape2::acast(markerDF, Gene~Cluster, value.var="Expression",
                                   fun.aggregate = mean, drop = F, fill = 0)
   # Heatmap.2 
@@ -351,7 +351,7 @@ plot_cell_clusters(mDAT, markers = c("LRRK2","GBA", overlappingGenes_PD), cell_s
 ```{r AD Genes vs. DGE Overlap}
 overlappingGenes_AD <- enrichment_test_and_plots(clustDAT, DEGs_monocytes_sig, ADgenes$Gene) 
 # Show full heatmap too
-overlap_heatmap(clustDAT, geneList = ADgenes$Gene)
+overlap_heatmap(clustDAT, geneList = ADgenes$Gene, title = "All AD-related Genes")
 # Monocle plot
 plot_cell_clusters(mDAT, markers = overlappingGenes_AD, cell_size = 0.8)
 ```
@@ -367,7 +367,7 @@ plot_cell_clusters(mDAT, markers = overlappingGenes_AD, cell_size = 0.8)
 # FDR <- 0.05/dim(DEGs)[1]
 # subset(DEGs, p_val<FDR)
 DEGs <- runDGE(clustDAT, meta_var = "dx", group1 = "PD", group2 = "control", 
-               allGenes = F) 
+               allGenes = F, test.use = test.use) 
 ```
 
 ## Mutation
@@ -375,7 +375,7 @@ DEGs <- runDGE(clustDAT, meta_var = "dx", group1 = "PD", group2 = "control",
 ```{r DGE Across Clusters: mut, results='asis'}
 # clustDAT@meta.data$dx %>% unique()
 DEGs <- runDGE(clustDAT, meta_var = "mut", group1 = "PD", group2 = "GBA", 
-               allGenes = F)
+               allGenes = F, test.use = test.use)
 ```
 
 
@@ -385,14 +385,14 @@ DEGs <- runDGE(clustDAT, meta_var = "mut", group1 = "PD", group2 = "GBA",
 
 ```{r Within Clusters: dx, results='asis'}  
 DGE_within_clusters(clustDAT,  meta_var = "dx", group1 = "PD", group2 = "control", 
-                    clusterList = c(1,2), allGenes = F)
+                    clusterList = c(1,2), allGenes = F, test.use = test.use)
 ```
 
 ## Mutation {.tabset .tabset-fade .tabset-pills}
 
 ```{r Within Clusters: mut, results='asis'}  
 DGE_within_clusters(DAT, meta_var = "mut", group1 = "PD", group2 = "GBA", 
-                    clusterList = c(1,2), allGenes = F)
+                    clusterList = c(1,2), allGenes = F, test.use = test.use)
 ```
 
  
