@@ -24,6 +24,8 @@ params:
 # Setup 
 
 ```{r setup, dpi = 600, warning=F, message=F}
+start_time <- Sys.time() 
+
 # Import functions
 root = "./"
 source(file.path(root,"general_functions.R"))
@@ -53,10 +55,11 @@ if(getwd()=="/Users/schilder/Desktop/PD_scRNAseq"){
   test.use <- "wilcox"
 }else{
   allGenes <- T
-  test.use <- "MAST"}
+  # MAST not install on Minerva...
+  test.use <- "DESeq2"}
 allGenes
 # session_info() #Doesn't work on Minerva?
-
+ 
 ```
 
 
@@ -424,5 +427,8 @@ for (db in enrichr_dbs){
 
 ```{r Save Results}  
 save.image(file.path(resultsPath, "scRNAseq_results.RData"))
+
+end_time <- Sys.time()
+end_time - start_time
 ```
 
