@@ -82,7 +82,7 @@ CDS_to_Seurat <- function(cds, export_PC=F, export_UMAP=F, export_tSNE=F){
   return(DAT)
 }
 DAT <- CDS_to_Seurat(mDAT, export_PC = T, export_UMAP = T)
-     head(DAT@meta.data) 
+head(DAT@meta.data) 
 ```
 
 
@@ -152,9 +152,10 @@ DEGs_monocytes <- runDGE(DAT, meta_var = "Cluster", group1 = 1, group2 = 2,
 # DEGs_monocytes <- FindMarkers(DAT, min.pct = 0.25, only.pos = F,
 #                                 ident.1 = 1, ident.2 = 2, test.use = "wilcox"
 #                                 )
+
+# DEGs_monocytes <- read.csv("Results/MonocyteSubtype.markers.csv", row.names = 1)
 createDT(DEGs_monocytes, caption="DEGs between cluster 1 (CD16- monocytes) and cluster 2 (CD16+ monocytes")
 write.csv(DEGs_monocytes, file.path(resultsPath, "MonocyteSubtype.markers.csv"), quote = F, row.names = T)
-
 ```
 
 ## Identify Cluster-specific Biomarkers

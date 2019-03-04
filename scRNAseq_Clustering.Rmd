@@ -298,7 +298,32 @@ plot_cell_clusters(mDAT, color_by ="cluster_ext_type", cell_size = .8)  +  facet
 plot_cell_clusters(mDAT, color_by ="cluster_ext_type_filt", cell_size = .8) +  facet_wrap(~dx)
 ```
 
-## Gene Expression
+### Cell Type Counts
+
+```{r Cell Type Counts, results='asis'}
+cell_proportions_plot <- function(mDAT, metavar){ 
+  data <- pData(mDAT)
+  cell_tally <- data %>% group_by(eval(parse(text = metavar)), cluster_ext_type_filt) %>% tally()
+  colnames(cell_tally)[1] <- metavar
+  createDT(cell_tally) 
+  p <- ggplot(data=cell_tally, aes(x=eval(parse(text = metavar)), y=n, fill=cluster_ext_type_filt)) + 
+    geom_col() + labs(title=paste("Cell Types by",metavar), x=metavar, y="Cell Count") +
+  scale_fill_discrete(name = "Cell Type")
+  print(p)
+} 
+
+for(var in c("dx","mut","Cluster")){
+  cat("\n")
+  cat("####", var)
+  cell_proportions_plot(mDAT, var)
+  cat("\n")
+} 
+```
+
+
+
+
+## Gene Expression  
 
 ### Monocyte Markers
 
@@ -318,7 +343,22 @@ plot_cell_clusters(mDAT, markers = c("LRRK2","GBA"), cell_size = 0.8)
 plot_cell_clusters(mDAT, markers = c("MS4A4A","MS4A6A"), cell_size = 0.8) 
 ```
 
-## Heatmap
+### Monocyte Count vs. LRRK2 Expression
+
+```{r  Monocyte Count vs. LRRK2 Expression}
+mDAT_sub <- mDAT[row.names(subset(fData(mDAT), gene_short_name %in% c("LRRK2"))),] 
+
+exp_dat <- exprs(mDAT_sub) %>% t() %>% as.matrix() %>% data.table(keep.rownames = "Cell", key = "Cell")
+meta_dat <- pData(mDAT) %>% data.table( keep.rownames = "Cell", key = "Cell")
+gene_dat <- exp_dat[meta_dat] %>% subset(cluster_ext_type_filt=="Monocytes") %>%  
+  add_count(ID, cluster_ext_type_filt, name = "cell_count") 
+
+ggplot(gene_dat, aes(x=cell_count, y=LRRK2, fill=ID, color=ID)) + geom_point() 
+```
+
+
+### Heatmap
+
 ```{r Heatmap}
 plot_markers_cluster(mDAT, markers = protDAT@var.genes[1:50], minimal_cluster_fraction = 0.05)
 ```
