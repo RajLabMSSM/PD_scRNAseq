@@ -317,7 +317,7 @@ for(var in c("dx","mut","Cluster")){
   cat("####", var)
   cell_proportions_plot(mDAT, var)
   cat("\n")
-} 
+}
 ```
 
 

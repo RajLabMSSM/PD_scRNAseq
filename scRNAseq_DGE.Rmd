@@ -19,6 +19,8 @@ params:
   resultsPath: "./Results"
   nCores: 2
   perplexity: 30
+editor_options: 
+  chunk_output_type: console
 ---
 
 # Setup 
@@ -56,7 +58,7 @@ if(getwd()=="/Users/schilder/Desktop/PD_scRNAseq"){
 }else{
   allGenes <- T
   # MAST not install on Minerva...
-  test.use <- "DESeq2"}
+  test.use <- "wilcox"}
 allGenes
 # session_info() #Doesn't work on Minerva?
  
@@ -92,25 +94,54 @@ head(DAT@meta.data)
 ## Biomarker Expression
 
 ```{r Biomarker Expression}
-markerList <- c("CD14", "FCGR3A")
-markerData <- DAT@scale.data[row.names(DAT@scale.data) %in% markerList,] %>% t() %>%
-  as.matrix() %>%  data.table(keep.rownames = T, key = "rn")
-markerData[markerData$markerList[1]==0,] <- NA
-markerData[markerData$markerList[2]==0,] <- NA
-
-
-## Efficiently merge using data.table
-# dt1 <- data.table(markerData, keep.rownames = "cell_type", key = "cell_type") %>% copy()
-dt2 <- data.table(DAT@meta.data[c("cluster_ext_type_filt","Cluster")], keep.rownames = "Cell", key = "Cell") %>% copy()
-row.names(dt2) <- dt2$Cell
-markerDT <- markerData[dt2]
-
-ggplot(data = markerDT, aes(x=CD14, y=FCGR3A) ) +
-  stat_density_2d(aes(fill = ..level..), geom = "polygon", colour="purple", bins = 100, size=.1) +
-  geom_point(aes(color=as.factor(cluster_ext_type_filt)), shape=16, stroke=0, size=2, alpha=.5) +
-  guides(colour = guide_legend(title="cluster_ext_type_filt",override.aes = list(alpha = 1))) + 
-    scale_color_manual(values = pretty_colors(mDAT, var = "cluster_ext_type_filt"))
+gene_gene_plot <- function(DAT, markerList, colorby, title="", plot=T, legend=T, filterZeros=T){ 
+  markerData <- DAT@data[row.names(DAT@data) %in% markerList,] %>% t() %>%
+    as.matrix() %>%  data.table(keep.rownames = T, key = "rn")
+  markerData[markerData$markerList[1]==0,] <- NA
+  markerData[markerData$markerList[2]==0,] <- NA 
+  colnames(markerData)[2:length(markerData)] <- c("Gene1", "Gene2")
+  ## Efficiently merge using data.table
+  # dt1 <- data.table(markerData, keep.rownames = "cell_type", key = "cell_type") %>% copy()
+  dt2 <- data.table(DAT@meta.data, keep.rownames = "Cell", key = "Cell") %>% copy()
+  row.names(dt2) <- dt2$Cell
+  markerDT <- markerData[dt2]
+  if(filterZeros==T){markerDT <- subset(markerDT, Gene1!=0 & Gene2!=0)}
+  
+  p <- ggplot(data = markerDT, aes(x=Gene1, y=Gene2 )) +
+    stat_density_2d(aes(fill = ..level..), 
+                    geom = "polygon", colour="purple", bins = 10, size=.1) +
+    geom_point(aes(color=as.factor(eval(parse(text=colorby)))), shape=16, stroke=0, size=2, alpha=.5) +
+    guides(colour = guide_legend(title=colorby, override.aes = list(alpha = 1))) + 
+      scale_color_manual(values = pretty_colors(mDAT, var = colorby)) +
+    labs(x=markerList[1], y=markerList[2], title=title) +
+    geom_smooth(method="lm")
+  if(legend==F){p <- p + theme(legend.position = "none")}
+  if(plot==T){print(p)}
+  return(p)
+} 
 ```
+
+### Monocyte Markers
+
+```{r Monocyte Markers}
+p <- gene_gene_plot(DAT, c("CD14", "FCGR3A"), colorby="cluster_ext_type_filt", 
+               title="Monocyte Subtype Markers")
+```
+
+### HLA Genes vs. LRRK2
+
+```{r} 
+d <- DAT@data@Dimnames[[1]] 
+HLA_genes  <- d[startsWith(d, "HLA-DR")] 
+HLA_1 <- gene_gene_plot(DAT, c("LRRK2", HLA_genes[1]), colorby="cluster_ext_type_filt", 
+               title="", plot = F, legend=F)
+HLA_2 <- gene_gene_plot(DAT, c("LRRK2", HLA_genes[2]), colorby="cluster_ext_type_filt", 
+               title="", plot = F, legend=F)
+HLA_3 <- gene_gene_plot(DAT, c("LRRK2", HLA_genes[3]), colorby="cluster_ext_type_filt", 
+               title="", plot = F, legend=F)
+plot_grid(HLA_1, HLA_2, HLA_3)
+```
+
 
 
 
@@ -197,7 +228,7 @@ identify_unique_markers <-function(DAT, clusterA, clusterB, allGenes=F, test.use
 }
 
 uniqueMarkers <- identify_unique_markers(clustDAT, clusterA = 1, clusterB = 2, 
-                                         allGenes=allGenes, test.use = test.use)
+                                         allGenes=F, test.use = test.use)
 ```
 
 
@@ -235,7 +266,6 @@ DEGs_monocytes_sig <- subset(DEGs_monocytes, p_val_adj <= 0.05)
     * [Documentation](http://bioconductor.org/packages/release/bioc/vignettes/GeneOverlap/inst/doc/GeneOverlap.pdf)
 ```{r Test Gene Overlap} 
 report_overlap <- function(DAT, list1, list2){ 
-   
   genomeSize <- dim(DAT@raw.data)[1]
   go.obj <- newGeneOverlap(listA = list1, listB = list2, genome.size = genomeSize )
   go.obj <- testGeneOverlap(go.obj)
@@ -346,6 +376,8 @@ heatScale <-  c("yellow","grey","red")
 
 ```{r PD Genes vs. DGE Overlap}  
 overlappingGenes_PD <- enrichment_test_and_plots(clustDAT, DEGs_monocytes_sig, PDgenes$Gene)
+# Show full heatmap too
+overlap_heatmap(clustDAT, geneList = PDgenes$Gene, title = "All PD-related Genes")
 # Moncle plot
 plot_cell_clusters(mDAT, markers = c("LRRK2","GBA", overlappingGenes_PD), cell_size = 0.8)
 ```
