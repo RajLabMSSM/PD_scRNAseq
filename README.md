@@ -1,13 +1,11 @@
 # PD_scRNAseq 
-Seurat analysis pipelines for Parkinson's Disease scRNA-seq data from CD14+ cells.  
+Seurat analysis pipelines for Parkinson's Disease scRNA-seq data from CD14+ peripheral monocytes.  
 
 ---  
 
 ## Full Dataset Rmarkdown
-### Protein-Coding Genes
-['FindClusters' resolution = 0.2: Preprocessing](https://rajlabmssm.github.io/PD_scRNAseq/Results/subsetGenes-protein_coding__subsetCells-F__Resolution-0.2__perplexity-40__nCores-4/Preprocessing.html)  
-['FindClusters' resolution = 0.2: Monocyte Subtypes](https://rajlabmssm.github.io/PD_scRNAseq/Results/subsetGenes-protein_coding__subsetCells-F__Resolution-0.2__perplexity-40__nCores-4/scRNAseq_MonocyteSubtypes.html)  
- 
+[Dimensionality Reduction, Cell Type Identification & Clustering](https://rajlabmssm.github.io/PD_scRNAseq/Results/Current_Pipeline/scRNAseq_Clustering.html)  
+[Differential Gene Expression](https://rajlabmssm.github.io/PD_scRNAseq/Results/Current_Pipeline/DGE.html)  
  
 
 ---

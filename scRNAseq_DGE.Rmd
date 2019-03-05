@@ -93,13 +93,31 @@ head(DAT@meta.data)
 
 ## Biomarker Expression
 
-```{r Biomarker Expression}
-gene_gene_plot <- function(DAT, markerList, colorby, title="", plot=T, legend=T, filterZeros=T){ 
+```{r Biomarker Expression}  
+exp_dat <- DAT@data[row.names(DAT@data) %in% c(ADgenes$Gene, PDgenes$Gene), ] %>% 
+  t() %>% as.matrix() %>% data.table(keep.rownames = "Cell", key = "Cell")
+meta_dat <- DAT@meta.data %>% data.table( keep.rownames = "Cell", key = "Cell")
+combined_DAT <- meta_dat[exp_dat]
+str(combined_DAT)
+
+write.csv(combined_DAT, "Results/AD-PD_gene_expression.csv", quote = F, row.names = F)
+
+
+ 
+make_markerDF <- function(DAT, markerList){
   markerData <- DAT@data[row.names(DAT@data) %in% markerList,] %>% t() %>%
     as.matrix() %>%  data.table(keep.rownames = T, key = "rn")
   markerData[markerData$markerList[1]==0,] <- NA
   markerData[markerData$markerList[2]==0,] <- NA 
-  colnames(markerData)[2:length(markerData)] <- c("Gene1", "Gene2")
+  colnames(markerData)[2:length(markerData)] <- paste("Gene", rep(1:length(markerList)), sep="")
+  return(markerData)
+}
+
+
+
+
+gene_gene_plot <- function(DAT, markerList, colorby, title="", plot=T, legend=T, filterZeros=T){ 
+  
   ## Efficiently merge using data.table
   # dt1 <- data.table(markerData, keep.rownames = "cell_type", key = "cell_type") %>% copy()
   dt2 <- data.table(DAT@meta.data, keep.rownames = "Cell", key = "Cell") %>% copy()
@@ -130,7 +148,7 @@ p <- gene_gene_plot(DAT, c("CD14", "FCGR3A"), colorby="cluster_ext_type_filt",
 
 ### HLA Genes vs. LRRK2
 
-```{r} 
+```{r HLA Genes vs. LRRK2} 
 d <- DAT@data@Dimnames[[1]] 
 HLA_genes  <- d[startsWith(d, "HLA-DR")] 
 HLA_1 <- gene_gene_plot(DAT, c("LRRK2", HLA_genes[1]), colorby="cluster_ext_type_filt", 
@@ -229,6 +247,7 @@ identify_unique_markers <-function(DAT, clusterA, clusterB, allGenes=F, test.use
 
 uniqueMarkers <- identify_unique_markers(clustDAT, clusterA = 1, clusterB = 2, 
                                          allGenes=F, test.use = test.use)
+createDT(uniqueMarkers, "Unique Biomarkers for Clusters 1 and 2")
 ```
 
 
@@ -375,26 +394,34 @@ heatScale <-  c("yellow","grey","red")
 ### PD Genes vs. DGE Overlap
 
 ```{r PD Genes vs. DGE Overlap}  
-overlappingGenes_PD <- enrichment_test_and_plots(clustDAT, DEGs_monocytes_sig, PDgenes$Gene)
-# Show full heatmap too
-overlap_heatmap(clustDAT, geneList = PDgenes$Gene, title = "All PD-related Genes")
-# Moncle plot
-plot_cell_clusters(mDAT, markers = c("LRRK2","GBA", overlappingGenes_PD), cell_size = 0.8)
+overlappingGenes_PD <- enrichment_test_and_plots(clustDAT, DEGs_monocytes_sig, PDgenes$Gene) 
 ```
+
+```{r PD Monocle plot, fig.height=14, fig.width=14} 
+plot_cell_clusters(mDAT, markers = c("LRRK2","GBA", overlappingGenes_PD), cell_size = 0.01)
+```
+
+```{r PD Full Heatmap, fig.height=14} 
+overlap_heatmap(clustDAT, geneList = PDgenes$Gene, title = "All PD-related Genes")
+```
+
 
 ### AD Genes vs. DGE Overlap
 
 ```{r AD Genes vs. DGE Overlap}
-overlappingGenes_AD <- enrichment_test_and_plots(clustDAT, DEGs_monocytes_sig, ADgenes$Gene) 
-# Show full heatmap too
-overlap_heatmap(clustDAT, geneList = ADgenes$Gene, title = "All AD-related Genes")
-# Monocle plot
-plot_cell_clusters(mDAT, markers = overlappingGenes_AD, cell_size = 0.8)
+overlappingGenes_AD <- enrichment_test_and_plots(clustDAT, DEGs_monocytes_sig, ADgenes$Gene)  
 ```
- 
+
+```{r AD Monocle plot, fig.height=14, fig.width=14} 
+plot_cell_clusters(mDAT, markers = overlappingGenes_AD, cell_size = 0.01)
+```
+
+```{r AD Full Heatmap, fig.height=14} 
+overlap_heatmap(clustDAT, geneList = ADgenes$Gene, title = "All AD-related Genes")
+```
 
 
-# DGE Across Clusters
+# DGE Across Clusters {.tabset .tabset-fade .tabset-pills}
 
 ## Disease
 

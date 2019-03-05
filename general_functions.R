@@ -184,14 +184,14 @@ runDGE <- function(DAT, meta_var, group1, group2, test.use="wilcox", show.table=
   return(DEGs)
 }
 
-DGE_within_clusters <- function(DAT, meta_var, group1, group2, clusterList, allClusts=F, allGenes = F){ 
+DGE_within_clusters <- function(DAT, meta_var, group1, group2, clusterList, allClusts=F, allGenes = F,  test.use="wilcox"){ 
   if(allClusts==T){ clusterList <- unique(DAT@meta.data$Cluster) }
   for (clust in clusterList){ 
     cat('\n')   
     cat("###",paste("Cluster ",clust,": ",group1," vs. ", group2, sep="") , "\n")
     DAT_clustSub <- Seurat::SubsetData(DAT, subset.name ="Cluster", 
                                        accept.value = clust, subset.raw = F)
-    DEG_df <-runDGE(DAT_clustSub, meta_var, group1, group2, allGenes) 
+    DEG_df <-runDGE(DAT_clustSub, meta_var, group1, group2, allGenes, test.use = test.use) 
     cat('\n')   
   }
 }
