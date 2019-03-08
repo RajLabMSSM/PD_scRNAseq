@@ -147,16 +147,16 @@ HLA_3 <- gene_gene_plot(DAT, c("LRRK2", HLA_genes[3]), colorby="cluster_ext_type
 plot_grid(HLA_1, HLA_2, HLA_3)
 ```
 
-# DGE: CD16+ vs. CD16- Monocytes
+# DGE: CD16+ vs. CD16-- Monocytes
 
 Remove filters to get __all__ DEGs.
-```{r DGE: CD16+ vs. CD16- Monocytes}
+```{r DGE: CD16+ vs. CD16-- Monocytes}
 clustDAT <- SubsetData(DAT, subset.name = "Cluster", accept.value = c(1,2), do.scale = F)
 
 DEGs_monocytes <- runDGE(DAT, meta_var = "Cluster", group1 = 1, group2 = 2, 
        allGenes = allGenes, test.use = test.use)
 # DEGs_monocytes <- read.csv("Results/MonocyteSubtype.markers.csv", row.names = 1)
-createDT(DEGs_monocytes, caption="DEGs between cluster 1 (CD16- monocytes) and cluster 2 (CD16+ monocytes")
+createDT(DEGs_monocytes, caption="DEGs between cluster 1 (CD16-- monocytes) and cluster 2 (CD16+ monocytes")
 write.csv(DEGs_monocytes, file.path(resultsPath, "MonocyteSubtype.markers.csv"), quote = F, row.names = T)
 ```
 
@@ -204,7 +204,7 @@ identify_unique_markers <-function(DAT, clusterA, clusterB, allGenes=F, test.use
 }
 # MUST use full dataset w/ all clusters (DAT) 
 uniqueMarkers <- identify_unique_markers(DAT, clusterA = 1, clusterB = 2, 
-                                         allGenes=F, test.use = test.use) 
+                                         allGenes=T, test.use = test.use) 
 ```
 
 
