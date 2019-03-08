@@ -1,5 +1,5 @@
 ---
-title: "Monocyte Subtypes" 
+title: "Clustering"
 author: "<h3>Author</h3>Brian M. Schilder, Bioinformatician II"
 date: "`r Sys.Date()`"
 output: 
@@ -270,7 +270,7 @@ plot_cell_clusters(mDAT, color_by = "mut", cell_size = .8)
 
 ## Identify Cell Types with Garnett
 
-```{r Identify Cell Types with Garnett} 
+```{r Identify Cell Types with Garnett, fig.width=14} 
 # generate size factors for normalization later
 # Get pre-trained PBMC classifer 
 load(file.path(root, "Data/Garnett/hsPBMC")) # Download from: https://cole-trapnell-lab.github.io/garnett/classifiers/hsPBMC  
@@ -327,19 +327,19 @@ for(var in c("dx","mut","Cluster")){
 
 ### Monocyte Markers
 
-```{r Monocyte Markers}
+```{r Monocyte Markers, fig.width=14}
 plot_cell_clusters(mDAT, markers = c("CD14","FCGR3A"), cell_size = 0.8)
 ```
 
 ### PD Genes
 
-```{r PD Genes}
+```{r PD Genes, fig.width=14}
 plot_cell_clusters(mDAT, markers = c("LRRK2","GBA"), cell_size = 0.8)
 ```
  
 ## Selected Genes
 
-```{r Selected Genes}
+```{r Selected Genes, fig.width=14}
 plot_cell_clusters(mDAT, markers = c("MS4A4A","MS4A6A"), cell_size = 0.8) 
 ```
 
