@@ -1,0 +1,68 @@
+---
+title: "Enrichment"
+author: "<h3>Author</h3>Brian M. Schilder, Bioinformatician II"
+date: "`r Sys.Date()`"
+output: 
+  rmarkdown::html_document: 
+    theme: spacelab
+    highlight: zenburn 
+    code_folding: show 
+    toc: true 
+    toc_float: true
+    smooth_scroll: true
+    number_sections: false 
+    self_contained: false
+params:
+  subsetGenes: "protein_coding" #FALSE
+  subsetCells: 500 #FALSE
+  resolution: 0.6
+  resultsPath: "./Results"
+  nCores: 2
+  perplexity: 30
+editor_options: 
+  chunk_output_type: inline
+---
+
+Enrichment tests on differentially expressed genes between Canonical monocytes (cluster 1) and Intermediate monocytes (cluster 1).
+
+```{r setup}
+# Import functions
+root = "./"
+source(file.path(root,"general_functions.R"))
+library(enrichR) #BiocManager::install("enrichR")
+library(data.table)
+library(dplyr)
+library(DT)
+```
+
+
+# DEG Enrichment w/ enrichR {.tabset .tabset-fade .tabset-pills}
+
+```{r DEG Enrichment, results="asis" }
+enrichr_dbs <- c("KEGG_2018", "Reactome_2016",
+                 "GO_Biological_Process_2018", "GO_Molecular_Function_2018", "GO_Cellular_Component_2018", 
+                 "Rare_Diseases_AutoRIF_ARCHS4_Predictions","ARCHS4_Cell-lines",
+                 "Aging_Perturbations_from_GEO_up", "Aging_Perturbations_from_GEO_down", 
+                 "Human_Gene_Atlas","ChEA_2016", "KEA_2015")
+# createDT(enrichR::listEnrichrDbs(), "Enrichr Databases")
+DEGs_monocytes <- read.csv("Results/Current_Pipeline/Differential Gene Expression.csv", row.names = 1)  
+DEGs_monocytes <- subset(DEGs_monocytes, p_val_adj<=0.05)[1:500,]
+
+geneList <- data.frame(Gene=row.names(DEGs_monocytes), 
+     Weight=scales::rescale(length(DEGs_monocytes$p_val_adj):1))
+
+results <- enrichr(genes = geneList, databases = enrichr_dbs ) 
+
+topHits <- data.table()
+for (db in enrichr_dbs){
+  cat('\n')
+  cat("##",db,"\n")  
+  # res <- subset(results[[db]], Adjusted.P.value<=0.05) 
+  newdf = subset(results[[ db ]], Adjusted.P.value<=0.05, select=c("Term","Overlap","Adjusted.P.value")) %>% mutate(Database=db)  
+  newdf = newdf[1:3, ]
+  topHits <- rbind(topHits, newdf[complete.cases(newdf), ]) 
+  cat('\n')
+}  
+write.csv(topHits, "topEnrichR_hits.csv")
+topHits
+```

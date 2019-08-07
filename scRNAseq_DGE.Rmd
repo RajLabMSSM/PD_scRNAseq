@@ -31,11 +31,13 @@ start_time <- Sys.time()
 root = "./"
 source(file.path(root,"general_functions.R"))
 import_parameters(params)
+# load("Results/Current_Pipeline/scRNAseq_results.RData")
 load(file.path(resultsPath, "scRNAseq_results.RData"))
 # resultsPath <- "Results/subsetGenes-protein_coding__subsetCells-F__Resolution-0.2__perplexity-40__nCores-4" 
-
-library(Seurat)
-library(cowplot)
+print("Written using: Seurat version* 2.3.4 2018-07-17")
+# https://satijalab.org/seurat/install.html
+library(Seurat) #
+library(cowplot) 
 library(ggplot2)
 library(dplyr) 
 library(data.table) 
@@ -45,12 +47,10 @@ library(ggrepel)
 library(plotly)
 
 library(GeneOverlap) # BiocManager::install("GeneOverlap") 
-library(enrichR) #BiocManager::install("enrichR")
 
 library(monocle) # BiocManager::install("monocle")   
 library(garnett) # devtools::install_github("cole-trapnell-lab/garnett")
  
-#  
 if(getwd()=="/Users/schilder/Desktop/PD_scRNAseq"){
   allGenes <- F
   test.use <- "wilcox"
@@ -58,7 +58,7 @@ if(getwd()=="/Users/schilder/Desktop/PD_scRNAseq"){
   allGenes <- T
   # MAST not install on Minerva...
   test.use <- "wilcox"}
-allGenes 
+allGenes <- T
 ```
 
 
@@ -126,7 +126,7 @@ gene_gene_plot <- function(DAT, markerList, colorby, title="", plot=T, legend=T,
 
 ### Monocyte Markers
 
-```{r Monocyte Markers}
+```{r Monocyte Markers} 
 p <- gene_gene_plot(DAT, c("CD14", "FCGR3A"), colorby="cluster_ext_type_filt", 
                title="Monocyte Subtype Markers")
 ```
@@ -204,7 +204,8 @@ identify_unique_markers <-function(DAT, clusterA, clusterB, allGenes=F, test.use
 }
 # MUST use full dataset w/ all clusters (DAT) 
 uniqueMarkers <- identify_unique_markers(DAT, clusterA = 1, clusterB = 2, 
-                                         allGenes=T, test.use = test.use) 
+                                         allGenes=F, test.use = test.use) 
+
 ```
 
 
@@ -426,7 +427,7 @@ Clust2Markers_ADgenes <- enrichment_test_and_plots(clustDAT, subset(uniqueMarker
 # FDR <- 0.05/dim(DEGs)[1]
 # subset(DEGs, p_val<FDR)
 DEGs <- runDGE(clustDAT, meta_var = "dx", group1 = "PD", group2 = "control", 
-               allGenes = F, test.use = test.use) 
+               allGenes = allGenes, test.use = test.use) 
 ```
 
 ## Mutation
@@ -434,7 +435,7 @@ DEGs <- runDGE(clustDAT, meta_var = "dx", group1 = "PD", group2 = "control",
 ```{r DGE Across Clusters: mut, results='asis'}
 # clustDAT@meta.data$dx %>% unique()
 DEGs <- runDGE(clustDAT, meta_var = "mut", group1 = "PD", group2 = "GBA", 
-               allGenes = F, test.use = test.use)
+               allGenes = allGenes, test.use = test.use)
 ```
 
 
@@ -444,39 +445,19 @@ DEGs <- runDGE(clustDAT, meta_var = "mut", group1 = "PD", group2 = "GBA",
 
 ```{r Within Clusters: dx, results='asis'}  
 DGE_within_clusters(clustDAT,  meta_var = "dx", group1 = "PD", group2 = "control", 
-                    clusterList = c(1,2), allGenes = F, test.use = test.use)
+                    clusterList = c(1,2), allGenes = allGenes, test.use = test.use)
 ```
 
 ## Mutation {.tabset .tabset-fade .tabset-pills}
 
 ```{r Within Clusters: mut, results='asis'}  
 DGE_within_clusters(DAT, meta_var = "mut", group1 = "PD", group2 = "GBA", 
-                    clusterList = c(1,2), allGenes = F, test.use = test.use)
+                    clusterList = c(1,2), allGenes = allGenes, test.use = test.use)
 ```
 
  
  
-# DEG Enrichment w/ enrichR {.tabset .tabset-fade .tabset-pills}
 
-```{r DEG Enrichment, results='asis'}
-enrichr_dbs <- c("KEGG_2018", "Reactome_2016",
-                 "GO_Biological_Process_2018", "GO_Molecular_Function_2018", "GO_Cellular_Component_2018", 
-                 "Rare_Diseases_AutoRIF_ARCHS4_Predictions", "Human_Gene_Atlas")
-# createDT(enrichR::listEnrichrDbs(), "Enrichr Databases")
- 
-geneList <- data.frame(Gene=row.names(DEGs_monocytes), 
-     Weight=scales::rescale(length(DEGs_monocytes$p_val_adj):1))
-
-results <- enrichr(genes = geneList, databases = enrichr_dbs ) 
-
-for (db in enrichr_dbs){
-  cat('\n')
-  cat("##",db,"\n")  
-  # res <- subset(results[[db]], Adjusted.P.value<=0.05)
-  createDT_html(results[[db]], paste("Enrichr Results:",db))
-  cat('\n')
-}  
-```
 
 # Save Results
 

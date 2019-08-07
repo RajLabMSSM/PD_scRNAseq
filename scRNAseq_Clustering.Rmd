@@ -28,21 +28,9 @@ params:
 root = "./"
 source(file.path(root,"general_functions.R"))
 import_parameters(params)
+# resultsPath <- "Results/Current_Pipeline"
 # load(file.path(resultsPath, "scRNAseq_results.RData"))
-# resultsPath <- "Results/subsetGenes-protein_coding__subsetCells-F__Resolution-0.2__perplexity-40__nCores-4"
- 
-library(Seurat)
-library(cowplot)
-library(ggplot2)
-library(dplyr) 
-library(data.table) 
-library(readxl) 
-library(reshape2)
-library(ggrepel)
-library(plotly)
 
-library(GeneOverlap) # BiocManager::install("GeneOverlap") 
-library(enrichR) #BiocManager::install("enrichR")
 
 ## Upgrade to alpha (development) version of Monocle, as this version has been optimized for large datasets
 if("DDRTree" %in% rownames(installed.packages())==F){
@@ -60,9 +48,6 @@ if("flexclust" %in% rownames(installed.packages())==F){
 if("mcclust" %in% rownames(installed.packages())==F){
  install.packages("mcclust")
 }
-library(flexclust)
-library(mcclust)
-library(reticulate)
 if(py_module_available("umap-learn")==F){
   reticulate::py_install('umap-learn')# , pip = T, pip_ignore_installed = T # Ensure the latest version of UMAP is installed 
 }
@@ -71,22 +56,61 @@ if(py_module_available("louvain")==F){
   system("pip install louvain --user")
 }
 if("monocle" %in% rownames(installed.packages())==F){
-  devtools::install_github("cole-trapnell-lab/monocle-release", ref="monocle3_alpha") 
+  # BiocManager::install("monocle")
+  remotes::install_github("cole-trapnell-lab/L1-graph") 
+  devtools::install_github("cole-trapnell-lab/monocle-release", ref="monocle3_alpha")
 }
+if("monocle3" %in% rownames(installed.packages())==F){  
+  BiocManager::install(c('BiocGenerics', 'DelayedArray', 'DelayedMatrixStats',
+                       'limma', 'S4Vectors', 'SingleCellExperiment',
+                       'SummarizedExperiment', 'org.Hs.eg.db','org.Mm.eg.db'))    
+  devtools::install_github('cole-trapnell-lab/monocle3')
+}
+if("garnett" %in% rownames(installed.packages())==F){ 
+  ## Install the monocle3 branch of garnett
+  # Garnett was originally written to work with Monocle 2. We have created a branch of Garnett that   works with Monocle 3, which will eventually replace the main branch. In the meantime, you must install and load the Monocle 3 branch of Garnett!
+  devtools::install_github("cole-trapnell-lab/garnett", ref="monocle3")
+}  
 if("ggrastr" %in% rownames(installed.packages())==F){
   devtools::install_github("VPetukhov/ggrastr")
 }
+if("Seurat" %in% rownames(installed.packages())==F){
+  source("http://bit.ly/archived-seurat")
+  # devtools::install_version(package = 'Seurat', version = package_version('2.3.0')) 
+}
 
-library(monocle) # BiocManager::install("monocle") 
-# BiocManager::install(c('DelayedArray', 'DelayedMatrixStats', 'org.Hs.eg.db', 'org.Mm.eg.db'))
+#install all packages:
+# bio_packages = c("Biobase", "BiocGenerics", "limma", "ComplexHeatmap", "HSMMSingleCell", 'GEOquery', 'DESeq', 'DESeq2', 'piano', 'edgeR', 'MAST', 'destiny', 'monocle') 
+# BiocManager::install(bio_packages)
+
+
+library(flexclust)
+library(mcclust)
+library(reticulate)
+
+library(monocle)
+# library(monocle3)  
+library(garnett)  
 library(org.Hs.eg.db)
-library(garnett) # devtools::install_github("cole-trapnell-lab/garnett")
- 
-#  
+library(Seurat)
+print(paste("Seurat",packageVersion("Seurat")))
+
+library(cowplot)
+library(ggplot2)
+library(dplyr) 
+library(data.table) 
+library(readxl) 
+library(reshape2)
+library(ggrepel)
+library(plotly) 
+library(GeneOverlap) # BiocManager::install("GeneOverlap") 
+library(enrichR) # BiocManager::install("enrichR")
+
+  
 if(getwd()=="/Users/schilder/Desktop/PD_scRNAseq"){
   allGenes <- F
 }else{allGenes <- T}
-allGenes
+print(allGenes)
 sessioninfo::session_info()
 ```
 
@@ -98,18 +122,32 @@ sessioninfo::session_info()
 * Alternatively, you can do your normalization in Seurat and then construct a new CDS object manually with the scale.data from the Seurat object.
 ```{r Convert and Normalize, warning=F, message=F}
 # Import Seurat obj
-load(file.path(root, "Data/seurat_object_add_HTO_ids.Rdata"))
-DAT <- seurat.obj  
+load(file.path(root, "./Data/seurat_object_add_HTO_ids.Rdata"))
+# DAT <- Seurat::UpdateSeuratObject(seurat.obj) # Seurat changed their object format at some point
+DAT <- seurat.obj
 rm(seurat.obj)
 # Add metadata
-metadata <- read.table(file.path(root,"Data/meta.data4.tsv"))
-DAT <- AddMetaData(object = DAT, metadata = metadata)  
+metadata <- read.table(file.path(root,"Data/meta.data4.tsv"))   
+DAT <- Seurat::AddMetaData(object = DAT, metadata = metadata)  
+
+
+# DAT@meta.data <- metadata # Keeps it as an OLD Seurat object
+  
 protDAT <- subsetBiotypes(DAT, subsetGenes = "protein_coding")
 protDAT <- remove_nonmatched_metadata(protDAT, subsetCells = F)
-protDAT <- FindVariableGenes(object = protDAT, mean.function = ExpMean, 
-                         dispersion.function = LogVMR, 
-                         selection.method ="dispersion", do.plot = T, 
-                         top.genes = 2000)
+ 
+# Seurat Update
+# protDAT <- Seurat::FindVariableMarkers(object = DAT, 
+#                                 mean.function = "FastExpMean",  
+#                                 dispersion.function = "FastLogVMR", 
+#                                 selection.method = "vst",#"dispersion", 
+#                                 top.genes = 2000)
+protDAT <- FindVariableGenes(object = protDAT, 
+                             mean.function = ExpMean, 
+                             dispersion.function = LogVMR, 
+                             selection.method ="dispersion", do.plot = T, 
+                             top.genes = 2000)
+ 
 
 
 
@@ -130,11 +168,19 @@ options(DelayedArray.block.size=1000e6)
 
 ## Construct CDS object automaticaly
 ### NOTE!: importCDS takes only the raw.data (not scale.data)
+ 
 mDAT <- monocle::importCDS(protDAT,  import_all = T)
+
+mDAT <- seurat_to_monocle(protDAT, monocle_version=3)
 mDAT <- estimateSizeFactors(mDAT) #DESeq2?
 mDAT <- estimateDispersions(mDAT)
-# Regressing out ID will also regress out mutation status 
-mDAT <- preprocessCDS(mDAT, num_dim = 20, residualModelFormulaStr = "~ nUMI + percent.mito") 
+
+# Regressing out ID will also regress out mutation status....
+
+mDAT <- monocle::preprocessCDS(mDAT, num_dim = 20, residualModelFormulaStr = "~ nUMI + percent.mito")
+mDAT <- monocle3::preprocess_cds(mDAT,
+                                 num_dim = 20,
+                                 residual_model_formula_str = "~ nUMI + percent.mito" )
 ```
 
 
@@ -181,14 +227,14 @@ pretty_colors <- function(mDAT, var="Cluster", palette="custom"){
 ```
 
 
-## Clustering
+## Louvain Clustering
 
 * "Here __res__ represents the resolution parameter (range from 0-1) for the louvain clustering. Values between 0 and 1e-2 are good, __bigger values give you more clusters__. Default is set to be 1e-4. louvain_iter represents the number of iterations used for Louvain clustering. The clustering result gives the largest modularity score that will be used as the final clustering result. The default is 1."
 
 ### Test Clustering Hyperparameters {.tabset .tabset-fade .tabset-pills}
 
 ```{r Test Clustering Hyperparameters, results="asis"}  
-plotDR <- function(resDAT, metavar="Cluster", title=""){ 
+plotDR <- function(resDAT, metavar="Cluster", title="", returnPlot=F){ 
   # options(repr.plot.width = 11)
   # options(repr.plot.height = 8)
   col_vector <- pretty_colors(resDAT, var=metavar) 
@@ -197,10 +243,10 @@ plotDR <- function(resDAT, metavar="Cluster", title=""){
                      cell_size = 0.8,
                      show_group_id = T)  + 
     scale_color_manual(values = col_vector) +
-    theme(legend.text=element_text(size=6)) +
-    theme(legend.position="right")+ 
-    labs(title = paste(title)) 
-  print(p)
+    theme(legend.text=element_text(size=6), legend.position="right") + 
+    labs(title = paste(title)) +  
+    guides(colour = guide_legend(override.aes = list(size=3)))
+  if(returnPlot==F){print(p)}else{return(p)}  
 }
 
 test_hyperparameters <- function(mDAT, resolutions=seq(0, 1e-4,length.out=6),
@@ -260,11 +306,43 @@ mDAT <- clusterCells(mDAT, res=louvain_res,
 #                         method = "densityPeak",    
 #                         verbose = F,  
 #                         cores = parallel::detectCores())
-plotDR(mDAT, "Cluster")
-plot_cell_clusters(mDAT, color_by = "dx", cell_size = .8)
-plot_cell_clusters(mDAT, color_by = "mut", cell_size = .8) 
+plotDR(mDAT, "Cluster", returnPlot = T)
+plot_cell_clusters(mDAT, color_by = "dx", cell_size = .8) +  
+  guides(colour = guide_legend(override.aes = list(size=3)))
+plot_cell_clusters(mDAT, color_by = "mut", cell_size = .8) +  
+  guides(colour = guide_legend(override.aes = list(size=3)))
 # CLUSTERING FROM SEURAT
 # plotDR(mDAT, "post_clustering")
+```
+
+
+## PINS+
+
+- An iterative clustering alogorithm that uses perturbation sampling to identify robust clusters.
+Does not require user to pre-specify number of clusters or resolution.
+- PINS+ takes raw data values as input, and performs and initial dimensionality reduction step using PCA before clustering.
+
+```{r PINS+, eval=F}
+library(PINSPlus)  
+ncores <- parallel::detectCores()
+# Prepare data
+# nDim <- 2
+# tDAT <- mDAT@normalized_data_projection[,1:nDim] %>% `colnames<-`( paste0("UMAP_dim",c(1:nDim)))
+# Biobase::exprs(mDAT) 
+result <- PerturbationClustering(data = Biobase::exprs(mDAT), 
+                                 verbose = T, 
+                                 ncore = ncores, 
+                                 clusteringMethod = "kmeans")
+
+
+merged_DT <- data.table:::merge.data.table(data.table::data.table(mDAT@phenoData@data, key="barcode"), 
+                                           data.table::data.table(tDAT, key="barcode", keep.rownames = "barcode"))
+merged_DT <- data.table:::merge.data.table(merged_DT, 
+                               data.table::data.table(data.frame(PINPlus.cluster = as.factor(result$cluster)), 
+                                                      keep.rownames = "barcode", key = "barcode") 
+                               )
+ 
+ggplot(data=merged_DT, aes(x=UMAP_dim1, y=UMAP_dim2, fill=PINPlus.cluster, color=PINPlus.cluster)) + geom_point()
 ```
 
 
@@ -293,9 +371,17 @@ head(feature_genes)
 mDAT$cluster_ext_type_filt <- ifelse(mDAT$cluster_ext_type %in% names(cell_summary[cell_summary<50]), 
                                      "Unknown", mDAT$cluster_ext_type)
 
-plot_cell_clusters(mDAT, color_by ="cell_type", cell_size = .8) +  facet_wrap(~dx)
-plot_cell_clusters(mDAT, color_by ="cluster_ext_type", cell_size = .8)  +  facet_wrap(~dx)
-plot_cell_clusters(mDAT, color_by ="cluster_ext_type_filt", cell_size = .8) +  facet_wrap(~dx)
+
+plotDR(mDAT, metavar="Cluster",title = "Cluster") 
+plot_cell_clusters(mDAT, color_by ="cell_type", cell_size = .8) +  
+  facet_wrap(~dx) +  
+  guides(colour = guide_legend(override.aes = list(size=3)))
+plot_cell_clusters(mDAT, color_by ="cluster_ext_type", cell_size = .8)  +  
+  facet_wrap(~dx)+  
+  guides(colour = guide_legend(override.aes = list(size=3)))
+plot_cell_clusters(mDAT, color_by ="cluster_ext_type_filt", cell_size = .8) +  
+  facet_wrap(~dx)+  
+  guides(colour = guide_legend(override.aes = list(size=3)))
 ```
 
 ### Cell Type Counts
@@ -328,7 +414,7 @@ for(var in c("dx","mut","Cluster")){
 ### Monocyte Markers
 
 ```{r Monocyte Markers, fig.width=14}
-plot_cell_clusters(mDAT, markers = c("CD14","FCGR3A"), cell_size = 0.8)
+plot_cell_clusters(mDAT, markers = c("CD14","FCGR3A"), cell_size = 0.8) 
 ```
 
 ### PD Genes
@@ -372,10 +458,14 @@ mDAT <- partitionCells(mDAT)
 mDAT <- learnGraph(mDAT, RGE_method = 'SimplePPT',
                    n_threads =  parallel::detectCores())
 
-plot_cell_trajectory(mDAT, color_by = "Cluster", cell_size = .01) 
-plot_cell_trajectory(mDAT, color_by = "dx", cell_size = .01) 
-plot_cell_trajectory(mDAT, color_by = "mut", cell_size = .01) 
-plot_cell_trajectory(mDAT, color_by = "cluster_ext_type_filt", cell_size = .01) 
+plot_cell_trajectory(mDAT, color_by = "Cluster", cell_size = .01) +  
+  guides(colour = guide_legend(override.aes = list(size=3)))
+plot_cell_trajectory(mDAT, color_by = "dx", cell_size = .01) +  
+  guides(colour = guide_legend(override.aes = list(size=3)))
+plot_cell_trajectory(mDAT, color_by = "mut", cell_size = .01) +  
+  guides(colour = guide_legend(override.aes = list(size=3)))
+plot_cell_trajectory(mDAT, color_by = "cluster_ext_type_filt", cell_size = .01) +  
+  guides(colour = guide_legend(override.aes = list(size=3)))
  
 # dir.create(file.path(resultsPath, "pseudotime"), showWarnings = F)
 # plot_3d_cell_trajectory(mDAT,
@@ -392,6 +482,7 @@ plot_cell_trajectory(mDAT, color_by = "cluster_ext_type_filt", cell_size = .01)
 ## Differential Expression: Monocle
 
 * [Tutorial](http://cole-trapnell-lab.github.io/monocle-release/docs/#differential-expression-analysis)
+* "///vector generalized linear and additive model (VGLM/__VGAM__) classes. VGLMs can be loosely thought of as __multivariate GLMs__. VGAMs are data-driven VGLMs that use smoothing."
 * qval = FDR
 *"The first of the two models is called the full model. This model is essentially a way of predicting the expression value of each gene in a given cell knowing only whether that cell is a fibroblast or a myoblast. The second model, called the reduced model, does the same thing, but it doesn't know the CellType for each cell. It has to come up with a reasonable prediction of the expression value for the gene that will be used for all the cells...The question Monocle must answer for each gene is how much better the full model's prediction is than the reduced model's."
 ```{r Differential Expression: Monocle, eval=F} 

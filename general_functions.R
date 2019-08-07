@@ -1,3 +1,5 @@
+ 
+
 # Import parameters supplied through yaml header
 import_parameters <- function(params){    
   params_list <- list(
@@ -54,7 +56,6 @@ raise_memory_limit <- function(){
   ulimit::memory_limit(RAM_Mib)  
 }
 
-
 subsetBiotypes <- function(DAT, subsetGenes="protein_coding"){
   if( subsetGenes!=F ){
     cat(paste("Subsetting genes:",subsetGenes, "\n"))
@@ -63,12 +64,12 @@ subsetBiotypes <- function(DAT, subsetGenes="protein_coding"){
       biotypes <- read.csv(file.path(root, "Data/gene_biotypes.csv"))
     }
     else {
-      ensembl <- useMart(biomart="ENSEMBL_MART_ENSEMBL", host="grch37.ensembl.org",
+      ensembl <- biomaRt::useMart(biomart="ENSEMBL_MART_ENSEMBL", host="grch37.ensembl.org",
                          dataset="hsapiens_gene_ensembl") 
-      ensembl <- useDataset(mart = ensembl, dataset = "hsapiens_gene_ensembl")
+      ensembl <- biomaRt::useDataset(mart = ensembl, dataset = "hsapiens_gene_ensembl")
       listFilters(ensembl)
       listAttributes(ensembl)   
-      biotypes <- getBM(attributes=c("hgnc_symbol", "gene_biotype"), filters="hgnc_symbol",
+      biotypes <- biomaRt::getBM(attributes=c("hgnc_symbol", "gene_biotype"), filters="hgnc_symbol",
                         values=row.names(DAT@data), mart=ensembl) 
       write.csv(biotypes, file.path(root,"Data/gene_biotypes.csv"), quote=F, row.names=F)
     } 
@@ -82,22 +83,60 @@ subsetBiotypes <- function(DAT, subsetGenes="protein_coding"){
     DAT_sub <- CreateSeuratObject(subset.matrix) # Create a new Seurat object with just the genes of interest
     orig.ident <- row.names(DAT@meta.data) # Pull the identities from the original Seurat object as a data.frame
     DAT_sub <- AddMetaData(object = DAT_sub, metadata = DAT@meta.data) # Add the idents to the meta.data slot
-    DAT_sub <- SetAllIdent(object = DAT_sub, id = "ident") # Assign identities for the new Seurat object
+    DAT_sub <- SetIdent(object = DAT_sub, id = "ident") # Assign identities for the new Seurat object
     DAT <- DAT_sub
     rm(list = c("DAT_sub","geneSubset", "subset.matrix", "orig.ident")) 
   } 
   return(DAT)
 }
 
+subsetBiotypes_updated <- function(DAT, subsetGenes="protein_coding"){
+  if( subsetGenes!=F ){
+    cat(paste("Subsetting genes:",subsetGenes, "\n"))
+    # If the gene_biotypes file exists, import csv. Otherwise, get from biomaRt
+    if(file_test("-f", file.path(root, "Data/gene_biotypes.csv"))){
+      biotypes <- read.csv(file.path(root, "Data/gene_biotypes.csv"))
+    }
+    else {
+      ensembl <- biomaRt::useMart(biomart="ENSEMBL_MART_ENSEMBL", host="grch37.ensembl.org",
+                         dataset="hsapiens_gene_ensembl") 
+      ensembl <- biomaRt::useDataset(mart = ensembl, dataset = "hsapiens_gene_ensembl")
+      listFilters(ensembl)
+      listAttributes(ensembl)   
+      biotypes <- biomaRt::getBM(attributes=c("hgnc_symbol", "gene_biotype"), filters="hgnc_symbol",
+                        values=row.names(DAT@assays$RNA@data), mart=ensembl) 
+      write.csv(biotypes, file.path(root,"Data/gene_biotypes.csv"), quote=F, row.names=F)
+    }
+    # gene_list <- biotypes[biotypes$gene_biotype==subsetGenes,"hgnc_symbol"] 
+    # protDAT <- subset(DAT, features = gene_list) 
+     
+    #  # Subset data by creating new Seurat object (annoying but necessary)
+    geneSubset <- biotypes[biotypes$gene_biotype==subsetGenes,"hgnc_symbol"]
+
+    cat(paste(dim(DAT@assays$RNA@data[geneSubset, ])[1],"/", dim(DAT@assays$RNA@data)[1],
+              "genes are", subsetGenes))
+    # Add back into DAT
+    subset.matrix <-DAT@assays$RNA@data[geneSubset, ] # Pull the raw expression matrix from the original Seurat object containing only the genes of interest
+    DAT_sub <- Seurat::CreateSeuratObject(subset.matrix) # Create a new Seurat object with just the genes of interest
+    orig.ident <- row.names(DAT@meta.data) # Pull the identities from the original Seurat object as a data.frame
+    DAT_sub <- Seurat::AddMetaData(object = DAT_sub, metadata = DAT@meta.data) # Add the idents to the meta.data slot
+     
+    DAT_sub <- Seurat::SetIdent(object = DAT_sub, value = "ident") # Assign identities for the new Seurat object
+    DAT <- DAT_sub
+    rm(list = c("DAT_sub","geneSubset", "subset.matrix", "orig.ident"))
+  } 
+  return(DAT)
+}
+
 remove_nonmatched_metadata <- function(DAT, subsetCells){
   # Get rid of any NAs (cells that don't match up with the metadata) 
-  if(subsetCells==F){
-    DAT <- FilterCells(object = DAT,  subset.names = "nGene", low.thresholds = 0)
-  } else {DAT <- FilterCells(object = DAT,  subset.names = "nGene", low.thresholds = 0,
+  if(subsetCells==F){ 
+    DAT <- Seurat::SubsetData(object = DAT,  subset.names = "nGene", low.thresholds = 0)
+  } else {DAT <- Seurat::SubsetData(object = DAT,  subset.names = "nGene", low.thresholds = 0,
                              # Subset for testing 
-                             cells.use = DAT@cell.names[0:as.numeric(subsetCells) ]
-    )
-  }  
+                             cells.use = DAT@cell.names[0:as.numeric(subsetCells) ] )
+  }   
+   
   return(DAT)
 }
 
@@ -163,7 +202,8 @@ runDGE <- function(DAT, meta_var, group1, group2, test.use="wilcox", show.table=
   DAT <- StashIdent(DAT, save.name = meta_var)  
   if(allGenes==T){
     # DON'T use filtering and apply FDR
-    DEGs <- FindMarkers(DAT, ident.1=group1, ident.2=group2, test.use=test.use, only.pos = F, 
+    DEGs <- FindMarkers(DAT, ident.1=group1, ident.2=group2, test.use=test.use, 
+                        only.pos = F, 
                         logfc.threshold = 0, min.pct = 0, min.cells.group = 1, 
                         min.cells.gene = 1, min.diff.pct = -Inf)
   } else {
@@ -194,4 +234,37 @@ DGE_within_clusters <- function(DAT, meta_var, group1, group2, clusterList, allC
     DEG_df <-runDGE(DAT_clustSub, meta_var, group1, group2, allGenes, test.use = test.use) 
     cat('\n')   
   }
+}
+
+ 
+
+seurat_to_monocle <- function(seurat_object, monocle_version=3){ 
+  # From: https://github.com/cole-trapnell-lab/monocle-release/issues/262
+  print("Processing...")
+  print("+ Expression data")
+  data <- as(as.matrix(seurat_object@assays$RNA@data), 'sparseMatrix')
+  
+  print("+ Phenotype data")
+  pd <- new('AnnotatedDataFrame', data = seurat_object@meta.data) 
+  
+  print("+ Feature Data")
+  fDATA <- data.frame(gene_short_name = row.names(data), row.names = row.names(data))
+  fd <- new('AnnotatedDataFrame', data = fDATA)
+  
+  #Construct monocle cds  
+  if(monocle_version==3){
+    print("+ Converting to monocle (Version 3)")
+    monocle_cds <- monocle3::new_cell_data_set(expression_data = data,
+                                cell_metadata = seurat_object@meta.data,
+                                gene_metadata = fDATA)
+  } else {
+    print("+ Converting to monocle (Version 1)")
+    monocle_cds <- monocle::newCellDataSet(data,
+                                           phenoData = pd,
+                                           featureData = fd,
+                                           lowerDetectionLimit = 0.5,
+                                           expressionFamily = VGAM::negbinomial.size())
+  }
+ 
+  return(monocle_cds)
 }
