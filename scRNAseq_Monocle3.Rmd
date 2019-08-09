@@ -1,0 +1,202 @@
+---
+title: "PD_scRNAseq: Monocle3" 
+author: "<h3>Author</h3>Brian M. Schilder, Bioinformatician II"
+date: "`r Sys.Date()`"
+output: 
+  rmarkdown::html_document: 
+    theme: spacelab
+    highlight: zenburn 
+    code_folding: show 
+    toc: true 
+    toc_float: true
+    smooth_scroll: true
+    number_sections: false 
+    self_contained: true
+params:
+  subsetGenes: "protein_coding" #FALSE
+  subsetCells: 500 #FALSE
+  resolution: 0.6
+  resultsPath: "./Results"
+  nCores: 2
+  perplexity: 30
+editor_options: 
+  chunk_output_type: inline
+---
+
+# Setup 
+
+```{r setup, dpi = 600, warning=F, message=F}
+start_time <- Sys.time() 
+# Import functions
+root = "./"
+source(file.path(root,"MAIN.R"))
+import_parameters(params)
+# load("Results/Current_Pipeline/scRNAseq_results.RData")
+load(file.path(resultsPath, "scRNAseq_results.RData"))
+# resultsPath <- "Results/subsetGenes-protein_coding__subsetCells-F__Resolution-0.2__perplexity-40__nCores-4" 
+print("Written using: Seurat version* 2.3.4 2018-07-17")
+# https://satijalab.org/seurat/install.html
+library(Seurat) #
+paste("Seurat", packageVersion("Seurat")) 
+# library(monocle) # BiocManager::install("monocle")   
+# paste("monocle", packageVersion("monocle")) 
+library(monocle3)
+paste("monocle3", packageVersion("monocle3")) 
+library(garnett) # devtools::install_github("cole-trapnell-lab/garnett")
+paste("garnett", packageVersion("garnett"))
+ 
+library(cowplot) 
+library(ggplot2)
+library(dplyr) 
+library(data.table) 
+library(readxl) 
+library(reshape2)
+library(ggrepel)
+library(plotly)
+
+library(GeneOverlap) # BiocManager::install("GeneOverlap") 
+
+
+if(getwd()=="/Users/schilder/Desktop/PD_scRNAseq"){
+  allGenes <- F
+  test.use <- "wilcox"
+}else{
+  allGenes <- T
+  # MAST not install on Minerva...
+  test.use <- "wilcox"}
+allGenes <- T
+
+nCores <- parallel::detectCores()
+set.seed(2019)
+```
+
+# Preprocessing
+
+## Seurat/2.3.4 to Monocle3
+
+```{r Seurat/2.3.4 to Monocle3}
+cds <- seurat_to_monocle(seurat_object = DAT, monocle_version = 3)
+cds
+```
+ 
+## Normalization & PCA
+
+```{r Normalize Data}    
+cds <- monocle3::preprocess_cds(cds, 
+                                num_dim = 20, #100 by default
+                                residual_model_formula_str = "~ nUMI + percent.mito")
+monocle3::plot_pc_variance_explained(cds) 
+```
+
+
+## Dimensionality Reduction
+
+Using UMAP.
+
+```{r Reduce Dimensions (UMAP)}
+# c("UMAP", "tSNE", "PCA", "LSI")
+cds <- monocle3::reduce_dimension(cds, reduction_method = "UMAP", 
+                                  max_components = 3, 
+                                  umap.fast_sgd = T,
+                                  cores=nCores) 
+```
+
+# Gene Expression
+
+```{r Gene Expression}
+# monocle3::plot_genes_by_group(cds, markers = c("CD14"), group_cells_by = "dx")
+```
+
+
+# Clustering
+
+- Unsupervised clustering of cells is a common step in many single-cell expression workflows. In an experiment containing a mixture of cell types, each cluster might correspond to a different cell type. - This function takes a cell_data_set as input, clusters the cells using Louvain community detection, and returns a cell_data_set with internally stored cluster assignments. 
+- In addition to clusters this function calculates partitions, which represent superclusters of the Louvain communities that are found using a kNN pruning method. Cluster assignments can be accessed using the clusters function and partition assignments can be accessed using the partitions function.
+
+- Using only the topN variable genes to cluster
+
+## Find Variable Genes
+
+```{r Find Variable Genes} 
+# Method 1
+variable.genes <- cds@preprocess_aux@listData$gene_loadings[,1:3] %>%
+  abs() %>% rowSums() %>% base::sort(decreasing = T)
+head(variable.genes)
+# # Method 2
+# variance <- base::apply(exprs(cds), 1, stats::var) %>% base::sort(decreasing = T)
+# head(variance)
+```
+
+## Louvain Clustering
+
+```{r Louvain Clustering}
+cds <- monocle3::cluster_cells(cds,#[names(variance)[1:5000],],
+                               resolution= 1e-4,#c(10^seq(-6,-1)), # Do NOT set to high number
+                               # random_seed = 2019, 
+                               reduction_method = "UMAP", 
+                               cores = nCores)
+plot_cells(cds, color_cells_by = "cluster", group_cells_by="cluster")
+plot_cells(cds, color_cells_by = "partition", group_cells_by="partition")
+
+## Extract cluster info
+# monocle3::clusters(cds)
+# monocle3::partitions(cds)
+```
+
+## UMAP Plots {.tabset .tabset-fade .tabset-pills}
+
+```{r UMAP Plots, results="asis}
+for(v in c("dx","mut","ID")){
+  cat("\n")
+  cat("###",v,"\n")
+  p <- plot_cells(cds, color_cells_by=v, label_cell_groups=F)
+  print(p)
+  cat("\n")
+} 
+```
+
+
+# Pseudotime
+
+```{r Pseudotime} 
+cds <- learn_graph(cds)
+cds <- order_cells(cds)
+
+monocle3::plot_cells(cds)
+```
+
+
+## UMAP Gene Expression
+
+```{r UMAP Gene Expression}
+plot_cells(cds, genes=c("CD14","FCGR3A"), show_trajectory_graph = F)
+```
+
+
+# Differential Expression
+
+```{r Differential Expression}
+# With regression:
+monocle3_DGE <- function(cds, variable = "dx"){
+  # With regression:
+  gene_fits <- fit_models(cds, 
+                        model_formula_str = paste0("~",variable), 
+                        expression_family = "quasipoisson",
+                        cores = nCores, 
+                        verbose = T)
+  fit_coefs <- coefficient_table(gene_fits) 
+  time_terms <- fit_coefs %>% filter(term != "(Intercept)")
+  time_terms <- time_terms %>% mutate(q_value = p.adjust(p_value))
+  # sig_genes <- time_terms %>% filter (q_value < 0.05) %>% pull(gene_short_name)
+  return(time_terms)
+  # # With graph autocorrelation:
+  # pr_test_res <- graph_test(cds[variance[1:10],],  
+  #                           neighbor_graph="principal_graph", 
+  #                           cores=nCores)
+  # pr_deg_ids <- row.names(subset(pr_test_res, q_value < 0.05))
+}
+
+dge.dx <- monocle3_DGE("dx")
+```
+
+

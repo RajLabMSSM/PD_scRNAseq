@@ -5,10 +5,12 @@
 #BSUB -n 2		    	    # Number of cores required
 #BSUB -R span[hosts=1]		    # Number of cores per host 
 #BSUB -R rusage[mem=30000]	    # Memory per core
-#BSUB -W 2:00			    # Time requested 
+#BSUB -W 12:00			    # Time requested 
 #BSUB -oo /dev/PD_scRNAseq.out      # Log file for standard output (overwrite)
 #BSUB -eo /dev/PD_scRNAseq.error.out	    # log file for standard error (overwrite)
 #BSUB -L /bin/bash	 	    # Script shell language (/bin/tcsh, /bin/ksh etc.)
     
 module load R pandoc/1.19.2.1
+module load garnett
+module load seurat 
 Rscript Run_scRNAseq.R 'protein_coding' F 0.5 30
