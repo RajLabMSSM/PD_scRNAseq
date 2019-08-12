@@ -90,44 +90,6 @@ subsetBiotypes <- function(DAT, subsetGenes="protein_coding"){
   return(DAT)
 }
 
-subsetBiotypes_updated <- function(DAT, subsetGenes="protein_coding"){
-  if( subsetGenes!=F ){
-    cat(paste("Subsetting genes:",subsetGenes, "\n"))
-    # If the gene_biotypes file exists, import csv. Otherwise, get from biomaRt
-    if(file_test("-f", file.path(root, "Data/gene_biotypes.csv"))){
-      biotypes <- read.csv(file.path(root, "Data/gene_biotypes.csv"))
-    }
-    else {
-      ensembl <- biomaRt::useMart(biomart="ENSEMBL_MART_ENSEMBL", host="grch37.ensembl.org",
-                         dataset="hsapiens_gene_ensembl") 
-      ensembl <- biomaRt::useDataset(mart = ensembl, dataset = "hsapiens_gene_ensembl")
-      listFilters(ensembl)
-      listAttributes(ensembl)   
-      biotypes <- biomaRt::getBM(attributes=c("hgnc_symbol", "gene_biotype"), filters="hgnc_symbol",
-                        values=row.names(DAT@assays$RNA@data), mart=ensembl) 
-      write.csv(biotypes, file.path(root,"Data/gene_biotypes.csv"), quote=F, row.names=F)
-    }
-    # gene_list <- biotypes[biotypes$gene_biotype==subsetGenes,"hgnc_symbol"] 
-    # protDAT <- subset(DAT, features = gene_list) 
-     
-    #  # Subset data by creating new Seurat object (annoying but necessary)
-    geneSubset <- biotypes[biotypes$gene_biotype==subsetGenes,"hgnc_symbol"]
-
-    cat(paste(dim(DAT@assays$RNA@data[geneSubset, ])[1],"/", dim(DAT@assays$RNA@data)[1],
-              "genes are", subsetGenes))
-    # Add back into DAT
-    subset.matrix <-DAT@assays$RNA@data[geneSubset, ] # Pull the raw expression matrix from the original Seurat object containing only the genes of interest
-    DAT_sub <- Seurat::CreateSeuratObject(subset.matrix) # Create a new Seurat object with just the genes of interest
-    orig.ident <- row.names(DAT@meta.data) # Pull the identities from the original Seurat object as a data.frame
-    DAT_sub <- Seurat::AddMetaData(object = DAT_sub, metadata = DAT@meta.data) # Add the idents to the meta.data slot
-     
-    DAT_sub <- Seurat::SetIdent(object = DAT_sub, value = "ident") # Assign identities for the new Seurat object
-    DAT <- DAT_sub
-    rm(list = c("DAT_sub","geneSubset", "subset.matrix", "orig.ident"))
-  } 
-  return(DAT)
-}
-
 remove_nonmatched_metadata <- function(DAT, subsetCells){
   # Get rid of any NAs (cells that don't match up with the metadata) 
   if(subsetCells==F){ 
