@@ -181,18 +181,24 @@ monocle3_DGE <- function(cds_DGE,
   
   # Plot
   if(plot_topN!=F){
-    top_genes <- res$gene_short_name[1:plot_topN] %>%  as.character()
-    p <- monocle3::plot_genes_violin(cds_dge[top_genes,], 
-                                     group_cells_by=variable, 
-                                     ncol=2)
-    print(p)
+    try({
+      top_genes <- res$gene_short_name[1:plot_topN] %>%  as.character()
+      p <- monocle3::plot_genes_violin(cds_dge[top_genes,], 
+                                       group_cells_by=variable, 
+                                       ncol=2)
+      print(p)
+    })
+   
   } 
     
   if(plot_volcano){
-    varis <- unique(pData(cds_dge)[variable])[,1]
-    comparison_label <- paste0(variable," : ", varis[1], " vs. ", varis[2] )
-    vp <- volcano_plot(dge = res, caption=comparison_label, topN_labeled=6)
-    print(vp)
+    try({
+      varis <- unique(pData(cds_dge)[variable])[,1]
+      comparison_label <- paste0(variable," : ", varis[1], " vs. ", varis[2] )
+      vp <- volcano_plot(dge = res, caption=comparison_label, topN_labeled=6)
+      print(vp)
+    })
+   
   }
   
   if(results_path!=F){
