@@ -72,7 +72,7 @@ set.seed(2019)
 
 
 # Load preprocessed data
-cds <- readRDS("./Data/monocle3_CDS.RData")
+load("./Data/monocle3_CDS.RData")
 cds
 ```
 
@@ -82,6 +82,7 @@ Detect whether or not to limit DGE analysis to only the top N most variable gene
 
 ```{r Differential Gene Expression}
 # DGE limiter
+dge_limit <- 10
 if(dge_limit){
   cds_DGE <- cds[var.genes[1:dge_limit],]
   print(paste0("Testing only the top ",dge_limit," most variable genes in DGE analysis."))

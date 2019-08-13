@@ -195,8 +195,8 @@ monocle3_DGE <- function(cds_DGE,
     print(vp)
   }
   
-  if(save_results!=F){
-    data.table::fwrite(paste0("./Results/",results_path))
+  if(results_path!=F){
+    data.table::fwrite(res, results_path)
   }
  
   return(res)

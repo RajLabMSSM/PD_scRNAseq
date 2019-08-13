@@ -212,6 +212,8 @@ monocle3::plot_cells(cds,
 Save R object and run memory-intensive DGE analyses on computing cluster.
 
 ```{r Save Checkpoint}
-saveRDS(cds, file="./Data/monocle3_CDS.RData")
+# saveRDS(cds, file="./Data/monocle3_CDS.RData")
+save(cds, var.genes, file = "./Data/monocle3_CDS.RData")
+
 ```
 
