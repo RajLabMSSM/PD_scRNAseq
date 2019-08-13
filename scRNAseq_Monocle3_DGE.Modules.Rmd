@@ -82,7 +82,7 @@ Detect whether or not to limit DGE analysis to only the top N most variable gene
 
 ```{r Differential Gene Expression}
 # DGE limiter
-dge_limit <- 10
+# dge_limit <- 10
 if(dge_limit){
   cds_DGE <- cds[var.genes[1:dge_limit],]
   print(paste0("Testing only the top ",dge_limit," most variable genes in DGE analysis."))
@@ -106,7 +106,7 @@ dge.dx <- monocle3_DGE(cds_DGE = cds_DGE,
                            expression_family = expression_family,
                            plot_volcano = T, 
                            results_path = "./Results/across_PD.vs.Ctrl.csv") 
-createDT(dge.dx)
+createDT(head(dge.dx))
 ```
 
 ### PD vs. GBA
@@ -118,8 +118,8 @@ dge.mut <- monocle3_DGE(cds_DGE = cds_DGE,
                            nCores = nCores, 
                            expression_family = expression_family,
                            plot_volcano = T, 
-                           results_path = "./Results/across_PD.vs.GBA.txt") 
-createDT(dge.mut)
+                           results_path = "./Results/across_PD.vs.GBA.csv") 
+createDT(head(dge.mut))
 ```
 
 ### Canonical vs. Intermediate Monocytes
@@ -128,13 +128,13 @@ createDT(dge.mut)
 
 ```{r Across Clusters: Canonical vs. Intermediate Monocytes}
 dge.clust <- monocle3_DGE(cds_DGE = cds_DGE,
-                           variable = "Cluster", 
-                           variable_subsets = c(1,2),
-                           nCores = nCores, 
-                           expression_family = expression_family,
-                           plot_volcano = T, 
-                          results_path = "./Results/across_Clust1.vs.Clust2.txt") 
-createDT(dge.clust)
+                          variable = "Cluster", 
+                          variable_subsets = c(1,2),
+                          nCores = nCores, 
+                          expression_family = expression_family,
+                          plot_volcano = T, 
+                          results_path = "./Results/across_Clust1.vs.Clust2.csv") 
+createDT(head(dge.clust))
 ```
 
 
@@ -148,15 +148,15 @@ createDT(dge.clust)
 ```{r Within Clusters: Disease, results="asis"}
 for (clust in within_clusters){
   cat("\n")
-  cat("####",clust,"\n")
+  cat("#### Cluster ",clust,"\n")
   cds_clust <- cds_DGE[,pData(cds_DGE)$Cluster==clust]
   dge.dx.clust <- monocle3_DGE(cds_DGE = cds_clust,
                            variable = "dx",  
                            nCores = nCores, 
                            expression_family = expression_family,
                            plot_volcano = T, 
-                           results_path = paste0("./Results/within.Clust",clust,"_PD.vs.Ctrl.txt") )
-  createDT(dge.dx.clust)
+                           results_path = paste0("./Results/within.Clust",clust,"_PD.vs.Ctrl.csv") )
+  createDT_html(head(dge.dx.clust))
   cat("\n")
 }
 ```
@@ -174,8 +174,8 @@ for (clust in within_clusters){
                            nCores = nCores, 
                            expression_family = expression_family,
                            plot_volcano = T, 
-                           results_path = paste0("./Results/within.Clust",clust,"_PD.vs.GBA.txt") ) 
-  createDT(dge.mut.clust)
+                           results_path = paste0("./Results/within.Clust",clust,"_PD.vs.GBA.csv") ) 
+  createDT_html(head(dge.mut.clust))
   cat("\n")
 }
 ```
@@ -183,13 +183,16 @@ for (clust in within_clusters){
 
 # Top Markers
 
-Find genes that characterize each cluster.
+- Find genes that characterize each cluster.  
+- Specifically, only compare Clusters 1 and 2 to focuses on differences between these.  
 
 ```{r Top Markers}
-marker_test_res = monocle3::top_markers(cds_DGE,
-                                        group_cells_by="cluster", 
-                                        reference_cells=1000, 
+cds_clusts <- cds_DGE[,(pData(cds_DGE)$Cluster==clust)]
+marker_test_res = monocle3::top_markers(cds_clusts,
+                                        group_cells_by="cluster",  
+                                        genes_to_test_per_group = 1000,
                                         cores=nCores)
+data.table::fwrite(marker_test_res, "./Results/cluster_markers.csv")
 # Cluster-specific markers
 top_specific_markers = marker_test_res %>%
     filter(fraction_expressing >= 0.10) %>%
@@ -239,7 +242,7 @@ Identify co-expression modules.<br>
 `find_gene_modules` essentially runs UMAP on the genes (as opposed to the cells) and then groups them into modules using Louvain community analysis.
 
 ```{r Gene Modules}
-gene_module_df = monocle3::find_gene_modules(cds_DGE, 
+gene_module_df = monocle3::find_gene_modules(cds_DGE[var.genes[1:1000], ], 
                                              resolution=1e-2, 
                                              cores=nCores)
 # Create pheatmap table
