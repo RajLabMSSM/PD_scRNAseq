@@ -147,37 +147,50 @@ monocle3_DGE <- function(cds_DGE,
                          nCores=4, 
                          expression_family="quasipoisson", 
                          variable_subsets=F,
+                         results_path="./Results/DGE_results.txt",
+                         force_DGE=F,
                          plot_topN=F,
-                         plot_volcano=T,
-                         results_path="./Results/DGE_results.txt"){
-  # With regression:
-  suppressWarnings(
-  if(variable_subsets==F){
-    cds_dge <- cds_DGE
-  } else { 
-    # variable="Cluster"
-    # variable_subsets = c(1,2) 
-    bool_vector <- (pData(cds_DGE)[variable] %in% variable_subsets)[[1]]
-    cds_dge <- cds_DGE[, bool_vector]
-  }
-  )
-  dge.start <- Sys.time()
-  gene_fits <- fit_models(cds_dge, 
-                          model_formula_str = paste0("~",variable), 
-                          expression_family = "quasipoisson",
-                          cores = nCores, 
-                          verbose = T)
-  fit_coefs <- coefficient_table(gene_fits) 
-  res <- fit_coefs %>% filter(term != "(Intercept)") %>% arrange(q_value, desc(abs(estimate)))
-  # time_terms <- time_terms %>% mutate(q_value = p.adjust(p_value))
-  sig_genes <- res %>% filter (q_value < 0.05) %>% pull(gene_short_name)
-  
-  # Report
-  dge.end <- Sys.time()
-  dge.diff <- as.numeric(round(difftime(dge.end, dge.start, units = "hours"),2))
-  print(paste("DGE:",dim(cds_DGE)[1],"genes x",dim(cds_DGE)[2],"samples"))
-  print(paste("+ Calculated in",dge.diff,"hours."))
-  print(paste("+",length(sig_genes),"significiant DGE(s) detected."))
+                         plot_volcano=T){
+  # Import DGE results file if it already exists
+  if(file.exists(results_path) & force_DGE==F){
+    print("Results file already exists. Importing...")
+    res <- data.table::fread(results_path)
+  }else{
+    dge.start <- Sys.time()
+    suppressWarnings(
+      if(variable_subsets==F){
+        cds_dge <- cds_DGE
+      } else { 
+        # variable="Cluster"
+        # variable_subsets = c(1,2) 
+        bool_vector <- (pData(cds_DGE)[variable] %in% variable_subsets)[[1]]
+        cds_dge <- cds_DGE[, bool_vector]
+      }
+    )
+   
+    # With regression:
+    print("Initiating DGE analysis...")
+    gene_fits <- fit_models(cds_dge, 
+                            model_formula_str = paste0("~",variable), 
+                            expression_family = "quasipoisson",
+                            cores = nCores, 
+                            verbose = T)
+    fit_coefs <- coefficient_table(gene_fits) 
+    res <- fit_coefs %>% filter(term != "(Intercept)") %>% arrange(q_value, desc(abs(estimate)))  
+    # Save
+    if(results_path!=F){
+      data.table::fwrite(res, results_path)
+    }
+    # Report
+    ## Time taken
+    dge.end <- Sys.time()
+    dge.diff <- as.numeric(round(difftime(dge.end, dge.start, units = "hours"),2))
+    print(paste("+ Calculated in",dge.diff,"hours."))
+    ## Sig genes
+    sig_genes <- res %>% filter (q_value < 0.05) %>% pull(gene_short_name)
+    print(paste("DGE:",dim(cds_DGE)[1],"genes x",dim(cds_DGE)[2],"samples"))
+    print(paste("+",length(sig_genes),"significiant DGE(s) detected.")) 
+  } 
   
   # Plot
   if(plot_topN!=F){
@@ -187,32 +200,20 @@ monocle3_DGE <- function(cds_DGE,
                                        group_cells_by=variable, 
                                        ncol=2)
       print(p)
-    })
-   
+    }) 
   } 
-    
+  
   if(plot_volcano){
     try({
       varis <- unique(pData(cds_dge)[variable])[,1]
       comparison_label <- paste0(variable," : ", varis[1], " vs. ", varis[2] )
       vp <- volcano_plot(dge = res, caption=comparison_label, topN_labeled=6)
       print(vp)
-    })
-   
-  }
-  
-  if(results_path!=F){
-    data.table::fwrite(res, results_path)
-  }
- 
+    }) 
+  } 
   return(res)
-  # # With graph autocorrelation:
-  # pr_test_res <- graph_test(cds[variance[1:10],],  
-  #                           neighbor_graph="principal_graph", 
-  #                           cores=nCores)
-  # pr_deg_ids <- row.names(subset(pr_test_res, q_value < 0.05))
 }
-
+ 
 
 volcano_plot <- function(dge, caption="", topN_labeled=6){
   # dge <- res

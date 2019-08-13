@@ -105,7 +105,7 @@ dge.dx <- monocle3_DGE(cds_DGE = cds_DGE,
                            nCores = nCores, 
                            expression_family = expression_family,
                            plot_volcano = T, 
-                           results_path = "./Results/across_PD.vs.Ctrl.txt") 
+                           results_path = "./Results/across_PD.vs.Ctrl.csv") 
 createDT(dge.dx)
 ```
 
