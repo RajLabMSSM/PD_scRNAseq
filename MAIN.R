@@ -148,7 +148,8 @@ monocle3_DGE <- function(cds_DGE,
                          expression_family="quasipoisson", 
                          variable_subsets=F,
                          plot_topN=F,
-                         plot_volcano=T){
+                         plot_volcano=T,
+                         results_path="./Results/DGE_results.txt"){
   # With regression:
   suppressWarnings(
   if(variable_subsets==F){
@@ -192,6 +193,10 @@ monocle3_DGE <- function(cds_DGE,
     comparison_label <- paste0(variable," : ", varis[1], " vs. ", varis[2] )
     vp <- volcano_plot(dge = res, caption=comparison_label, topN_labeled=6)
     print(vp)
+  }
+  
+  if(save_results!=F){
+    data.table::fwrite(paste0("./Results/",results_path))
   }
  
   return(res)

@@ -208,8 +208,22 @@ dge.dx <- monocle3_DGE(cds_DGE = cds_DGE,
                            variable = "dx",
                            nCores = nCores, 
                            expression_family = expression_family,
-                           plot_volcano = T) 
+                           plot_volcano = T, 
+                           results_path = "./Results/across_PD.vs.Ctrl.txt") 
 createDT(dge.dx)
+```
+
+### PD vs. GBA
+
+```{r Across Clusters: PD vs. GBA} 
+dge.mut <- monocle3_DGE(cds_DGE = cds_DGE,
+                           variable = "dx",
+                           variable_subsets = c("PD","GBA"),
+                           nCores = nCores, 
+                           expression_family = expression_family,
+                           plot_volcano = T, 
+                           results_path = "./Results/across_PD.vs.GBA.txt") 
+createDT(dge.mut)
 ```
 
 ### Canonical vs. Intermediate Monocytes
@@ -222,7 +236,8 @@ dge.clust <- monocle3_DGE(cds_DGE = cds_DGE,
                            variable_subsets = c(1,2),
                            nCores = nCores, 
                            expression_family = expression_family,
-                           plot_volcano = T) 
+                           plot_volcano = T, 
+                          results_path = "./Results/across_Clust1.vs.Clust2.txt") 
 createDT(dge.clust)
 ```
 
@@ -243,26 +258,28 @@ for (clust in within_clusters){
                            variable = "dx",  
                            nCores = nCores, 
                            expression_family = expression_family,
-                           plot_volcano = T) 
+                           plot_volcano = T, 
+                           results_path = paste0("./Results/within.Clust",clust,"_PD.vs.Ctrl.txt") )
   createDT(dge.dx.clust)
   cat("\n")
 }
 ```
 
-### Mutation {.tabset .tabset-fade .tabset-pills}
+### PD vs. GBA {.tabset .tabset-fade .tabset-pills}
 
 ```{r Within Clusters: Mutations, results="asis"}
 for (clust in within_clusters){
   cat("\n")
   cat("####",clust,"\n")
   cds_clust <- cds_DGE[,(pData(cds_DGE)$Cluster==clust)]
-  dge.dx.clust <- monocle3_DGE(cds_DGE = cds_clust,
+  dge.mut.clust <- monocle3_DGE(cds_DGE = cds_clust,
                            variable = "mut",  
                            variable_subsets = c("PD","GBA"),
                            nCores = nCores, 
                            expression_family = expression_family,
-                           plot_volcano = T) 
-  createDT(dge.dx.clust)
+                           plot_volcano = T, 
+                           results_path = paste0("./Results/within.Clust",clust,"_PD.vs.GBA.txt") ) 
+  createDT(dge.mut.clust)
   cat("\n")
 }
 ```
@@ -275,7 +292,7 @@ for (clust in within_clusters){
 Find genes that characterize each cluster.
 
 ```{r Top Markers}
-marker_test_res = monocle3::top_markers(cds[var.genes[1:100], ],
+marker_test_res = monocle3::top_markers(cds_DGE,
                                         group_cells_by="cluster", 
                                         reference_cells=1000, 
                                         cores=nCores)
