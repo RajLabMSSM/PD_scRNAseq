@@ -13,7 +13,7 @@ Analysis pipelines for Parkinson's Disease scRNA-seq data from CD14+ peripheral 
 ### [Full DGE Results Tables](https://github.com/RajLabMSSM/PD_scRNAseq/tree/master/Results)  
  
  
-### [Enrichement Results](https://rajlabmssm.github.io/PD_scRNAseq/scRNAseq_Monocle3_Enrich.html)  
+### [Enrichment Results](https://rajlabmssm.github.io/PD_scRNAseq/scRNAseq_Monocle3_Enrich.html)  
 
 ---
 ### Created by:  
