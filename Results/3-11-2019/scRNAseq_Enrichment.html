@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+
+<meta charset="utf-8" />
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="generator" content="pandoc" />
+
+
+
+<meta name="date" content="2019-03-12" />
+
+<title>Enrichment</title>
+
+<script src="scRNAseq_Enrichment_files/jquery-1.11.3/jquery.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="scRNAseq_Enrichment_files/bootstrap-3.3.5/css/spacelab.min.css" rel="stylesheet" />
+<script src="scRNAseq_Enrichment_files/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="scRNAseq_Enrichment_files/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="scRNAseq_Enrichment_files/bootstrap-3.3.5/shim/respond.min.js"></script>
+<script src="scRNAseq_Enrichment_files/jqueryui-1.11.4/jquery-ui.min.js"></script>
+<link href="scRNAseq_Enrichment_files/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
+<script src="scRNAseq_Enrichment_files/tocify-1.9.1/jquery.tocify.js"></script>
+<script src="scRNAseq_Enrichment_files/navigation-1.1/tabsets.js"></script>
+<script src="scRNAseq_Enrichment_files/navigation-1.1/codefolding.js"></script>
+
+
+<style type="text/css">code{white-space: pre;}</style>
+<style type="text/css" data-origin="pandoc">
+div.sourceCode { overflow-x: auto; }
+table.sourceCode, tr.sourceCode, td.lineNumbers, td.sourceCode {
+  margin: 0; padding: 0; vertical-align: baseline; border: none; }
+table.sourceCode { width: 100%; line-height: 100%; background-color: #303030; color: #cccccc; }
+td.lineNumbers { text-align: right; padding-right: 4px; padding-left: 4px; }
+td.sourceCode { padding-left: 5px; }
+pre, code { color: #cccccc; background-color: #303030; }
+code > span.kw { color: #f0dfaf; } /* Keyword */
+code > span.dt { color: #dfdfbf; } /* DataType */
+code > span.dv { color: #dcdccc; } /* DecVal */
+code > span.bn { color: #dca3a3; } /* BaseN */
+code > span.fl { color: #c0bed1; } /* Float */
+code > span.ch { color: #dca3a3; } /* Char */
+code > span.st { color: #cc9393; } /* String */
+code > span.co { color: #7f9f7f; } /* Comment */
+code > span.ot { color: #efef8f; } /* Other */
+code > span.al { color: #ffcfaf; } /* Alert */
+code > span.fu { color: #efef8f; } /* Function */
+code > span.er { color: #c3bf9f; } /* Error */
+code > span.wa { color: #7f9f7f; font-weight: bold; } /* Warning */
+code > span.cn { color: #dca3a3; font-weight: bold; } /* Constant */
+code > span.sc { color: #dca3a3; } /* SpecialChar */
+code > span.vs { color: #cc9393; } /* VerbatimString */
+code > span.ss { color: #cc9393; } /* SpecialString */
+code > span.im { } /* Import */
+code > span.va { } /* Variable */
+code > span.cf { color: #f0dfaf; } /* ControlFlow */
+code > span.op { color: #f0efd0; } /* Operator */
+code > span.bu { } /* BuiltIn */
+code > span.ex { } /* Extension */
+code > span.pp { color: #ffcfaf; font-weight: bold; } /* Preprocessor */
+code > span.at { } /* Attribute */
+code > span.do { color: #7f9f7f; } /* Documentation */
+code > span.an { color: #7f9f7f; font-weight: bold; } /* Annotation */
+code > span.cv { color: #7f9f7f; font-weight: bold; } /* CommentVar */
+code > span.in { color: #7f9f7f; font-weight: bold; } /* Information */
+
+.sourceCode .row {
+  width: 100%;
+}
+.sourceCode {
+  overflow-x: auto;
+}
+.code-folding-btn {
+  margin-right: -30px;
+}
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    for (var j = 0; j < rules.length; j++) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") continue;
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' || rule.style.backgroundColor === '') continue;
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+<style type="text/css">
+  pre:not([class]) {
+    background-color: white;
+  }
+</style>
+
+
+<style type="text/css">
+h1 {
+  font-size: 34px;
+}
+h1.title {
+  font-size: 38px;
+}
+h2 {
+  font-size: 30px;
+}
+h3 {
+  font-size: 24px;
+}
+h4 {
+  font-size: 18px;
+}
+h5 {
+  font-size: 16px;
+}
+h6 {
+  font-size: 12px;
+}
+.table th:not([align]) {
+  text-align: left;
+}
+</style>
+
+
+</head>
+
+<body>
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+code {
+  color: inherit;
+  background-color: rgba(0, 0, 0, 0.04);
+}
+img {
+  max-width:100%;
+  height: auto;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+.html-widget {
+  margin-bottom: 20px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+summary {
+  display: list-item;
+}
+</style>
+
+
+
+<div class="container-fluid main-container">
+
+<!-- tabsets -->
+
+<style type="text/css">
+.tabset-dropdown > .nav-tabs {
+  display: inline-table;
+  max-height: 500px;
+  min-height: 44px;
+  overflow-y: auto;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs > li.active:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
+  content: "&#xe258;";
+  border: none;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs > li.active {
+  display: block;
+}
+
+.tabset-dropdown > .nav-tabs > li > a,
+.tabset-dropdown > .nav-tabs > li > a:focus,
+.tabset-dropdown > .nav-tabs > li > a:hover {
+  border: none;
+  display: inline-block;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li {
+  display: block;
+  float: none;
+}
+
+.tabset-dropdown > .nav-tabs > li {
+  display: none;
+}
+</style>
+
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+
+$(document).ready(function () {
+  $('.tabset-dropdown > .nav-tabs > li').click(function () {
+    $(this).parent().toggleClass('nav-tabs-open')
+  });
+});
+</script>
+
+<!-- code folding -->
+<style type="text/css">
+.code-folding-btn { margin-bottom: 4px; }
+</style>
+<script>
+$(document).ready(function () {
+  window.initializeCodeFolding("show" === "show");
+});
+</script>
+
+
+
+<script>
+$(document).ready(function ()  {
+
+    // move toc-ignore selectors from section div to header
+    $('div.section.toc-ignore')
+        .removeClass('toc-ignore')
+        .children('h1,h2,h3,h4,h5').addClass('toc-ignore');
+
+    // establish options
+    var options = {
+      selectors: "h1,h2,h3",
+      theme: "bootstrap3",
+      context: '.toc-content',
+      hashGenerator: function (text) {
+        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_').toLowerCase();
+      },
+      ignoreSelector: ".toc-ignore",
+      scrollTo: 0
+    };
+    options.showAndHide = true;
+    options.smoothScroll = true;
+
+    // tocify
+    var toc = $("#TOC").tocify(options).data("toc-tocify");
+});
+</script>
+
+<style type="text/css">
+
+#TOC {
+  margin: 25px 0px 20px 0px;
+}
+@media (max-width: 768px) {
+#TOC {
+  position: relative;
+  width: 100%;
+}
+}
+
+
+.toc-content {
+  padding-left: 30px;
+  padding-right: 40px;
+}
+
+div.main-container {
+  max-width: 1200px;
+}
+
+div.tocify {
+  width: 20%;
+  max-width: 260px;
+  max-height: 85%;
+}
+
+@media (min-width: 768px) and (max-width: 991px) {
+  div.tocify {
+    width: 25%;
+  }
+}
+
+@media (max-width: 767px) {
+  div.tocify {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+.tocify ul, .tocify li {
+  line-height: 20px;
+}
+
+.tocify-subheader .tocify-item {
+  font-size: 0.90em;
+  padding-left: 25px;
+  text-indent: 0;
+}
+
+.tocify .list-group-item {
+  border-radius: 0px;
+}
+
+
+</style>
+
+<!-- setup 3col/9col grid for toc_float and main content  -->
+<div class="row-fluid">
+<div class="col-xs-12 col-sm-4 col-md-3">
+<div id="TOC" class="tocify">
+</div>
+</div>
+
+<div class="toc-content col-xs-12 col-sm-8 col-md-9">
+
+
+
+
+<div class="fluid-row" id="header">
+
+<div class="btn-group pull-right">
+<button type="button" class="btn btn-default btn-xs dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false"><span>Code</span> <span class="caret"></span></button>
+<ul class="dropdown-menu" style="min-width: 50px;">
+<li><a id="rmd-show-all-code" href="#">Show All Code</a></li>
+<li><a id="rmd-hide-all-code" href="#">Hide All Code</a></li>
+</ul>
+</div>
+
+
+
+<h1 class="title toc-ignore">Enrichment</h1>
+<h4 class="author"><em><h3>
+Author
+</h3>
+<p>Brian M. Schilder, Bioinformatician II</p></em></h4>
+<h4 class="date"><em>2019-03-12</em></h4>
+
+</div>
+
+
+<p>Enrichment tests on differentially expressed genes between Canonical monocytes (cluster 1) and Intermediate monocytes (cluster 1).</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="co"># Import functions</span>
+root =<span class="st"> &quot;./&quot;</span>
+<span class="kw">source</span>(<span class="kw">file.path</span>(root,<span class="st">&quot;general_functions.R&quot;</span>))
+<span class="kw">library</span>(enrichR) <span class="co">#BiocManager::install(&quot;enrichR&quot;)</span>
+<span class="kw">library</span>(data.table)</code></pre></div>
+<pre><code>## Warning: package &#39;data.table&#39; was built under R version 3.5.2</code></pre>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="kw">library</span>(dplyr)</code></pre></div>
+<pre><code>## Warning: package &#39;dplyr&#39; was built under R version 3.5.2</code></pre>
+<pre><code>## 
+## Attaching package: &#39;dplyr&#39;</code></pre>
+<pre><code>## The following objects are masked from &#39;package:data.table&#39;:
+## 
+##     between, first, last</code></pre>
+<pre><code>## The following objects are masked from &#39;package:stats&#39;:
+## 
+##     filter, lag</code></pre>
+<pre><code>## The following objects are masked from &#39;package:base&#39;:
+## 
+##     intersect, setdiff, setequal, union</code></pre>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="kw">library</span>(DT)</code></pre></div>
+<div id="deg-enrichment-w-enrichr" class="section level1 tabset tabset-fade tabset-pills">
+<h1>DEG Enrichment w/ enrichR</h1>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">enrichr_dbs &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&quot;KEGG_2018&quot;</span>, <span class="st">&quot;Reactome_2016&quot;</span>,
+                 <span class="st">&quot;GO_Biological_Process_2018&quot;</span>, <span class="st">&quot;GO_Molecular_Function_2018&quot;</span>, <span class="st">&quot;GO_Cellular_Component_2018&quot;</span>, 
+                 <span class="st">&quot;Rare_Diseases_AutoRIF_ARCHS4_Predictions&quot;</span>,<span class="st">&quot;ARCHS4_Cell-lines&quot;</span>,
+                 <span class="st">&quot;Aging_Perturbations_from_GEO_up&quot;</span>, <span class="st">&quot;Aging_Perturbations_from_GEO_down&quot;</span>, 
+                 <span class="st">&quot;Human_Gene_Atlas&quot;</span>,<span class="st">&quot;ChEA_2016&quot;</span>, <span class="st">&quot;KEA_2015&quot;</span>)
+<span class="co"># createDT(enrichR::listEnrichrDbs(), &quot;Enrichr Databases&quot;)</span>
+DEGs_monocytes &lt;-<span class="st"> </span><span class="kw">read.csv</span>(<span class="st">&quot;Results/Current_Pipeline/Differential Gene Expression.csv&quot;</span>, <span class="dt">row.names =</span> <span class="dv">1</span>)  
+DEGs_monocytes &lt;-<span class="st"> </span><span class="kw">subset</span>(DEGs_monocytes, p_val_adj<span class="op">&lt;=</span><span class="fl">0.05</span>)[<span class="dv">1</span><span class="op">:</span><span class="dv">500</span>,]
+
+geneList &lt;-<span class="st"> </span><span class="kw">data.frame</span>(<span class="dt">Gene=</span><span class="kw">row.names</span>(DEGs_monocytes), 
+     <span class="dt">Weight=</span>scales<span class="op">::</span><span class="kw">rescale</span>(<span class="kw">length</span>(DEGs_monocytes<span class="op">$</span>p_val_adj)<span class="op">:</span><span class="dv">1</span>))
+
+results &lt;-<span class="st"> </span><span class="kw">enrichr</span>(<span class="dt">genes =</span> geneList, <span class="dt">databases =</span> enrichr_dbs ) </code></pre></div>
+<p>Uploading data to Enrichr… Done. Querying KEGG_2018… Done. Querying Reactome_2016… Done. Querying GO_Biological_Process_2018… Done. Querying GO_Molecular_Function_2018… Done. Querying GO_Cellular_Component_2018… Done. Querying Rare_Diseases_AutoRIF_ARCHS4_Predictions… Done. Querying ARCHS4_Cell-lines… Done. Querying Aging_Perturbations_from_GEO_up… Done. Querying Aging_Perturbations_from_GEO_down… Done. Querying Human_Gene_Atlas… Done. Querying ChEA_2016… Done. Querying KEA_2015… Done. Parsing results… Done.</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">topHits &lt;-<span class="st"> </span><span class="kw">data.table</span>()
+<span class="cf">for</span> (db <span class="cf">in</span> enrichr_dbs){
+  <span class="kw">cat</span>(<span class="st">&#39;</span><span class="ch">\n</span><span class="st">&#39;</span>)
+  <span class="kw">cat</span>(<span class="st">&quot;##&quot;</span>,db,<span class="st">&quot;</span><span class="ch">\n</span><span class="st">&quot;</span>)  
+  <span class="co"># res &lt;- subset(results[[db]], Adjusted.P.value&lt;=0.05) </span>
+  newdf =<span class="st"> </span><span class="kw">subset</span>(results[[ db ]], Adjusted.P.value<span class="op">&lt;=</span><span class="fl">0.05</span>, <span class="dt">select=</span><span class="kw">c</span>(<span class="st">&quot;Term&quot;</span>,<span class="st">&quot;Overlap&quot;</span>,<span class="st">&quot;Adjusted.P.value&quot;</span>)) <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">mutate</span>(<span class="dt">Database=</span>db)  
+  newdf =<span class="st"> </span>newdf[<span class="dv">1</span><span class="op">:</span><span class="dv">3</span>, ]
+  topHits &lt;-<span class="st"> </span><span class="kw">rbind</span>(topHits, newdf[<span class="kw">complete.cases</span>(newdf), ]) 
+  <span class="kw">cat</span>(<span class="st">&#39;</span><span class="ch">\n</span><span class="st">&#39;</span>)
+}  </code></pre></div>
+<div id="kegg_2018" class="section level2">
+<h2>KEGG_2018</h2>
+</div>
+<div id="reactome_2016" class="section level2">
+<h2>Reactome_2016</h2>
+</div>
+<div id="go_biological_process_2018" class="section level2">
+<h2>GO_Biological_Process_2018</h2>
+</div>
+<div id="go_molecular_function_2018" class="section level2">
+<h2>GO_Molecular_Function_2018</h2>
+</div>
+<div id="go_cellular_component_2018" class="section level2">
+<h2>GO_Cellular_Component_2018</h2>
+</div>
+<div id="rare_diseases_autorif_archs4_predictions" class="section level2">
+<h2>Rare_Diseases_AutoRIF_ARCHS4_Predictions</h2>
+</div>
+<div id="archs4_cell-lines" class="section level2">
+<h2>ARCHS4_Cell-lines</h2>
+</div>
+<div id="aging_perturbations_from_geo_up" class="section level2">
+<h2>Aging_Perturbations_from_GEO_up</h2>
+</div>
+<div id="aging_perturbations_from_geo_down" class="section level2">
+<h2>Aging_Perturbations_from_GEO_down</h2>
+</div>
+<div id="human_gene_atlas" class="section level2">
+<h2>Human_Gene_Atlas</h2>
+</div>
+<div id="chea_2016" class="section level2">
+<h2>ChEA_2016</h2>
+</div>
+<div id="kea_2015" class="section level2">
+<h2>KEA_2015</h2>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="kw">write.csv</span>(topHits, <span class="st">&quot;topEnrichR_hits.csv&quot;</span>)
+topHits</code></pre></div>
+<pre><code>                                                                       Term</code></pre>
+<p>1: Peptide chain elongation_Homo sapiens_R-HSA-156902 2: Viral mRNA Translation_Homo sapiens_R-HSA-192823 3: Eukaryotic Translation Elongation_Homo sapiens_R-HSA-156842 4: neutrophil degranulation (<a href="GO:0043312" class="uri">GO:0043312</a>) 5: neutrophil mediated immunity (<a href="GO:0002446" class="uri">GO:0002446</a>) 6: protein targeting to ER (<a href="GO:0045047" class="uri">GO:0045047</a>) 7: RAGE receptor binding (<a href="GO:0050786" class="uri">GO:0050786</a>) 8: vacuolar lumen (<a href="GO:0005775" class="uri">GO:0005775</a>) 9: cytosolic large ribosomal subunit (<a href="GO:0022625" class="uri">GO:0022625</a>) 10: secretory granule lumen (<a href="GO:0034774" class="uri">GO:0034774</a>) 11: Infantile_histiocytoid_cardiomyopathy 12: Berylliosis 13: Anisakiasis 14: MV411 15: HNSCC 16: THP1 17: Mouse_liver_6 months vs 14 months_GSE15129_aging:322 18: Human_CD4+Tlyphocytes_72 years vs 81 years_GSE62373_aging:186 19: Human_CD4+Tlyphocytes_61 years vs 81 years_GSE62373_aging:170 20: Human_bone marrow mononuclear cells_28 years vs 79 years_GSE32725_aging:306 21: Human_CD4+Tlymphocytes_25 years vs 64 years_GSE62374_aging:131 22: Mouse_inguinal fat_5 months vs 24 months_GSE25325_aging:277 23: CD14+_Monocytes 24: CD33+_Myeloid 25: WholeBlood Term Overlap Adjusted.P.value Database 1: 21/84 5.051226e-05 Reactome_2016 2: 20/84 5.051226e-05 Reactome_2016 3: 21/89 5.051226e-05 Reactome_2016 4: 62/480 1.561838e-07 GO_Biological_Process_2018 5: 62/488 1.561838e-07 GO_Biological_Process_2018 6: 21/98 4.209800e-04 GO_Biological_Process_2018 7: 4/10 3.465857e-02 GO_Molecular_Function_2018 8: 19/162 9.638372e-03 GO_Cellular_Component_2018 9: 12/70 1.289306e-02 GO_Cellular_Component_2018 10: 34/318 1.483029e-03 GO_Cellular_Component_2018 11: 48/200 5.266823e-12 Rare_Diseases_AutoRIF_ARCHS4_Predictions 12: 45/200 1.061153e-10 Rare_Diseases_AutoRIF_ARCHS4_Predictions 13: 43/200 3.213472e-10 Rare_Diseases_AutoRIF_ARCHS4_Predictions 14: 163/2395 1.151938e-03 ARCHS4_Cell-lines 15: 149/2395 7.875202e-03 ARCHS4_Cell-lines 16: 147/2395 1.361519e-02 ARCHS4_Cell-lines 17: 59/343 2.865875e-14 Aging_Perturbations_from_GEO_up 18: 60/272 2.570463e-16 Aging_Perturbations_from_GEO_up 19: 52/218 1.003995e-14 Aging_Perturbations_from_GEO_up 20: 67/286 3.230273e-17 Aging_Perturbations_from_GEO_down 21: 68/294 4.542453e-17 Aging_Perturbations_from_GEO_down 22: 62/324 6.587396e-15 Aging_Perturbations_from_GEO_down 23: 63/383 1.942984e-07 Human_Gene_Atlas 24: 78/679 2.277838e-02 Human_Gene_Atlas 25: 57/514 1.997563e-02 Human_Gene_Atlas Overlap Adjusted.P.value Database</p>
+</div>
+</div>
+
+
+
+</div>
+</div>
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.header').parent('thead').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

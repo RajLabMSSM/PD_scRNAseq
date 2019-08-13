@@ -253,6 +253,41 @@ volcano_plot <- function(dge, caption="", topN_labeled=6){
   return(vol)
 }
 
+
+
+top_cluster_markers <- function(cds_DGE, 
+                                cluster_list=c(1,2), 
+                                genes_to_test_per_group=100, 
+                                save_path= "./Results/cluster_markers.csv", 
+                                verbose=F){
+  # Subset clusters
+  cds_clusts <- cds_DGE[,(pData(cds_DGE)$Cluster %in% cluster_list)]
+  # Test
+  marker_test_res = monocle3::top_markers(cds_clusts,
+                                          group_cells_by="cluster", 
+                                          genes_to_test_per_group = genes_to_test_per_group,
+                                          cores=nCores, 
+                                          verbose=verbose)
+  # Sort
+  marker_test_res <- marker_test_res %>% arrange(desc(fraction_expressing), marker_test_q_value, desc(specificity), desc(pseudo_R2))  
+  # Save
+  if(save_path!=F){
+    data.table::fwrite(marker_test_res, save_path)
+  }
+  # Filter
+  filtered_res <- marker_test_res %>%
+    filter(fraction_expressing >= 0.10 & marker_test_q_value <=0.05) %>%
+    group_by(cell_group) %>% arrange(desc(specificity), desc(pseudo_R2))
+  createDT_html(filtered_res) %>% print()
+  # Plot
+  top_specific_markers <-filtered_res$gene_id[1:min(c(10,nrow(filtered_res)))] %>% unique()
+  print(paste("Plotting the top",length(top_specific_markers), "specific markers."))
+  monocle3::plot_cells(cds_DGE, 
+                       genes = top_specific_markers, 
+                       show_trajectory_graph = F)
+  return(marker_test_res)
+}
+
 get_earliest_principal_node <- function(cds,  variable = "dx", variable_value = "PD"){
   cell_ids <- which(colData(cds)[, variable] == variable_value)
   

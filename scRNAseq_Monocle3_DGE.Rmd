@@ -1,0 +1,187 @@
+---
+title: "PD_scRNAseq: Monocle3 DGE & Modules" 
+author: "<h3>Author</h3>Brian M. Schilder, Bioinformatician II"
+date: "`r Sys.Date()`"
+output: 
+  rmarkdown::html_document: 
+    theme: spacelab
+    highlight: zenburn 
+    code_folding: show 
+    toc: true 
+    toc_float: true
+    smooth_scroll: true
+    number_sections: false 
+    self_contained: true
+params:
+  subsetGenes: "protein_coding" #FALSE
+  subsetCells: 500 #FALSE
+  resolution: 0.6
+  resultsPath: "./Results"
+  nCores: 2
+  perplexity: 30
+editor_options: 
+  chunk_output_type: inline
+---
+
+# Setup 
+
+```{r setup, dpi = 600, warning=F, message=F}
+start_time <- Sys.time() 
+
+#### #### Load Objects & Functions #### #### 
+######################################################
+# Import functions
+root = "./"
+source(file.path(root,"MAIN.R"))
+import_parameters(params)
+######################################################
+
+
+#### #### PACKAGES #### #### 
+###################################################### 
+library(monocle3)
+paste("monocle3", packageVersion("monocle3"))  
+
+library(cowplot) 
+library(ggplot2)
+library(dplyr) 
+library(data.table) 
+library(readxl) 
+library(reshape2)
+library(ggrepel)
+library(plotly)
+library(GeneOverlap) # BiocManager::install("GeneOverlap") 
+######################################################
+
+
+# Exporting 3D plots 
+knitr::knit_hooks$set(webgl = rgl::hook_webgl)
+dge_limit <- F # 100
+nCores <- 4#parallel::detectCores()
+set.seed(2019)
+
+# Load preprocessed data
+load("./Data/monocle3_CDS.RData")
+cds
+```
+
+# Differential Gene Expression
+
+Detect whether or not to limit DGE analysis to only the top N most variable genes.
+
+```{r Differential Gene Expression}
+# DGE limiter
+# dge_limit <- 10
+if(dge_limit){
+  cds_DGE <- cds[var.genes[1:dge_limit],]
+  print(paste0("Testing only the top ",dge_limit," most variable genes in DGE analysis."))
+} else{
+  cds_DGE <- cds
+  print(paste0("Testing all ",dim(cds)[1]," genes in DGE analysis."))
+} 
+# DGE distribution type
+expression_family <- "quasipoisson" # Recommended by Monocle3 authors for most cases.
+within_clusters <- c(1,2)
+DT_max <- 1000
+```
+
+## Across Clusters
+
+### PD vs. Control
+
+```{r Across Clusters: PD vs. Control} 
+dge.dx <- monocle3_DGE(cds_DGE = cds_DGE,
+                           variable = "dx",
+                           nCores = nCores, 
+                           expression_family = expression_family,
+                           plot_volcano = T, 
+                           results_path = "./Results/across_PD.vs.Ctrl.csv") 
+createDT(head(dge.dx, DT_max))
+```
+
+### PD vs. GBA
+
+```{r Across Clusters: PD vs. GBA} 
+dge.mut <- monocle3_DGE(cds_DGE = cds_DGE,
+                           variable = "dx",
+                           variable_subsets = c("PD","GBA"),
+                           nCores = nCores, 
+                           expression_family = expression_family,
+                           plot_volcano = T, 
+                           results_path = "./Results/across_PD.vs.GBA.csv") 
+createDT(head(dge.mut, DT_max))
+```
+
+### Canonical vs. Intermediate Monocytes
+
+- Compare all Canonical Monocytes (**Cluster 1**) to all Intermediate Monocytes (**Cluster 2**), regardless of disease status.
+
+```{r Across Clusters: Canonical vs. Intermediate Monocytes}
+dge.clust <- monocle3_DGE(cds_DGE = cds_DGE,
+                          variable = "Cluster", 
+                          variable_subsets = c(1,2),
+                          nCores = nCores, 
+                          expression_family = expression_family,
+                          plot_volcano = T, 
+                          results_path = "./Results/across_Clust1.vs.Clust2.csv") 
+createDT(head(dge.clust, DT_max))
+```
+
+
+## Within Clusters
+
+### Disease {.tabset .tabset-fade .tabset-pills}
+
+- Compare PD vs. Controls DGE within each cluster.  
+- **Cluster 1** = Canonical Monocytes, **Cluster 2** = Intermediate Monocytes.  
+
+```{r Within Clusters: Disease, results="asis"}
+for (clust in within_clusters){
+  cat("\n")
+  cat("#### Cluster ",clust,"\n")
+  cds_clust <- cds_DGE[,pData(cds_DGE)$Cluster==clust]
+  dge.dx.clust <- monocle3_DGE(cds_DGE = cds_clust,
+                           variable = "dx",  
+                           nCores = nCores, 
+                           expression_family = expression_family,
+                           plot_volcano = T, 
+                           results_path = paste0("./Results/within.Clust",clust,"_PD.vs.Ctrl.csv") )
+  createDT_html(head(dge.dx.clust, DT_max)) %>% print()
+  cat("\n")
+}
+```
+
+### PD vs. GBA {.tabset .tabset-fade .tabset-pills}
+
+```{r Within Clusters: Mutations, results="asis"}
+for (clust in within_clusters){
+  cat("\n")
+  cat("#### Cluster ",clust,"\n")
+  cds_clust <- cds_DGE[,(pData(cds_DGE)$Cluster==clust)]
+  dge.mut.clust <- monocle3_DGE(cds_DGE = cds_clust,
+                           variable = "mut",  
+                           variable_subsets = c("PD","GBA"),
+                           nCores = nCores, 
+                           expression_family = expression_family,
+                           plot_volcano = T, 
+                           results_path = paste0("./Results/within.Clust",clust,"_PD.vs.GBA.csv") ) 
+  createDT_html(head(dge.mut.clust, DT_max)) %>% print()
+  cat("\n")
+}
+```
+
+
+# Top Specific Markers
+
+- Find genes that characterize each cluster.  
+- Specifically, only compare Clusters 1 and 2 to focuses on differences between these.  
+
+```{r Top Specific Markers, results="asis"} 
+# Cluster-specific markers
+marker_res <- top_cluster_markers(cds_DGE, 
+                                  cluster_list=c(1,2), 
+                                  genes_to_test_per_group=1000, 
+                                  save_path= "./Results/cluster_markers.csv")
+```
+
+
