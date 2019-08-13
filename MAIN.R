@@ -151,23 +151,24 @@ monocle3_DGE <- function(cds_DGE,
                          force_DGE=F,
                          plot_topN=F,
                          plot_volcano=T){
+  dge.start <- Sys.time()
+  # Subset data
+  suppressWarnings(
+    if(variable_subsets==F){
+      cds_dge <- cds_DGE
+    } else { 
+      # variable="Cluster"
+      # variable_subsets = c(1,2) 
+      bool_vector <- (pData(cds_DGE)[variable] %in% variable_subsets)[[1]]
+      cds_dge <- cds_DGE[, bool_vector]
+    }
+  )
+  
   # Import DGE results file if it already exists
   if(file.exists(results_path) & force_DGE==F){
     print("Results file already exists. Importing...")
     res <- data.table::fread(results_path)
-  }else{
-    dge.start <- Sys.time()
-    suppressWarnings(
-      if(variable_subsets==F){
-        cds_dge <- cds_DGE
-      } else { 
-        # variable="Cluster"
-        # variable_subsets = c(1,2) 
-        bool_vector <- (pData(cds_DGE)[variable] %in% variable_subsets)[[1]]
-        cds_dge <- cds_DGE[, bool_vector]
-      }
-    )
-   
+  }else{ 
     # With regression:
     print("Initiating DGE analysis...")
     gene_fits <- fit_models(cds_dge, 
