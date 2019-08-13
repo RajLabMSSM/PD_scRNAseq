@@ -176,7 +176,7 @@ for (clust in within_clusters){
 - Find genes that characterize each cluster.  
 - Specifically, only compare Clusters 1 and 2 to focuses on differences between these.  
 
-```{r Top Specific Markers, results="asis"} 
+```{r Top Specific Markers, message=F, echo=T, results = 'hide'} 
 # Cluster-specific markers
 marker_res <- top_cluster_markers(cds_DGE, 
                                   cluster_list=c(1,2), 
@@ -184,4 +184,10 @@ marker_res <- top_cluster_markers(cds_DGE,
                                   save_path= "./Results/cluster_markers.csv")
 ```
 
+```{r Top Specific Markers - Results}
+filtered_res <- marker_res %>%
+    filter(fraction_expressing >= 0.10 & marker_test_q_value <=0.05) %>%
+    group_by(cell_group) %>% arrange(desc(specificity), desc(pseudo_R2))
+createDT(filtered_res)
+```
 

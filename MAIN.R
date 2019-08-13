@@ -225,9 +225,14 @@ volcano_plot <- function(dge, caption="", topN_labeled=6){
                              "q_value>0.05"
                      ))  
   dge <- arrange(dge, desc(sig))
+  # Y max
   neg.log.pvals <- -log10(dge$q_value)
-  maximum <- max(neg.log.pvals)
-  yMax  <- maximum + maximum/8 #ifelse(max(-log10(dge$p_val_adj))<45, 50, max(-log10(dge$p_val_adj)) + 10)
+  yMaximum <- max(neg.log.pvals)
+  yMax  <- yMaximum + yMaximum/8 #ifelse(max(-log10(dge$p_val_adj))<45, 50, max(-log10(dge$p_val_adj)) + 10)
+  # X max
+  dge_sig <- subset(dge, q_value<0.05)
+  xMaximum <- max(abs(dge_sig$estimate))
+  xMax <- xMaximum + xMaximum/8
   
   vol <- ggplot(data=dge, aes(x=estimate, y= -log10(q_value))) +
     geom_point(alpha=0.5, size=3, aes(col=sig)) + 
@@ -248,7 +253,8 @@ volcano_plot <- function(dge, caption="", topN_labeled=6){
     geom_vline(xintercept= 1.5,lty=4, lwd=.3, alpha=.5) +
     geom_hline(yintercept= -log10(0.05),lty=4, lwd=.3, alpha=.5) +   
     ggtitle(caption) +
-    xlim(-2,2) + ylim(0, yMax) + 
+    xlim(-xMax, xMax) +
+    ylim(0, yMax) + 
     theme(plot.title = element_text(hjust = 0.5))
   return(vol)
 }
@@ -278,7 +284,7 @@ top_cluster_markers <- function(cds_DGE,
   filtered_res <- marker_test_res %>%
     filter(fraction_expressing >= 0.10 & marker_test_q_value <=0.05) %>%
     group_by(cell_group) %>% arrange(desc(specificity), desc(pseudo_R2))
-  createDT_html(filtered_res) %>% print()
+  # createDT_html(filtered_res) %>% print()
   # Plot
   top_specific_markers <-filtered_res$gene_id[1:min(c(10,nrow(filtered_res)))] %>% unique()
   print(paste("Plotting the top",length(top_specific_markers), "specific markers."))
@@ -287,6 +293,9 @@ top_cluster_markers <- function(cds_DGE,
                        show_trajectory_graph = F)
   return(marker_test_res)
 }
+
+
+
 
 get_earliest_principal_node <- function(cds,  variable = "dx", variable_value = "PD"){
   cell_ids <- which(colData(cds)[, variable] == variable_value)
@@ -302,3 +311,111 @@ get_earliest_principal_node <- function(cds,  variable = "dx", variable_value = 
 }
 
 
+
+zscore <- function(vec, rescale_01=T){ 
+  vec.sd <- sd(vec)*sqrt((length(vec)-1)/(length(vec)))
+  vec.mean <- mean(vec)
+  z <- (vec - vec.mean) / vec.sd
+  if(rescale_01){
+    z <- scales::rescale(x=z, to=c(1,0))
+  }
+  return(z)
+}
+
+run_enrichr <- function(DEG_table, 
+                        results_path = "./Results/topEnrichR_hits.csv",  
+                        enrichr_dbs = c("KEGG_2018", 
+                                        "Reactome_2016",
+                                        "GO_Biological_Process_2018", 
+                                        "GO_Molecular_Function_2018",
+                                        "GO_Cellular_Component_2018",
+                                        "Rare_Diseases_AutoRIF_ARCHS4_Predictions",
+                                        "ARCHS4_Cell-lines",
+                                        "Aging_Perturbations_from_GEO_up", 
+                                        "Aging_Perturbations_from_GEO_down",
+                                        "Human_Gene_Atlas",
+                                        "ChEA_2016", 
+                                        "KEA_2015"),
+                        top_genes=500,
+                        include_weights=T
+){ 
+  # createDT(enrichR::listEnrichrDbs(), "Enrichr Databases") 
+  DEGs_table <- subset(DEGs_table, q_value<=0.05)[1:top_genes,]
+  if(include_weights){
+    vec <- -log10(DEGs_table$q_value)
+    vec[is.infinite(vec)] <- .Machine$double.xmin
+    z <- zscore(vec, rescale_01 = T) 
+    geneList <- data.frame(Gene=row.names(DEGs_table), 
+                           Weight=z)
+  } else {
+    geneList <- data.frame(Gene=row.names(DEGs_table), 
+                           Weight=1)
+  }
+ 
+  results <- enrichR::enrichr(genes = geneList, databases = enrichr_dbs) 
+  
+  topHits <- data.table()
+  for (db in enrichr_dbs){
+    cat('\n')
+    cat("##",db,"\n")  
+    # res <- subset(results[[db]], Adjusted.P.value<=0.05) 
+    newdf = subset(results[[ db ]], Adjusted.P.value<=0.05, select=c("Term","Overlap","Adjusted.P.value")) %>% mutate(Database=db)  
+    newdf = newdf[1:3, ]
+    topHits <- rbind(topHits, newdf[complete.cases(newdf), ]) 
+    cat('\n')
+  }  
+  write.csv(topHits, results_path)
+  return(topHits)
+}
+
+
+
+report_overlap <- function(genomeSize, list1, list2){  
+  go.obj <-  GeneOverlap::newGeneOverlap(listA = list1, listB = list2, genome.size = genomeSize )
+  go.obj <-  GeneOverlap::testGeneOverlap(go.obj)
+  print(go.obj) 
+  
+  overlappingGenes <-  GeneOverlap::getIntersection(go.obj)
+  percent_of_targetGenes <- length(overlappingGenes) / length(list2)*100
+  percent_of_DEGs <- length(overlappingGenes) / length(list1)*100
+  targetGenes_DEGs <- list2[overlappingGenes %in% list2]
+  
+  cat("\n",round(percent_of_targetGenes, 2),"% of the provided genes (",length(overlappingGenes),"/",length(list2),") are DEGs.")
+  
+  cat("\n",round(percent_of_DEGs, 2),"% of the DEGs (",
+      length(overlappingGenes),"/",length(list1),") are in the provided gene list.")
+  
+  cat("\n-------------------------------------------------------",
+      "\n\n++++++++++++ Enrichment p-value =",go.obj@pval,"++++++++++++\n\n")
+  return(overlappingGenes) 
+} 
+
+
+
+# HEATMAP
+overlap_heatmap <- function(clustDAT, geneList, 
+                            title="Overlapping Genes:\nGene List vs. DGE Genes", 
+                            interactive=F){ 
+  knitr::opts_chunk$set(fig.width=14, fig.height=14) 
+  markerDF  <- get_markerDT(clustDAT, markerList = geneList, rawData = F)
+  markerMatrix <- reshape2::acast(markerDF, Gene~Cluster, value.var="Expression",
+                                  fun.aggregate = mean, drop = F, fill = 0)
+  # Heatmap.2 
+  my_palette <- colorRampPalette(c("purple", "black", "cyan"))(n = 1000)
+  hmap <- gplots::heatmap.2(markerMatrix, xlab = "Cluster", dendrogram = "row",
+                            col = my_palette, tracecol = "gray", srtCol = 0, offsetCol=1.5, vline=T, 
+                            trace='none', key.title=NA, key.ylab = "Expression", colsep=T, sepwidth = 0.01, 
+                            main = title) 
+  knitr::opts_chunk$set(fig.width=7, fig.height=5) 
+}
+
+overlap_expression_plot <- function(DEG_table, geneList, title=""){
+  dat.sub <- subset(DEG_table, gene_short_name %in% geneList) %>% arrange(desc(estimate))
+  dat.sub$gene_short_name <- factor(dat.sub$gene_short_name, levels = dat.sub$gene_short_name)
+  
+  p <- ggplot(dat.sub, aes(x=gene_short_name, y=estimate, fill=estimate)) + 
+    geom_col(show.legend = F) + labs(title=title) + 
+    theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_text(angle = 45, hjust = 1)) +  
+    ylim(-2,2)
+  plot(p)
+}

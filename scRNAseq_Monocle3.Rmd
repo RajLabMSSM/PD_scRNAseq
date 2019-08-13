@@ -43,7 +43,8 @@ load(file.path(resultsPath, "scRNAseq_results.RData"))
 ######################################################
 print("Written using: Seurat version* 2.3.4 2018-07-17")
 # https://satijalab.org/seurat/install.html
-library(Seurat) #
+# source("http://bit.ly/archived-seurat")
+library(Seurat) 
 paste("Seurat", packageVersion("Seurat")) 
 # library(monocle) # BiocManager::install("monocle")   
 # paste("monocle", packageVersion("monocle")) 

@@ -1,0 +1,158 @@
+---
+title: "Enrichment"
+author: "<h3>Author</h3>Brian M. Schilder, Bioinformatician II"
+date: "`r Sys.Date()`"
+output: 
+  rmarkdown::html_document: 
+    theme: spacelab
+    highlight: zenburn 
+    code_folding: show 
+    toc: true 
+    toc_float: true
+    smooth_scroll: true
+    number_sections: false 
+    self_contained: false
+params:
+  subsetGenes: "protein_coding" #FALSE
+  subsetCells: 500 #FALSE
+  resolution: 0.6
+  resultsPath: "./Results"
+  nCores: 2
+  perplexity: 30
+editor_options: 
+  chunk_output_type: inline
+---
+
+Enrichment tests on differentially expressed genes between Canonical monocytes (cluster 1) and Intermediate monocytes (cluster 1).
+
+```{r setup}
+# Import functions
+root = "./"
+source(file.path(root,"MAIN.R"))
+
+library(enrichR) # BiocManager::install("enrichR") # devtools::install_github("wjawaid/enrichR")
+
+library(fgsea)
+library(reactome.db) # BiocManager::install("reactome.db")
+ 
+library(dplyr) 
+library(ggplot2)
+
+load("./Data/monocle3_CDS.RData")
+cds
+```
+
+# Import Gene Lists
+
+## DEGs
+
+```{r Import: DEGs} 
+# DEGs
+dge.dx <- read.csv("Results/across_PD.vs.Ctrl.csv")  
+dge.clust <- read.csv("Results/across_Clust1.vs.Clust2.csv")  
+```
+
+# AD and PD-associated Genes
+
+```{r Import - AD/PD}
+curatedGenes <- readxl::read_excel("Data/curated_AD-PDgene_lists.xlsx")
+AD_related_genes <- readxl::read_excel(file.path(root, "Data/AD-related_genes.xlsx"))
+ADgenes <- rbind(AD_related_genes, data.frame(Gene=curatedGenes$AD_panel, Category="AD") ) %>% unique()
+ADgenes <- ADgenes[!is.na(ADgenes$Gene),]
+# Combine PD gene lists
+PDgenes <- data.frame(Gene=c("LRRK2","GBA",
+                             curatedGenes$gwas_Nearest_gene_Nalls_2019, 
+                             curatedGenes$QTL_Nominated_genes_Nalls_2019,
+                             curatedGenes$TWAS_Garrett
+                             ), Category="PD") %>% unique()
+PDgenes <- PDgenes[!is.na(PDgenes$Gene),]
+
+```
+
+
+
+# Curated Gene Lists
+
+## Alzheimer's Disease
+
+### Disease DGEs
+
+```{r Overlap - AD vs. dx DGEs}
+AD_overlap <- report_overlap(genomeSize=dim(cds)[1], 
+                            list1=subset(dge.dx, q_value<=0.05)$gene_short_name, 
+                            list2=ADgenes$Gene)
+overlap_expression_plot(dge.dx, 
+                        geneList = AD_overlap, 
+                        title="Overlapping AD-associated Genes / dx DGEs")
+```
+
+### Cluster DGEs
+
+```{r Overlap - AD vs. cluster DGEs}
+AD_overlap <- report_overlap(genomeSize=dim(cds)[1], 
+                            list1=subset(dge.clust, q_value<=0.05)$gene_short_name, 
+                            list2=ADgenes$Gene)
+overlap_expression_plot(dge.clust, 
+                        geneList = AD_overlap, 
+                        title="Overlapping AD-associated Genes / Cluster DGEs")
+```
+
+
+
+
+## Parkinson's Disease
+
+### Disease DGEs
+
+```{r Overlap - PD vs. dx DGEs}
+PD_overlap <- report_overlap(genomeSize=dim(cds)[1], 
+                            list1=subset(dge.dx, q_value<=0.05)$gene_short_name, 
+                            list2=PDgenes$Gene)
+overlap_expression_plot(dge.dx, 
+                        geneList = PD_overlap, 
+                        title="Overlapping PD-associated Genes / dx DGEs")
+```
+
+### Cluster DGEs
+
+```{r Overlap - PD vs. cluster DGEs}
+PD_overlap <- report_overlap(genomeSize=dim(cds)[1], 
+                            list1=subset(dge.clust, q_value<=0.05)$gene_short_name, 
+                            list2=PDgenes$Gene)
+overlap_expression_plot(dge.clust, 
+                        geneList = PD_overlap, 
+                        title="Overlapping PD-associated Genes / Cluster DGEs")
+```
+
+
+
+# enrichR {.tabset .tabset-fade .tabset-pills}
+
+## Cluster 1 vs. Cluster 2
+
+- Showing plenty of enrichment on the Enrichr website, just not the enrichR R package.  
+- Providing the [link to the online results here](https://amp.pharm.mssm.edu/Enrichr/enrich?dataset=d634d1a5b290e873498f65676c894b33) for now.  
+
+```{r EnrichrR - Across: Cluster1 vs. Cluster 2, results="asis", eval=F}
+# enrichr.clusts <- run_enrichr(DEG_table,
+#                               results_path = "./Results/topEnrichR_hits.csv",   
+#                               top_genes=100,
+#                               include_weights=T
+#                               )
+```
+ 
+
+# fGSEA
+
+```{r fGSEA, eval=F, echo=F} 
+# Reactome
+geneSet <- subset(dge.clust, q_value<0.05)$gene_short_name %>% as.character() 
+GSEABase::ENSEMBLIdentifier(annotation(GSEABase::GeneSet(geneSet)))
+GSEABase::AnnoOrEntrezIdentifier(geneSet, )
+pathways <- fgsea::reactomePathways(geneSet)
+fgseaRes <- fgsea::fgsea(pathways, exampleRanks, nperm=1000, maxSize=500)
+head(fgseaRes)
+```
+
+
+
