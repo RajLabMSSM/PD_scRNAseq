@@ -1,0 +1,494 @@
+---  
+title: "Preprocessing"  
+author: "<h3>Author</h3>Brian M. Schilder, Bioinformatician II"
+date: "`r Sys.Date()`"
+output: 
+  rmarkdown::html_document: 
+    theme: spacelab
+    highlight: zenburn 
+    code_folding: show 
+    toc: true 
+    toc_float: true
+    smooth_scroll: true
+    number_sections: false 
+    self_contained: true  
+params:
+  subsetGenes: "protein_coding" #FALSE
+  subsetCells: 500 #FALSE
+  resolution: 0.6
+  resultsPath: "./Results"
+  nCores: 4
+  perplexity: 30
+---
+
+# Setup 
+
+```{r setup,  dpi = 600}
+# Import functions
+root <- "./"  
+source(file.path(root,"general_functions.R"))
+import_parameters(params) 
+```
+
+__`r resultsPath`__
+ 
+## Load Libraries
+
+```{r Load Libraries, message=F, warning=F}
+library(Seurat)
+library(dplyr)
+library(gridExtra)
+library(knitr) 
+library(plotly)
+library(ggplot2)
+library(shiny) 
+library(DT) 
+
+sessionInfo()
+print(paste("Seurat ", packageVersion("Seurat")))
+```
+
+## Load Data
+
+```{r Load Data }   
+## ! IMPORTANT! Must not setwd to local path when launching on cluster
+# setwd("~/Desktop/PD_scRNAseq/") 
+load(file.path(root, "Data/seurat_object_add_HTO_ids.Rdata"))
+DAT <- seurat.obj  
+rm(seurat.obj)
+```
+
+### Pre-filtered Dimensions
+
+```{r Pre-filtered Dimensions}
+DAT
+```
+
+
+## Clean Metadata
+
+```{r Clean Metadata, include=F, eval=F}
+library(readxl)
+
+## Update dx and mut fields
+### Import updated  dx, mut info
+subjectInfo <- read_excel(file.path(root,"Data/scRNAseq_meta.xlsx"))
+### Import metadata
+meta <- read.table(file.path(root,"Data/meta.data3.tsv"), header=T )
+### Remove last 2 cols (contain incorrect values) and duplicate HTO col
+sum(meta$HTO != meta$HTO.1) # double check they're identical
+
+meta["barcode"] = row.names(meta)
+unique(meta["HTO"])
+# Map incorrect subject IDs to CORRECT subject IDs (typos occurred at NYGC during processing)
+map = setNames( # Incorrect (from NYGC)
+               c("NYUMD0011", "BIMD0076", "MSMD0067", "BIMD0077", "BIMD0007",
+                 "BIMD0075", "NYUMD0015", "MSMD0035","MSMD0207", "BIMD0010"), 
+               # Correct (from Evan)
+              c("NYUMD0011", "BID0076", "MSMD0067", "BID0077", "BIMD0007",
+                 "BID00075","NYUMD0015", "MSMD0035", "MSMD0207", "BIMD0010")
+              )
+meta["ID"] <- map[unlist(meta["HTO"])]
+meta <- subset(meta, select = -c(dx, mut, HTO, HTO.1)) 
+### Merge new cols
+metadata <- merge(meta, subjectInfo, by="ID", all.x=T) 
+row.names(metadata) <- metadata$barcode
+colnames(metadata)[colnames(metadata)=="Ethnitcity"] <- "Ethnicity" 
+# Remove "CellType" (these were just clusters identified previously with an old pipeline, no longer being used)
+metadata <- subset(metadata, select = -CellType)
+
+dim(meta)
+dim(metadata)
+head(metadata)
+paste("singlet.or.not.binary =",unique(DAT@meta.data$singlet.or.not.binary))
+# Correct misspelling
+### Export updated Metadata
+write.table(metadata, file.path(root,"Data/meta.data4.tsv"))
+# Add metadata to seurat object
+DAT <- AddMetaData(object = DAT, metadata =  metadata )  
+
+rm(list = c("meta", "metadata", "map", "subjectInfo"))
+## % Mitochondrial genes metadata
+#mito.genes <- grep(pattern = "^MT-", x = rownames(x = DAT@data), value = TRUE)
+#percent.mito <- Matrix::colSums(DAT@raw.data[mito.genes, ])/Matrix::colSums(DAT@raw.data)
+#DAT <- AddMetaData(object = DAT, metadata = percent.mito, col.name = "percent.mito")
+```
+
+
+## Add Metadata
+
+```{r Subset for Testing, results="asis"}  
+metadata <- read.table(file.path(root,"Data/meta.data4.tsv"))
+createDT( metadata[1:100,], caption = "Metadata")  
+
+# Make AgeGroups
+makeAgeGroups <- function(){
+  dim(metadata)
+  getMaxRound <- function(vals=metadata$Age, unit=10)unit*ceiling((max(vals)/unit))
+  getMinRound <- function(vals=metadata$Age, unit=10)unit*floor((min(vals)/unit)) 
+   
+  ageBreaks = c(seq(getMinRound(), getMaxRound(), by = 10), getMaxRound()+10)
+  AgeGroupsUniq <- c()
+  for (i in 1:(length(ageBreaks)-1)){ 
+    AgeGroupsUniq <- append(AgeGroupsUniq, paste(ageBreaks[i],ageBreaks[i+1], sep="-")) 
+  } 
+  data.table::setDT(metadata,keep.rownames = T,check.names = F)[, AgeGroups := cut(Age, 
+                                  breaks = ageBreaks, 
+                                  right = F, 
+                                  labels = AgeGroupsUniq,
+                                  nclude.lowest=T)]
+  metadata <- data.frame(metadata)
+  unique(metadata$AgeGroups)
+  head(metadata)
+  dim(metadata)
+  return(metadata)
+}
+# metadata <- makeAgeGroups()
+
+DAT <- AddMetaData(object = DAT, metadata = metadata)  
+
+remove_nonmatched_metadata <- function(DAT, subsetCells){
+  # Get rid of any NAs (cells that don't match up with the metadata) 
+    if(subsetCells==F){
+    DAT <- FilterCells(object = DAT,  subset.names = "nGene", low.thresholds = 0)
+  } else {DAT <- FilterCells(object = DAT,  subset.names = "nGene", low.thresholds = 0,
+                      # Subset for testing 
+                      cells.use = DAT@cell.names[0:as.numeric(subsetCells) ]
+                      )
+  }  
+    return(DAT)
+}
+
+DAT <- remove_nonmatched_metadata(DAT, params$subsetCells)
+DAT
+```
+
+## Filter & Normalize Data
+
+### Subset Genes by Biotype
+
+Include only subsets of genes by type.
+Biotypes from: https://useast.ensembl.org/info/genome/genebuild/biotypes.html
+
+```{r Subset Genes by Biotype}
+subsetBiotypes <- function(DAT, subsetGenes="protein_coding"){
+  if( subsetGenes!=F ){
+    cat(paste("Subsetting genes:",subsetGenes, "\n"))
+    # If the gene_biotypes file exists, import csv. Otherwise, get from biomaRt
+    if(file_test("-f", file.path(root, "Data/gene_biotypes.csv"))){
+      biotypes <- read.csv(file.path(root, "Data/gene_biotypes.csv"))
+    }
+    else {
+      ensembl <- useMart(biomart="ENSEMBL_MART_ENSEMBL", host="grch37.ensembl.org",
+                       dataset="hsapiens_gene_ensembl") 
+      ensembl <- useDataset(mart = ensembl, dataset = "hsapiens_gene_ensembl")
+      listFilters(ensembl)
+      listAttributes(ensembl)   
+      biotypes <- getBM(attributes=c("hgnc_symbol", "gene_biotype"), filters="hgnc_symbol",
+            values=row.names(DAT@data), mart=ensembl) 
+      write.csv(biotypes, file.path(root,"Data/gene_biotypes.csv"), quote=F, row.names=F)
+    } 
+    # Subset data by creating new Seurat object (annoying but necessary)
+    geneSubset <- biotypes[biotypes$gene_biotype==subsetGenes,"hgnc_symbol"] 
+    
+    cat(paste(dim(DAT@raw.data[geneSubset, ])[1],"/", dim(DAT@raw.data)[1], 
+                "genes are", subsetGenes))
+    # Add back into DAT 
+    subset.matrix <- DAT@raw.data[geneSubset, ] # Pull the raw expression matrix from the original Seurat object containing only the genes of interest
+    DAT_sub <- CreateSeuratObject(subset.matrix) # Create a new Seurat object with just the genes of interest
+    orig.ident <- row.names(DAT@meta.data) # Pull the identities from the original Seurat object as a data.frame
+    DAT_sub <- AddMetaData(object = DAT_sub, metadata = DAT@meta.data) # Add the idents to the meta.data slot
+    DAT_sub <- SetAllIdent(object = DAT_sub, id = "ident") # Assign identities for the new Seurat object
+    DAT <- DAT_sub
+    rm(list = c("DAT_sub","geneSubset", "subset.matrix", "orig.ident")) 
+  } 
+  return(DAT)
+}
+
+DAT <- subsetBiotypes(DAT, as.numeric(params$subsetGenes))
+```
+
+### Subset Cells
+
+Filter cells and normalize
+```{r Subset Cells }
+cat("Total Cells:", length(DAT@cell.names), "\n")
+DAT <- FilterCells(object = DAT, subset.names = c("nGene", "percent.mito"), 
+    low.thresholds = c(200, -Inf), high.thresholds = c(2500, 0.05))
+cat("Filtered Cells:", length(DAT@cell.names))
+
+DAT <- NormalizeData(object = DAT, normalization.method = "LogNormalize", 
+    scale.factor = 10000)
+```
+
+### Subset Genes by Variance
+
+__Important!__:
+* In ScaleData...
+  + __IMPORTANT!__: _Must_ specify do.par = F ("If set to TRUE, will use _half_ of the machine's available cores")
+  + Specify num.cores = nCores (to use all available cores, determined by parallel::detectCores())
+
+Regress out: number of unique transcripts (nUMI), % mitochondrial transcripts (percent.mito) 
+```{r Subset Genes by Variance} 
+# Store the top most variable genes in @var.genes
+DAT <- FindVariableGenes(object = DAT, mean.function = ExpMean, dispersion.function = LogVMR,
+    x.low.cutoff = 0.0125, x.high.cutoff = 3, y.cutoff = 0.5)
+cat("Total Genes:", length(row.names(DAT@raw.data)), "\n")
+cat("Highly Variable Genes:", length(DAT@var.genes))
+
+# IMPORTANT!: Use only the var.genes identified by 'FindVariableGenes' as the 'gene.use' arg in 'ScaleData'
+## This will greatly reduced the computational load.
+
+# Ensure CD14 and CD16 are included
+appendedGenes <- c(DAT@var.genes, "CD14", "FCGR3A")
+DAT <- ScaleData(object = DAT, 
+                  genes.use = appendedGenes, 
+                  vars.to.regress = c("nUMI", "percent.mito"), 
+                  do.par = F, num.cores = as.numeric(params$nCores))
+
+```
+
+### Filtered Dimensions
+
+```{r Filtered Dimensions}
+DAT
+```
+
+
+# Diagnostic Plots
+
+## Violin Plots
+```{r Violin Plots }  
+vp <- VlnPlot(object = DAT, features.plot = c("nGene", "nUMI", "percent.mito"),nCol = 3, do.return = T) %>% + ggplot2::aes(alpha=0.5)
+vp
+```
+
+## Gene Plots {.tabset .tabset-fade .tabset-pills}
+
+### percent.mito plot
+
+```{r percent.mito - process}
+# results = 'hide', fig.show='hide'
+# par(mfrow = c(1, 2))
+# do.hover <- ifelse(interactive==T, T, F)
+GenePlot(object = DAT, gene1 = "nUMI", gene2 = "percent.mito", pch.use=20) 
+         #do.hover=do.hover, data.hover = "mut")
+```
+
+ 
+### nGene plot
+
+```{r nGene - process}
+# , results = 'hide', fig.show='hide'
+# do.hover <-ifelse(interactive==T, T, F)
+GenePlot(object = DAT, gene1 = "nUMI", gene2 = "nGene", pch.use=20)
+         #do.hover=do.hover, data.hover = "mut")
+```
+
+
+# Dimensionality Reduction & Clustering
+
+## PCA {.tabset .tabset-fade .tabset-pills}
+
+ProjectPCA scores each gene in the dataset (including genes not included
+in the PCA) based on their correlation with the calculated components.
+Though we don't use this further here, it can be used to identify markers
+that are strongly correlated with cellular heterogeneity, but may not have
+passed through variable gene selection.  The results of the projected PCA
+can be explored by setting use.full=T in the functions above
+
+* Other Dim Reduction Methods in Seurat
+  + RunCCA()
+  + RunMultiCCA()
+  + RunDiffusion()
+  + RunPHATE() 
+  + RunICA()
+  
+```{r PCA }
+# Run PCA with only the top most variables genes
+DAT <- RunPCA(object = DAT, pc.genes = DAT@var.genes, do.print=F, verbose=F) #, pcs.print = 1:5,  genes.print = 5
+# Store in Seurat object so you don't have to recalculate it for the tSNE/UMAP steps
+DAT <- ProjectPCA(object = DAT, do.print=F) 
+```
+
+### VizPCA
+
+```{r VizPCA}
+VizPCA(object = DAT, pcs.use = 1:2)
+```
+
+### PCHeatmaps
+
+```{r PCHeatmap, message=F, warning=F}  
+# 'PCHeatmap' is a wrapper for heatmap.2  
+PCHeatmap(object = DAT, pc.use = 1:12, do.balanced=T, label.columns=F, use.full=F)
+```
+
+
+### Determine Significant PCs
+
+Determine statistically significant PCs for further analysis.
+NOTE: This process can take a long time for big datasets, comment out for
+expediency.  More approximate techniques such as those implemented in
+PCElbowPlot() can be used to reduce computation time
+
+```{r Determine Significant PCs}
+#DAT <- JackStraw(object = DAT, num.replicate = 100, display.progress = FALSE)
+PCElbowPlot(object = DAT)
+```
+
+## Find Cell Clusters
+* We first construct a KNN graph based on the euclidean distance in PCA space, and refine the edge weights between any two cells based on the shared overlap in their local neighborhoods (Jaccard similarity). To cluster the cells, we apply modularity optimization techniques such as the Louvain algorithm (default) or SLM [SLM, Blondel et al., Journal of Statistical Mechanics], to iteratively group cells together, with the goal of optimizing the standard modularity function.
+  + The clustering approach in FindClusters was heavily inspired by recent manuscripts which applied graph-based clustering approaches to scRNA-seq data [SNN-Cliq, Xu and Su, Bioinformatics, 2015](http://bioinformatics.oxfordjournals.org/content/early/2015/02/10/bioinformatics.btv088.abstract) and CyTOF data [PhenoGraph, Levine et al., Cell, 2015](https://www.ncbi.nlm.nih.gov/pubmed/26095251).
+  + To further increase speed, you can employ an approximate nearest neighbor search via the RANN package by increasing the nn.eps + parameter. 
+  Setting this at 0 (the default) represents an exact neighbor search.
+  + By default, we perform 100 random starts for clustering and select the result with highest modularity. You can lower this through the n.start
+  parameter to reduce clustering time.
+  + Algorithm for modularity optimization (1 = original Louvain algorithm; 2 = Louvain algorithm with multilevel refinement; 3 = SLM algorithm).
+
+
+* __On Resolution__  
+    + "The FindClusters function implements the procedure, and contains a resolution parameter that sets the ‘granularity’ of the downstream clustering, with increased values leading to a greater number of clusters. We find that setting this parameter between 0.6-1.2 typically returns good results for single cell datasets of around 3K cells. Optimal resolution often increases for larger datasets. The clusters are saved in the object@ident slot."  
+    + Changing the resolution between 0.2-0.4 does not change the clusters significantly.
+      
+* __On Perplexity__
+    + Changing perplexity between 20-40 hardly changes the results. However, turning perplexity up to 50 radically
+    changes the structure and becomes unrecognizable.
+```{r Run t-SNE}
+DAT <- RunTSNE(object=DAT,  reduction.use = "pca", dims.use = 1:10, do.fast = TRUE,  
+               tsne.method = "Rtsne", verbose=F,
+               num_threads = as.numeric(params$nCores),
+               perplexity = as.numeric(params$perplexity)) #   FItSNE  
+```
+
+
+```{r Cluster Cells}   
+DAT <- StashIdent(object = DAT, save.name = "pre_clustering") 
+# DAT <- SetAllIdent(object = DAT, id = "pre_clustering") 
+
+# Default resolution = 0.8
+DAT <- FindClusters(object = DAT, reduction.type = "pca",
+                    dims.use = 1:10, algorithm = 1, 
+                    print.output = F, save.SNN = T, n.start = 10, nn.eps = 0.5, plot.SNN = T, force.recalc=T,
+                    resolution =  as.numeric(params$resolution)) 
+PrintFindClustersParams(object = DAT) 
+
+DAT <- StashIdent(object = DAT, save.name = "post_clustering") 
+```
+
+### PCA plot
+
+```{r PCAplot} 
+# do.hover <-ifelse(interactive==T, T, F)
+PCAPlot(object = DAT, dim.1 = 1, dim.2 = 2, group.by="post_clustering")
+#, do.hover=do.hover, data.hover="mut")
+```
+
+## UMAP
+
+Additional UMAP arguments detailed here: https://umap-learn.readthedocs.io/en/latest/api.html#module-umap.umap_ 
+```{r UMAP, results = 'asis', eval=F} 
+# cat(print(mem_used()))
+DAT <- RunUMAP(object = DAT, reduction.use = "pca", dims.use = 1:10, verbose=TRUE, 
+               num_threads=as.numeric(params$nCores), 
+               genes.use = DAT@var.genes)
+# cat(print(mem_used()))
+# Plot results
+DimPlot(object = DAT, reduction.use = 'umap')
+```
+
+
+
+## Plot t-SNE {.tabset .tabset-fade .tabset-pills}
+
+As input to the tSNE, we suggest using the same PCs as input to the clustering analysis, although computing the tSNE based on scaled gene expression is also supported using the genes.use argument.  
+
+**Important!**: Specify num_threads=0 in 'RunTSNE' to use all available cores.
+
+"FItSNE", a new fast implementation of t-SNE, is also available through RunTSNE. However FItSNE must first be setup on your computer.
+```{r t-SNE, results = 'asis'} 
+labSize <- 12 
+tsnePlot <- TSNEPlot(object = DAT, do.label=T, label.size = labSize, do.return=T) + 
+  scale_color_brewer( palette = "Set1", aesthetics = aes(alpha=.5))
+
+# customColors <- function(var="post_clustering", palette="Set1"){
+#   add.alpha <- function(col, alpha=1){ 
+#     if(missing(col))
+#       stop("Please provide a vector of colours.")
+#      apply(sapply(col, col2rgb)/255, 2, 
+#                        function(x) 
+#                          rgb(x[1], x[2], x[3], alpha=alpha))  
+#   } 
+#   cluster_colors  <- RColorBrewer::brewer.pal( length(unique(DAT@meta.data[var])), palette)
+#   cluster_colors_transparent <- add.alpha(cluster_colors, .5) %>% as.character()
+#   return(cluster_colors_transparent)
+# }
+
+
+# # Try t-SNE at different perplexities
+# for (i in c(5,20,30,100)){
+#    cat('\n')   
+#    cat("### t-SNE: perplexity =",i,"\n") 
+#    DAT <- RunTSNE(object=DAT,  reduction.use = "pca", dims.use = 1:10, do.fast = TRUE,  
+#                 perplexity = i, tsne.method = "Rtsne", 
+#                 num_threads=params$nCores,
+#                  genes.use = DAT@var.genes,
+#                 verbose=F) #   FItSNE
+#   tsnePlot <- TSNEPlot(object = DAT, do.label=T, label.size = labSize, do.return=T) + 
+#     scale_color_brewer( palette = "Set1", aesthetics = aes(alpha=.5))
+#   print(tsnePlot)
+#   cat('\n')   
+# } 
+```
+
+
+## Plot t-SNE & Metadata Plots {.tabset .tabset-fade .tabset-pills}
+
+```{r t-SNE and Metadata, results='asis'}
+tSNE_metadata_plot <- function(var, labSize=12){ 
+  # Metadata plot  
+  p1 <- TSNEPlot(DAT, do.return = T,  do.label = T,  group.by = var,label.size = labSize,
+                 plot.title=paste(var), vector.friendly=T) +
+    theme(legend.position = "top") + 
+    scale_color_brewer( palette = "Dark2",  aesthetics = aes(alpha=.5)) 
+     
+  # t-SNE clusters plot
+  p2 <- TSNEPlot(DAT, do.return = T, do.label = T,label.size = labSize,
+                 plot.title=paste("Unsupervised Clusters"), vector.friendly=T)  +
+    theme(legend.position = "top") + 
+    scale_color_brewer( palette = "Set1", aesthetics = aes(alpha=.5))  
+  print(plot_grid(p1,p2))
+     
+}   
+# Iterate plots over metadata variables
+metaVars <- c("dx","mut","Gender","Age", "ID")
+for (var in metaVars){
+  cat('\n')
+  cat("### t-SNE Metadata plot for ",var, "\n") 
+  tSNE_metadata_plot(var)
+  cat('\n') 
+} 
+```
+
+# DGE: CD16+ vs. CD16- Monocytes
+
+```{r DGE: CD16+ vs. CD16- Monocytes} 
+# register(MulticoreParam(as.numeric(params$nCores)))
+
+# subDAT <- SubsetData(DAT, cells.use = 1:500) 
+MonocyteSubtype.markers <- FindMarkers(DAT, min.pct = 0.25, only.pos = F,
+                                ident.1 = 1, ident.2 = 0, test.use = "DESeq2"
+                                )
+
+createDT(MonocyteSubtype.markers, caption="DEGs between cluster 0 (CD16- monocytes) and cluster 1 (CD16+ monocytes")
+write.csv(MonocyteSubtype.markers, file.path(resultsPath, "MonocyteSubtype.markers.csv"), quote = F, row.names = T)
+```
+
+
+# Save Results
+
+```{r Save Results}  
+save.image(file.path(resultsPath, "scRNAseq_results.RData"))
+```
+
+ 

@@ -1,0 +1,16 @@
+#!/bin/bash
+#BSUB -J PD_scRNAseq.Monocle3		    # Name of job
+#BSUB -P acc_ad-omics		    # Project to charge time
+#BSUB -q premium		    # Target queue for job execution
+#BSUB -n 4		    	    # Number of cores required
+#BSUB -R span[hosts=1]		    # Number of cores per host 
+#BSUB -R rusage[mem=30000]	    # Memory per core
+#BSUB -W 12:00			    # Time requested 
+#BSUB -oo /dev/PD_scRNAseq.out      # Log file for standard output (overwrite)
+#BSUB -eo /dev/PD_scRNAseq.error.out	    # log file for standard error (overwrite)
+#BSUB -L /bin/bash	 	    # Script shell language (/bin/tcsh, /bin/ksh etc.)
+    
+ml R
+ml seurat/2.3.4
+
+Rscript -e "rmarkdown::render(input='scRNAseq_Monocle3_DGE.Modules.Rmd', output_file='scRNAseq_Monocle3_DGE.Modules.html');" 

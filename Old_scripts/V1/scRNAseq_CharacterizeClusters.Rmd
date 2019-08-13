@@ -1,0 +1,671 @@
+---
+title: "Characterize Clusters" 
+author: "<h3>Author</h3>Brian M. Schilder, Bioinformatician II"
+date: "`r Sys.Date()`"
+output: 
+  rmarkdown::html_document: 
+    theme: spacelab
+    highlight: zenburn 
+    code_folding: show 
+    toc: true 
+    toc_float: true
+    smooth_scroll: true
+    number_sections: false 
+    self_contained: true  
+params:
+  subsetGenes: "protein_coding" #FALSE
+  subsetCells: 500 #FALSE
+  resolution: 0.6
+  resultsPath: "./Results"
+  nCores: 2
+  perplexity: 30
+---
+
+# Setup 
+
+```{r setup, dpi = 600}
+# Import functions
+root = "./"
+source(file.path(root,"general_functions.R"))
+import_parameters(params)
+load(file.path(resultsPath, "scRNAseq_results.RData"))
+# load(file.path("Results","subsetGenes-protein_coding__subsetCells-F__Resolution-0.5__perplexity-30__nCores-64","scRNAseq_results.RData"))
+```
+
+<!-- __`r resultsPath`__ -->
+ 
+## Load Libraries
+
+```{r Load Libraries, message=F, warning=F, error=T}
+library(Seurat)
+library(dplyr)
+library(gridExtra)
+# library(knitr)
+library(plotly)
+library(ggplot2)
+# library(viridis)
+library(reshape2) 
+library(ggrepel)
+library(DT)
+# library(ComplexHeatmap); #BiocManager::install("ComplexHeatmap") # NOT on Minerva currently
+   
+# library(biomaRt) # BiocManager::install(c("biomaRt"))
+# library(DESeq2) # BiocManager::install(c("DESeq2"))
+
+sessionInfo()
+print(paste("Seurat ", packageVersion("Seurat")))
+```
+
+
+# Cluster Biomarkers
+
+Seurat has several tests for differential expression which can be set with the test.use parameter (see the DE vignette for details). For example, the ROC test returns the ‘classification power’ for any individual marker (ranging from 0 - random, to 1 - perfect).  
+
+Shown here: Biomarkers of each cluster vs. all other clusters.
+
+## Biomarkers Data {.tabset .tabset-fade .tabset-pills}
+
+### All Biomarkers
+
+```{r All Biomarkers} 
+# Limit to only top variable genes?: 
+# Set arg 'only.pos=F' to capture negative biomarkers
+# DAT <- SetIdent(DAT, ident.use = "post_clustering") 
+
+DAT.markers <- FindAllMarkers(object = DAT, min.pct = 0.25, thresh.use = 0.25,  only.pos = F,  
+                              test.use = "wilcox") # DESeq2
+DAT.markers <- DAT.markers %>% mutate(FC = 2^avg_logFC)
+
+DAT.markers.sig <- DAT.markers %>% subset(p_val_adj<=0.05) 
+markers.summary <- DAT.markers.sig %>% group_by(cluster) %>% tally()
+# markers.summary <- base::merge(DAT.markers.sig %>% group_by(cluster) %>% tally(),
+#       DAT.markers %>% group_by(cluster) %>% summarise(mean(avg_logFC)), 
+#       by="cluster" )
+
+createDT(markers.summary, caption = "Number of DEGs and Mean logFC per Cluster")
+
+createDT(DAT.markers, caption = paste("All Biomarkers: All Clusters"))
+```
+
+### Top Biomarkers
+
+```{r Top Biomarkers} 
+topNum = 5
+topBiomarkers <- DAT.markers %>% group_by(cluster) %>% top_n(topNum, avg_logFC)
+createDT(DAT.markers, caption = paste("All Biomarkers: All Clusters"))
+```
+
+
+## Cluster Biomarker: Violin Plots {.tabset .tabset-fade .tabset-pills}
+
+```{r cluster biomarker plots, results='asis'}
+
+getTopBiomarker <- function(DAT.markers, clusterID, topN=1){
+  df <-DAT.markers %>%
+    subset(p_val_adj<0.05 & cluster==as.character(clusterID)) %>%
+    arrange(desc(avg_logFC))
+    top_pct_markers <- df[1:topN,"gene"]
+  return(top_pct_markers)
+}
+# clust1_biomarkers <- getTopBiomarker(DAT.markers, clusterID=1, topN=2)
+# clust2_biomarkers <- getTopBiomarker(DAT.markers, clusterID=2, topN=2)
+
+
+### Plot biomarkers 
+plotBiomarkers <- function(DAT, biomarkers, cluster){
+  biomarkerPlots <- list()
+  for (marker in biomarkers){ 
+    p <- VlnPlot(object = DAT, features.plot = c(marker), y.log=T, return.plotlist=T) 
+    biomarkerPlots[[marker]] <- p + ggplot2::aes(alpha=0.5) + xlab( "Cluster") + ylab( "Expression")
+  }
+  combinedPlot <- do.call(grid.arrange, c(biomarkerPlots, list(ncol=2, top=paste("Top DEG Biomarkers for Cluster",cluster))) ) 
+
+  # biomarkerPlots <- lapply(biomarkers, function(marker) {
+  #   VlnPlot(object = DAT, features.plot = c(marker), y.log=T, return.plotlist=T) %>% + ggplot2::ggtitle(marker) %>% ggplotly() 
+  # })    
+  # return(subplot(biomarkerPlots) )
+}   
+
+top1 <- DAT.markers %>% group_by(cluster) %>% top_n(1, avg_logFC) 
+nCols <- floor( sqrt(length(unique(top1$cluster))) )   
+figHeight <- nCols *7
+
+# Plot top 2 biomarker genes for each 
+for (clust in unique(DAT.markers$cluster)){ 
+   cat('\n')   
+   cat("### Cluster ",clust,"\n") 
+   biomarkers <- getTopBiomarker(DAT.markers, clusterID=clust, topN=2)
+   plotBiomarkers(DAT, biomarkers, clust)  
+   cat('\n')   
+} 
+```
+ 
+## Cluster Biomarker: Volcano Plots {.tabset .tabset-fade .tabset-pills}
+
+```{r Volcano Plots, fig.height=5, fig.width=5, results='asis'}
+##Construct the plot object
+volcanoPlot <- function(DEG_df, caption="", topFC_labeled=5){
+  DEG_df$sig<-  ifelse( DEG_df$p_val_adj<0.05 & DEG_df$avg_logFC<1.5, "p_val_adj<0.05",
+            ifelse( DEG_df$p_val_adj<0.05  & DEG_df$avg_logFC>1.5, "p_val_adj<0.05 & avg_logFC>1.5",
+		        "p_val_adj>0.05"
+		)) 
+  DEG_df <- arrange(DEG_df, desc(sig))
+  yMax  <- max(-log10(DEG_df$p_val_adj)) + max(-log10(DEG_df$p_val_adj))/3 #ifelse(max(-log10(DEG_df$p_val_adj))<45, 50, max(-log10(DEG_df$p_val_adj)) + 10)
+  
+  vol <- ggplot(data=DEG_df, aes(x=avg_logFC, y= -log10(p_val_adj))) +
+    geom_point(alpha=0.5, size=3, aes(col=sig)) + 
+    scale_color_manual(values=list("p_val_adj<0.05"="turquoise3",
+                                   "p_val_adj<0.05 & avg_logFC>1.5"="purple", 
+                                   "p_val_adj>0.05" = "darkgray")) +
+    theme(legend.position = "none") + 
+    xlab(expression(paste("Average ",log^{2},"(fold change)"))) +
+    ylab(expression(paste(-log^{10},"(p-value)"))) + xlim(-2,2) + ylim(0, yMax) +
+    ## ggrepl labels
+    geom_text_repel(data= arrange(DEG_df,  p_val_adj, desc(avg_logFC))[1:topFC_labeled,], 
+                    # filter(DEG_df, avg_logFC>=1.5)[1:10,],
+                    aes(label=gene),  color="black", alpha=.5,
+                    segment.color="black", segment.alpha=.5  
+                    ) +  
+    # Lines
+    geom_vline(xintercept= -1.5,lty=4, lwd=.3, alpha=.5) + 
+    geom_vline(xintercept= 1.5,lty=4, lwd=.3, alpha=.5) +
+    geom_hline(yintercept= -log10(0.05),lty=4, lwd=.3, alpha=.5) + 
+    ggtitle(caption) 
+  print(vol)
+}
+
+
+# Run plots
+for (clust in unique(DAT.markers$cluster)){
+   cat('\n')   
+   cat("### Cluster ",clust,": Volcano","\n") 
+   cap <- paste("Cluster",clust,"DEG Table") 
+   DEG_df <- subset(DAT.markers, cluster==as.character(clust)) %>% arrange(desc(avg_logFC))  
+   volcanoPlot(DEG_df, caption = cap)
+   createDT_html(DEG_df, caption = cap)
+   cat('\n')   
+} 
+```
+
+
+## Top Biomarker Plot
+
+### Biomarkers GO {.tabset .tabset-fade}
+
+```{r Biomarkers GO, results='asis'}
+for (clust in top1$cluster){ 
+  subClust <- subset( top1, cluster==clust)
+  cat('\n')
+  cat("### Cluster",clust,"\n")
+  cat( "Biomarker\n",subClust$gene) 
+  results <- Seurat::FindGeneTerms(QueryGene = subClust$gene) 
+  print(results) #parse_html_notebook(results)
+  cat('\n')
+}
+```
+
+
+###  Biomarkers tSNE
+
+```{r Biomarkers tSNE, out.height="300%"} 
+fp <- FeaturePlot(object = DAT, features.plot = top1$gene, cols.use = c("grey", "purple"), 
+    reduction.use = "tsne", nCol = nCols, do.return = T)
+```
+
+
+### Biomarkers Heatmap
+
+```{r Biomarkers Heatmap}
+top5 <- DAT.markers %>% group_by(cluster) %>% top_n(5, avg_logFC)
+# setting slim.col.label to TRUE will print just the cluster IDS instead of
+# every cell name
+DoHeatmap(object = DAT, genes.use = top5$gene, slim.col.label=T, remove.key=T) 
+# ifelse(interactive, p %>% ggplotly() %>% toWebGL() %>% print(), print(p))
+```
+
+### Biomarkers Ridgeplot
+
+```{r Biomarkers RidgePlot}
+RidgePlot(DAT, features.plot = top1$gene,  nCol = nCols, do.sort = F)
+```
+
+### Biomarkers Split Dot Plot
+
+Visualize biomarker expression for each cluster, by disease
+
+```{r Biomarkers Split Dot Plot} 
+top2 <- DAT.markers %>% group_by(cluster) %>% top_n(2, avg_logFC)
+
+sdp <- SplitDotPlotGG(DAT, genes.plot = top2$gene, cols.use = c("blue","red"), 
+                      x.lab.rot = T, plot.legend = T, dot.scale = 8, do.return = T, grouping.var = "dx")
+```
+
+
+# Map Clusters to Known Biomarkers
+
+- Known Monocytes Biomarkers
+    + Classical: CD14++ / CD16--
+    + Intermediate: CD14++ / CD16+
+    + Nonclassical: CD14+ / CD16++ (not captured in this data)
+ 
+The following plots show the absolute expression of each biomarker, 
+as opposed to avg_logFC which is dependent on the expression patterns of other cell types being compared.
+  
+## Markers Dataframe
+
+```{r Markers Dataframe}
+markerList <- c("CD14", "FCGR3A") 
+ 
+get_markerDF <- function(DAT, markerList, meta_vars =c("barcode", "dx", "mut","post_clustering", "percent.mito","nGene", "nUMI")){
+  exp <- DAT@scale.data %>% data.frame() 
+  marker.matrix <- exp[row.names(exp) %in% markerList, ] 
+  marker.matrix$Gene <- row.names(marker.matrix)
+  markerMelt <- reshape2:::melt.data.frame(marker.matrix, id.vars = "Gene", variable.name = "Cell",value.name = "Expression") 
+  metaSelect <-  DAT@meta.data[,meta_vars] 
+  markerDF <- merge(markerMelt,metaSelect, by.x="Cell", by.y="barcode") 
+  return(markerDF)
+}
+markerDF <- get_markerDF(DAT, markerList)
+createDT(markerDF, caption = "Known Marker Expression")
+```
+
+## Marker ANOVAs + Boxplots 
+
+```{r Marker ANOVAs + Boxplots } 
+# Explore expression differences between groups
+marker_vs_metadata <- function(markerDF, meta_var){ 
+  # Create title from ANOVA summary
+  ANOVAtitle <- function(markerDF, marker){
+      nTests <- length(unique(markerDF$Gene))
+      res <- anova(lm(data = subset(markerDF, Gene==marker), 
+                      formula = Expression ~ eval(parse(text=meta_var))))
+      
+      title <-paste(paste("ANOVA (",marker, " vs. ",meta_var, ")", sep=""), 
+                    ": p=",round(res$`Pr(>F)`,3), 
+                    ", F=",round(res$`F value`,3), 
+        ifelse(res$`Pr(>F)`<.05/nTests,"(Significant**)",
+               "(Non-significant)") ) 
+  }
+  
+  title = ""
+  for (marker in unique(markerDF$Gene) ){
+    cat(marker)
+    title <- paste(title, "\n", ANOVAtitle(markerDF, marker))
+  } 
+   
+ 
+  ggplot(markerDF, aes(x=eval(parse(text=meta_var)), y=Expression, fill= Gene)) + 
+    geom_violin() + 
+      geom_point( position=position_jitterdodge(jitter.width = .2, dodge.width = .9 ),   alpha=0.6, color="turquoise3") + 
+    labs(title = title, x=meta_var) +
+    theme(plot.title = element_text( size=10)) +
+    scale_fill_manual(values=c("brown", "slategray"))
+  
+}
+```
+
+### ANOVA: dx
+
+```{r ANOVA: dx} 
+marker_vs_metadata(markerDF, "dx")
+```
+
+### ANOVA: mut
+
+```{r ANOVA: mut}
+marker_vs_metadata(markerDF, "mut")
+```
+
+
+
+ 
+# Identify Cell Types with Garnett + Monocle
+
+## Pre-trained PBMC Classifer
+
+```{r Identify Cell Types with Garnett}
+library(monocle) # BiocManager::install("monocle") 
+# BiocManager::install(c('DelayedArray', 'DelayedMatrixStats', 'org.Hs.eg.db', 'org.Mm.eg.db'))
+library(org.Hs.eg.db)
+library(garnett) # devtools::install_github("cole-trapnell-lab/garnett")
+ 
+# Convert Seurat objt to CDS object 
+mDAT <- monocle::importCDS(DAT,  import_all = T) 
+# generate size factors for normalization later
+mDAT <-  DESeq2::estimateSizeFactors(mDAT)
+# Get pre-trained PBMC classifer 
+load(file.path(root, "Data/Garnett/hsPBMC")) # Download from: https://cole-trapnell-lab.github.io/garnett/classifiers/hsPBMC 
+# Get feature genes for each cell type
+feature_genes <- garnett::get_feature_genes(classifier = hsPBMC,
+                                   node = "root",
+                                   db = org.Hs.eg.db,
+                                   convert_ids = F)
+# head(feature_genes)
+mDAT <- garnett::classify_cells(mDAT, hsPBMC,
+                           db = org.Hs.eg.db,
+                           cluster_extend = TRUE,
+                           cds_gene_id_type = "SYMBOL")
+head(pData(mDAT))
+table(pData(mDAT)$cell_type)
+table(pData(mDAT)$cluster_ext_type) 
+
+# 
+# 
+# # Run tSNE: Plot Clusters and Cell Types 
+# mDAT <- reduceDimension(mDAT, max_components = 3, reduction_method = "tSNE") 
+# commonGeoms <- labs(x="tSNE1",y="tSNE2")
+# plot_grid(nrow = 2,
+#   qplot(data = pData(mDAT), mDAT@reducedDimA[1,], mDAT@reducedDimA[2,], color = cell_type) + theme_bw() + commonGeoms,
+#   qplot(data = pData(mDAT), mDAT@reducedDimA[1,], mDAT@reducedDimA[2,], color = cluster_ext_type) + theme_bw() + commonGeoms
+# )
+
+# Unsupervised Clustering
+# mDAT <- clusterCells(mDAT, num_clusters = 5)
+# pData(mDAT)
+# plot_cell_clusters(mDAT, 1, 2, color = "Cluster",  markers = c("CD14", "FCGR3A"))
+# plot_cell_clusters(mDAT, 1, 2, color = "Cluster") + facet_wrap(~dx)
+# plot_cell_clusters(mDAT, 1, 2, color = "Cluster") + facet_wrap(~mut)
+# plot_cell_clusters(mDAT, 1, 2, color = "Cluster") + facet_wrap(~cell_type) 
+
+DAT <- Seurat::AddMetaData(DAT, pData(mDAT)[c("garnett_cluster","cell_type","cluster_ext_type")])
+write.csv(DAT@meta.data, file.path(resultsPath, "garnett_results.csv"), quote = F,row.names = F)
+```
+
+## Train Classifier on Data
+
+```{r, include=F}
+
+# marker_file_path <- system.file("extdata", "pbmc_test.txt",
+#                                 package = "garnett")
+# # Plot chosen markers
+# marker_check <- check_markers(mDAT, marker_file_path,
+#                               db=org.Hs.eg.db,
+#                               cds_gene_id_type = "SYMBOL",
+#                               marker_file_gene_id_type = "SYMBOL")
+#
+# plot_markers(marker_check)
+
+# Classify Cells
+## Get classifier from
+# write.table( RCurl::getURL("https://cole-trapnell-lab.github.io/garnett/marker_files/hsPBMC_markers.txt"),
+#              file = "pbmc_markerFile.txt",row.names = F, col.names = F, quote = F, )
+# Train Classifier
+# classifier <- train_cell_classifier(cds = mDAT,
+#                                          marker_file = "pbmc_markerFile.txt",
+#                                          db=org.Hs.eg.db,
+#                                          cds_gene_id_type = "SYMBOL",
+#                                          num_unknown = 50,
+#                                          marker_file_gene_id_type = "SYMBOL")
+#get_classifier_references(classifier) 
+```
+
+
+# Pseudo-time
+
+WARNING: _Very_ computationally expensive!
+```{r Pseudo-time, eval=F}
+mDAT <- reduceDimension(mDAT, max_components = 2, method = 'DDRTree')
+mDAT <- orderCells(mDAT)
+plot_cell_trajectory(mDAT, color_by = "dx")
+plot_cell_trajectory(mDAT, color_by = "cell_type")
+plot_cell_trajectory(HSMM_myo, color_by = "cell_type") +
+    facet_wrap(~mut, nrow = 2)
+```
+
+
+
+
+
+
+## Known Biomarkers: Heatmaps {.tabset .tabset-fade .tabset-pills}
+
+### Cells Separated
+
+```{r Cells Separated, eval=F} 
+markerDF <- get_markerDF(DAT, markerList, 
+             meta_vars =c("barcode", "dx", "mut","ID","post_clustering", "percent.mito","nGene", "nUMI" )) #cell_type
+Spectral <- grDevices::colorRampPalette(RColorBrewer::brewer.pal(length(unique(DAT@meta.data$mut)), "Spectral"))
+
+# DAT <- DoKMeans(DAT, k.genes = 3) 
+# KMeansHeatmap(DAT)
+
+if (T==F){
+  # Spectral <- heatmaply::Spectral(length(unique(DAT@meta.data$mut)))
+  markerMelt <- reshape2::acast(markerDF, Cell~Gene, value.var="Expression", fun.aggregate = mean, drop = F, fill = 0) 
+  heatmaply::heatmaply(markerMelt,  key.title="Expression",#plot_method= "ggplot",
+        k_row = dim(markerMelt)[2], dendrogram = "row",
+        showticklabels = c(T, F), xlab = "Known Markers", ylab = "Cells", column_text_angle = 45, 
+        row_side_colors =  DAT@meta.data[,c("dx","mut")], #cell_type
+        row_side_palette = Spectral
+        )  %>%  colorbar(tickfont = list(size = 12), titlefont = list(size = 14), which = 2)  %>% 
+        colorbar(tickfont = list(size = 12), titlefont = list(size = 14), which = 1)
+ }else{ 
+  # markerDF_sub <-subset(markerDF, Gene==markerList[1])  
+  # var_to_colors(markerDF_sub, "post_clustering")  
+  # library(pheatmap)
+  # pheatmap(markerMelt, annotation_row = markerDF_sub[c("dx","mut","cell_type")])
+  # pheatmap(markerMelt, kmeans_k = NA, annotation_row = markerDF_sub[c("dx","mut","cell_type")],
+  #         cluster_cols = F, cutree_rows = length(unique(markerDF$post_clustering)),  angle_col=45 )
+  library(RColorBrewer) 
+  var_to_colors <- function(markerDF, metaVar){
+    colors <- brewer.pal(length(unique(markerDF[metaVar]) ), "Dark2")
+     sample(colors, length(unique(markerDF[metaVar])), replace = TRUE, prob = NULL)
+    # metaColors <- colors[ subset(markerDF, Gene==markerList[1])[metaVar][,1] %>% as.factor() ]
+    return(metaColors)
+  }  
+  # library(GMD)
+  # myCols = cbind(var_to_colors(markerDF, "dx"), var_to_colors(markerDF, "mut")) 
+  # rlab=t(cbind(
+  #   var_to_colors(markerDF, "post_clustering"),
+  #   var_to_colors(markerDF, "dx")
+  #   ))
+  #   heatmap.2(marker.matrix, key.title="Expression",  col = viridis(300), trace="none",Colv = F, Rowv = F,
+  #             labRow = F, xlab = "Biomarker", ylab="Cell", cexCol=1, RowSideColors = var_to_colors(markerDF, "post_clustering")
+  #             )
+  # heatmap.3(markerMelt, dendrogram = 'row', kr = length(unique(markerDF)), labRow = F, 
+  #           xlab = "Biomarker", ylab = "Cell", RowSideColors = rlab, RowSideColorsSize=2 )
+   
+  
+  
+  markerDF <- markerDF %>%    
+    mutate_at(vars(post_clustering, dx, mut, ID), as.factor) %>% #cell_type
+    mutate(Cluster = post_clustering) %>%
+    arrange(post_clustering) 
+  # markerMelt <- reshape2::acast(markerDF, Cell~Gene, value.var="Expression", fun.aggregate = mean, drop = F, fill = 0) 
+  markerMelt <- dcast(markerDF,  Cell + post_clustering + dx + mut + ID  ~ Gene, #+ cell_type
+                      fun.aggregate = mean, value.var = "Expression") %>% arrange(post_clustering)
+  marker.matrix <- markerMelt[markerList] %>%as.matrix()
+  row.names(marker.matrix) <- markerMelt$Cell
+  
+  ha = HeatmapAnnotation(df = markerDF[c("dx","mut","ID","post_clustering")], which = "row")  #cell_type
+  
+  ComplexHeatmap::Heatmap(marker.matrix, col=viridis(300), column_title = "Biomarker", row_title = "Cell",  
+                          row_dend_reorder = F,show_row_names = F, show_column_dend = F,show_row_dend =T,
+                          cluster_rows = T, column_title_side = "bottom",km = length(unique(markerMelt$post_clustering))) + ha
+ 
+
+} 
+```
+
+### Average Expression: By Clusters
+
+```{r Clusters Averaged}
+markerDF <- markerDF %>% mutate(Cluster = post_clustering)
+# Show mean exp for each marker
+avgMarker <- markerDF %>% group_by(Gene, Cluster) %>% summarise(meanExp = mean(Expression)) 
+
+p <- ggplot(data = avgMarker, aes(x=Gene, y=Cluster, fill=meanExp)) %>% + geom_tile() #+ scale_fill_viridis()
+p
+# ifelse(interactive, p %>% ggplotly() %>% toWebGL() %>% print(), print(p))
+```
+
+### Average Expression: By Disease
+
+```{r Average Expression: By Disease}
+# Show mean exp for each marker
+avgMarker <- markerDF %>% group_by(Gene, dx, Cluster) %>% summarise(meanExp = mean(Expression)) 
+p <- ggplot(data = avgMarker, aes(x=Gene, y=dx, fill=meanExp)) %>% + geom_tile() #+ scale_fill_viridis()
+p 
+# ifelse(interactive, p %>% ggplotly() %>% toWebGL() %>% print(), print(p))
+```
+
+
+## Known Biomarkers: Boxplot
+
+```{r Known Biomarkers: Boxplot} 
+ggplot(data = markerDF, aes(x=Cluster, y=Expression, fill=Gene)) %>% 
+  + geom_boxplot(alpha=0.5) %>% + scale_fill_manual(values=c("purple", "turquoise"))  
+```
+
+
+
+##  Known Biomarkers: tSNE
+
+```{r Known Biomarkers: tSNE code, fig.width=12}
+#, results = 'hide', fig.show='hide'
+expressionTSNE <- function(DAT, marker, colors=c("grey", "red")){
+   FeaturePlot(object = DAT, features.plot = marker, cols.use = colors, 
+    reduction.use = "tsne", nCol=2, do.return = T, dark.theme = T)[[1]]
+  # p <- ifelse(interactive, p %>% ggplotly() %>% toWebGL(), print(p)) 
+}
+ plot_grid(expressionTSNE(DAT, markerList[1]),
+ expressionTSNE(DAT, markerList[2], colors=c("grey", "green")))
+```
+ 
+
+
+## Label Clusters by DGE Biomarkers
+
+```{r Label Clusters by DGE Biomarkers }
+current.cluster.ids <- unique(DAT.markers$cluster) #c(0, 1, 2, 3, 4, 5, 6, 7)
+top1 <- DAT.markers %>% group_by(cluster) %>% top_n(1, avg_logFC)
+new.cluster.ids <- top1$gene #c("CD4 T cells", "CD14+ Monocytes", "B cells", "CD8 T cells", "FCGR3A+ Monocytes", "NK cells", "Dendritic cells", "Megakaryocytes")
+
+DAT@ident <- plyr::mapvalues(x = DAT@ident, from = current.cluster.ids, to = new.cluster.ids)
+TSNEPlot(object=DAT, do.label=T, pt.size=0.5, do.return=T) 
+# ifelse(interactive, p %>% ggplotly() %>% toWebGL() %>% print(), print(p)) 
+```
+
+
+# DGE: All Cells {.tabset .tabset-fade .tabset-pills}
+
+- DGE methods available in Seurat include:
+ + DESeq2DETest()
+ + DiffExpTest()
+ + DiffTTest() 
+```{r All Cells: function} 
+# Available DGE methods:
+## "wilcox", "bimod", "roc", "t", "tobit", "poisson", "negbinom", "MAST", "DESeq2"
+runDGE <- function(DAT, meta_var, group1, group2, test.use="wilcox"){
+  #print(paste("DGE_allCells",meta_var,sep="_")) 
+  DAT <- SetAllIdent(DAT, id = meta_var)
+  DAT <- StashIdent(DAT, save.name = meta_var)  
+  DEGs <- FindMarkers(DAT, ident.1=group1, ident.2=group2, test.use=test.use, only.pos = F)
+  DEGs$gene <- row.names(DEGs)
+  
+  cap <- paste("DEGs:\n",group1, "vs.", group2)
+  createDT_html(DEG_df, caption = cap)
+  volcanoPlot(DEG_df, caption = cap)
+  
+  DAT <- SetAllIdent(DAT, id = "post_clustering")
+  return(DEGs)
+}
+```
+
+## PD vs. Controls
+
+```{r All Cells: PD vs. Controls, results='asis'}
+DEG_df <-runDGE(DAT, "dx", group1 = "PD", group2="control")
+```
+
+## LRRK vs. PD
+
+```{r All Cells: LRRK2 vs. PD, results='asis'} 
+DEG_df <-runDGE(DAT, "mut", "LRRK2", "PD")
+```
+
+## cell_type
+
+```{r All Cells: cell_type, results='asis', eval=F}  
+DEG_df <-runDGE(DAT, "cell_type", "Monocytes", "Dendritic cells") 
+```
+
+# DGE: Within Clusters {.tabset .tabset-fade .tabset-pills}
+
+```{r Within Clusters: function, results='asis'} 
+DGE_within_clusters <- function(DAT, meta_var, group1, group2){ 
+  for (clust in unique(DAT@meta.data$post_clustering)){
+    # Subset cells by cluster  
+   cat('\n')   
+   cat("### ",paste("Cluster ",clust,": ",group1," vs. ", group2, sep="") , "\n")
+   DAT_clustSub <- Seurat::SubsetData(DAT, accept.value = clust, subset.raw = T)  
+   DEG_df <-runDGE(DAT_clustSub, meta_var, group1, group2 ) 
+   cat('\n')   
+  } 
+}
+```
+
+
+## Between Disease Groups {.tabset .tabset-fade .tabset-pills}
+
+```{r Within Clusters: Between Disease Groups, results='asis'}   
+DGE_within_clusters(DAT, "dx", "PD", "control")    
+```
+
+## Between Mutation Groups {.tabset .tabset-fade .tabset-pills}
+
+```{r Within Clusters: Between Mutation Groups, results='asis'}
+DGE_within_clusters(DAT, "mut", "LRRK2", "PD")
+```
+
+## Between cell_type {.tabset .tabset-fade .tabset-pills}
+
+```{r Within Clusters: cell_type, results='asis', eval=F}
+DGE_within_clusters(DAT, "cell_type", "Monocytes", "Dendritic cells") 
+DAT@meta.data$cell_type %>% table()
+```
+
+
+# Try Different Cluster Resolutions {.tabset .tabset-fade .tabset-pills}
+
+If you perturb some of our parameter choices above (for example, setting resolution=0.8 or changing the number of PCs), you might see the CD4 T cells subdivide into two groups. You can explore this subdivision to find markers separating the two T cell subsets. However, before reclustering (which will overwrite object@ident), we can stash our renamed identities to be easily recovered later.
+
+## Find New Clusters
+
+```{r Find New Clusters, fig.width=12, eval=F}
+new_resolution <- 3.0
+orig_resolution <- paste("resolution",resolution,sep="_")
+DAT <- StashIdent(object = DAT, save.name = orig_resolution) 
+
+## Warning in BuildSNN(object = object, genes.use = genes.use, reduction.type
+## = reduction.type, : Build parameters exactly match those of already
+## computed and stored SNN. To force recalculation, set force.recalc to TRUE.
+DAT <- FindClusters(object = DAT, reduction.type = "pca", dims.use = 1:10,
+                     resolution = new_resolution, print.output = F)
+DAT <- StashIdent(object = DAT, save.name = "resolution_3.0") 
+
+plot1 <- TSNEPlot(object = DAT, do.return = TRUE, no.legend = TRUE, do.label = TRUE, label.size=labSize)
+plot2 <- TSNEPlot(object = DAT, do.return = TRUE, group.by = "post_clustering", 
+                  no.legend = TRUE, do.label = TRUE, label.size=labSize)
+plot_grid(plot1, plot2)
+```
+
+## Find New Biomarkers
+
+```{r Find New Biomarkers, out.height="300%", eval=F}  
+res3.0_markers <- FindAllMarkers(object = DAT, min.pct = 0.25, thresh.use = 0.25,  only.pos = F,  test.use = "wilcox")
+top1_res3.0 <- res3.0_markers %>% group_by(cluster) %>% top_n(1, avg_logFC) 
+
+FeaturePlot(object = DAT, features.plot = top1_res3.0$gene, cols.use = c("green", "blue"))
+
+# Set back to orig
+DAT <- SetAllIdent(object = DAT, id = orig_resolution) 
+```
+
+
+
+# Save Results
+
+```{r Save Results}  
+save.image(file.path(resultsPath, "scRNAseq_results.RData"))   
+```
