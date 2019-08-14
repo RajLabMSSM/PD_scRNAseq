@@ -23,17 +23,14 @@ editor_options:
   chunk_output_type: inline
 ---
 
-Enrichment tests on differentially expressed genes between Canonical monocytes (cluster 1) and Intermediate monocytes (cluster 1).
-
-```{r setup}
+```{r setup, message=F, results='hide'}
 # Import functions
 root = "./"
 source(file.path(root,"MAIN.R"))
 
-library(enrichR) # BiocManager::install("enrichR") # devtools::install_github("wjawaid/enrichR")
-
-library(fgsea)
-library(reactome.db) # BiocManager::install("reactome.db")
+# library(enrichR) # BiocManager::install("enrichR") # devtools::install_github("wjawaid/enrichR")
+# library(fgsea) 
+library(gprofiler2)
  
 library(dplyr) 
 library(ggplot2)
@@ -44,7 +41,10 @@ cds
 
 # Import Gene Lists
 
-## DEGs
+## DEG Tables
+
+- **dge.dx**: DGE results of dx/disease status (PD vs Controls) across all clusters.  
+- **dge.clust**: DGE results of cluster (Cluster1/Canonical Monocytes vs. Cluster2/Intermediate Monocytes) across all indivdiuals (regardless of disease status).  
 
 ```{r Import: DEGs} 
 # DEGs
@@ -124,35 +124,32 @@ overlap_expression_plot(dge.clust,
                         title="Overlapping PD-associated Genes / Cluster DGEs")
 ```
 
-
-
-# enrichR {.tabset .tabset-fade .tabset-pills}
-
-## Cluster 1 vs. Cluster 2
-
-- Showing plenty of enrichment on the Enrichr website, just not the enrichR R package.  
-- Providing the [link to the online results here](https://amp.pharm.mssm.edu/Enrichr/enrich?dataset=d634d1a5b290e873498f65676c894b33) for now.  
-
-```{r EnrichrR - Across: Cluster1 vs. Cluster 2, results="asis", eval=F}
-# enrichr.clusts <- run_enrichr(DEG_table,
-#                               results_path = "./Results/topEnrichR_hits.csv",   
-#                               top_genes=100,
-#                               include_weights=T
-#                               )
-```
+  
  
 
-# fGSEA
 
-```{r fGSEA, eval=F, echo=F} 
-# Reactome
-geneSet <- subset(dge.clust, q_value<0.05)$gene_short_name %>% as.character() 
-GSEABase::ENSEMBLIdentifier(annotation(GSEABase::GeneSet(geneSet)))
-GSEABase::AnnoOrEntrezIdentifier(geneSet, )
-pathways <- fgsea::reactomePathways(geneSet)
-fgseaRes <- fgsea::fgsea(pathways, exampleRanks, nperm=1000, maxSize=500)
-head(fgseaRes)
+
+# gprofiler2
+
+[gprofiler2](https://biit.cs.ut.ee/gprofiler/page/r)  
+
+## Disease DGEs
+
+```{r gprofiler2 - Disease}
+query <- subset(dge.dx, q_value<0.05)$gene_short_name %>% as.character()
+gostres <- gprofiler2::gost(query = query, organism = "hsapiens")
+gprofiler2::gostplot(gostres)
+createDT(gostres$result)
 ```
 
+## Cluster DGEs
 
+- enrichR R package not currently working (8.14.2019). Providing the [link to the online results here](https://amp.pharm.mssm.edu/Enrichr/enrich?dataset=d634d1a5b290e873498f65676c894b33) for now. 
+
+```{r gprofiler2 - Cluster}
+query <- subset(dge.clust, q_value<0.05)$gene_short_name %>% as.character()
+gostres <- gprofiler2::gost(query = query, organism = "hsapiens")
+gprofiler2::gostplot(gostres)
+createDT(gostres$result)
+```
 
