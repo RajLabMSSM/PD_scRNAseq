@@ -1,5 +1,6 @@
 ---
-title: "PD_scRNAseq: Monocle3 DGE & Modules" 
+title: "PD_scRNAseq: Monocle3" 
+subtitle: "DGE + Top Specific Markers"
 author: "<h3>Author</h3>Brian M. Schilder, Bioinformatician II"
 date: "`r Sys.Date()`"
 output: 
