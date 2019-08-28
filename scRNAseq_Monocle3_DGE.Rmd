@@ -104,7 +104,7 @@ createDT(head(dge.dx, DT_max))
 
 ```{r Across Clusters: PD vs. GBA} 
 dge.mut <- monocle3_DGE(cds_DGE = cds_DGE,
-                           variable = "dx",
+                           variable = "mut",
                            variable_subsets = c("PD","GBA"),
                            nCores = nCores, 
                            expression_family = expression_family,
@@ -177,13 +177,16 @@ for (clust in within_clusters){
 - Find genes that characterize each cluster.  
 - Specifically, only compare Clusters 1 and 2 to focuses on differences between these.  
 
-```{r Top Specific Markers, message=F, echo=T, results = 'hide'} 
+```{r Top Specific Markers, echo=T, message=FALSE}
 # Cluster-specific markers
 marker_res <- top_cluster_markers(cds_DGE, 
                                   cluster_list=c(1,2), 
                                   genes_to_test_per_group=1000, 
-                                  save_path= "./Results/cluster_markers.csv")
+                                  save_path= "./Results/cluster_markers.csv") 
 ```
+
+
+
 
 ```{r Top Specific Markers - Results}
 filtered_res <- marker_res %>%
@@ -191,4 +194,43 @@ filtered_res <- marker_res %>%
     group_by(cell_group) %>% arrange(desc(specificity), desc(pseudo_R2))
 createDT(filtered_res)
 ```
+
+
+# Gene Expression Plots
+
+```{r Gene Expression Plots} 
+# Selected DEGs
+m1 <- monocle3::plot_cells(cds, 
+                     genes=c("COX5A", "COX7B", "NDUFA1", "MS4A4A", "PYCARD", "S100A4"), 
+                     # group_cells_by = "cluster",
+                     show_trajectory_graph = F)
+ggsave2("./Results/selected_DEGs.png", m1, dpi = 1000, height = 4)
+m1
+
+m2 <- monocle3::plot_cells(cds, 
+                     genes=c("COX5A", "COX6B1", "COX7A2", "COX7B"), 
+                     # group_cells_by = "cluster",
+                     show_trajectory_graph = F)
+ggsave2("./Results/COX-genes.png", m2, dpi = 1000,  height = 4, width = 6)
+m2
+
+
+# Cluster-specific Markers
+marker_res <- data.table::fread("./Results/cluster_markers.csv")
+marker_res <- marker_res %>% arrange(desc(marker_score))
+# Cluster1 specific
+c1 <- monocle3::plot_cells(cds, 
+                     genes=subset(marker_res, cell_group==1)$gene_id[1:6], 
+                     # group_cells_by = "cluster",
+                     show_trajectory_graph = F)
+# Cluster2 specific
+c2 <- monocle3::plot_cells(cds, 
+                     genes=subset(marker_res, cell_group==2)$gene_id[1:6], 
+                     # group_cells_by = "cluster",
+                     show_trajectory_graph = F)
+cp <- cowplot::plot_grid(c1, c2, nrow = 2)
+cp
+ggsave2("./Results/cluster_markers.png", cp, dpi = 1000, scale = 1, height = 7)
+```
+
 

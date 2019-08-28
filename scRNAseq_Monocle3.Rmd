@@ -36,7 +36,9 @@ root = "./"
 source(file.path(root,"MAIN.R"))
 import_parameters(params)
 # load("Results/Current_Pipeline/scRNAseq_results.RData")
-load(file.path(resultsPath, "scRNAseq_results.RData")) 
+# load(file.path(resultsPath, "3-11-2019/scRNAseq_results.RData")) 
+load(file.path("Data", "monocle3_CDS.RData")) 
+
 ######################################################
 
 
@@ -184,6 +186,7 @@ for(v in c("dx","mut","ID")){
 ```
 
 
+
 # Cell-type Identication
 
 ## Garnett
@@ -273,6 +276,66 @@ monocle3::plot_cells(cds,
 ```
 
 
+# Cell Type Proportions 
+
+- Check the proportion of of cells within each disease group that belong to cluster. This will help determine whether any PD vs. Control DEGs are reflective of cell proportion differences.
+
+## dx
+
+```{r Cluster Proportions - dx}
+meta <- data.frame(pData(cds)) 
+# By dx
+cell_proportions <- meta %>%  
+                   group_by(dx, Cluster) %>% 
+                   summarise(Proportion=n()) %>% 
+                   group_by(dx) %>% 
+                   mutate(Proportion=Proportion/sum(Proportion)) 
+createDT(cell_proportions)
+prop.dx <- ggplot(cell_proportions, aes(x=dx, y=Proportion, fill = Cluster)) + 
+              geom_col() + # position="dodge"
+              ylab("Proportion of Cells") 
+print(prop.dx)
+
+clust.key <- list("1"="Canonical Monocytes", "2"="Intermediate Monocytes")
+for(clust in 1:2){ 
+clust1.diff <- (subset(cell_proportions, Cluster==clust & dx=="PD")$Proportion - subset(cell_proportions, Cluster==clust & dx=="control")$Proportion)*100
+print(paste("There is a",round(clust1.diff, 2),"% difference in the number of Cluster",clust,"cells (",clust.key[[as.character(clust)]], ") in Controls compared to PD."))
+} 
+```
+
+## mut
+
+```{r Cluster Proportions - mut} 
+# By mut
+cell_proportions <- meta %>%  
+                   group_by(mut, Cluster) %>% 
+                   summarise(Proportion=n()) %>% 
+                   group_by(mut) %>% 
+                   mutate(Proportion=Proportion/sum(Proportion)) 
+createDT(cell_proportions)
+prop.mut <- ggplot(cell_proportions, aes(x=mut, y=Proportion, fill = Cluster)) + 
+              geom_col() + # position="dodge"
+              ylab("Proportion of Cells") 
+print(prop.mut) 
+```
+
+## individual
+
+```{r Cluster Proportions - individual} 
+# By mut
+cell_proportions <- meta %>%  
+                   group_by(dx, Cluster, ID) %>% 
+                   summarise(Proportion=n()) %>% 
+                   group_by(ID) %>% 
+                   mutate(Proportion=Proportion/sum(Proportion)) 
+createDT(cell_proportions)
+prop.ID <- ggplot(cell_proportions, aes(x=ID, y=Proportion, fill = Cluster)) + 
+              geom_col() + # position="dodge"
+              ylab("Proportion of Cells") + 
+              facet_grid("~dx") + 
+              theme(axis.text.x = element_text(angle = 45))
+print(prop.ID) 
+```
 
 # Save Checkpoint
 
