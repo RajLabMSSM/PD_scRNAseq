@@ -36,7 +36,7 @@ library(dplyr)
 library(ggplot2)
 
 load("./Data/monocle3_CDS.RData")
-cds
+# print(cds)
 ```
 
 # Import Gene Lists
@@ -66,7 +66,7 @@ PDgenes <- data.frame(Gene=c("LRRK2","GBA",
                              curatedGenes$TWAS_Garrett
                              ), Category="PD") %>% unique()
 PDgenes <- PDgenes[!is.na(PDgenes$Gene),]
-
+createDT(rbind(ADgenes, PDgenes))
 ```
 
 
@@ -83,7 +83,7 @@ AD_overlap <- report_overlap(genomeSize=dim(cds)[1],
                             list2=ADgenes$Gene)
 overlap_expression_plot(dge.dx, 
                         geneList = AD_overlap, 
-                        title="Overlapping AD-associated Genes / dx DGEs")
+                        title="Overlapping AD-associated Genes w/ dx DGEs")
 ```
 
 ### Cluster DGEs
@@ -94,7 +94,7 @@ AD_overlap <- report_overlap(genomeSize=dim(cds)[1],
                             list2=ADgenes$Gene)
 overlap_expression_plot(dge.clust, 
                         geneList = AD_overlap, 
-                        title="Overlapping AD-associated Genes / Cluster DGEs")
+                        title="Overlapping AD-associated Genes w/ Cluster DGEs")
 ```
 
 
@@ -110,7 +110,7 @@ PD_overlap <- report_overlap(genomeSize=dim(cds)[1],
                             list2=PDgenes$Gene)
 overlap_expression_plot(dge.dx, 
                         geneList = PD_overlap, 
-                        title="Overlapping PD-associated Genes / dx DGEs")
+                        title="Overlapping PD-associated Genes w/ dx DGEs")
 ```
 
 ### Cluster DGEs
@@ -152,4 +152,6 @@ gostres <- gprofiler2::gost(query = query, organism = "hsapiens")
 gprofiler2::gostplot(gostres)
 createDT(gostres$result)
 ```
+
+
 

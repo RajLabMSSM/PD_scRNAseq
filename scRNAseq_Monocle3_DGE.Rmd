@@ -183,54 +183,97 @@ marker_res <- top_cluster_markers(cds_DGE,
                                   cluster_list=c(1,2), 
                                   genes_to_test_per_group=1000, 
                                   save_path= "./Results/cluster_markers.csv") 
+# marker_res <- data.table::fread("./Results/cluster_markers.csv")
 ```
 
+## Results Table
 
+When trying to identify cluster-specific markers you need to consider the other columns in the DGE results table, namely:  
+- ``marker_score``  
+- ``fraction_expressing``  
+- ``specificity``  
+- ``pseudo_R2``  
 
-
-```{r Top Specific Markers - Results}
+```{r Top Specific Markers - Results Table}
 filtered_res <- marker_res %>%
-    filter(fraction_expressing >= 0.10 & marker_test_q_value <=0.05) %>%
-    group_by(cell_group) %>% arrange(desc(specificity), desc(pseudo_R2))
+    filter(fraction_expressing >= 0.10 & marker_test_q_value <=0.05)  %>% 
+  dplyr::mutate(neg_log10_q_value = -log10(marker_test_q_value)) %>%
+    group_by(cell_group) %>% arrange(desc(specificity), desc(pseudo_R2))  
 createDT(filtered_res)
+```
+
+## Alternative Plots
+
+- For genes further down the properly sorted *Top Specific Markers* table may be more difficult to see in UMAP gene expression plots due to a variety of reasons (e.g. excessive cell density, low fraction of cells expressing).  
+- Thus, it can be more useful to produce alternative means of visualizing these genes.  
+
+```{r Top Specific Markers - Alternative Plots, fig.height=8, fig.width=14}  
+select.genes <- c("COX5A", "COX6B1", "COX7A2", "COX7B", "NDUFA1", "MS4A4A", "PYCARD", "S100A4")
+shared.metrics <- c("pseudo_R2", "neg_log10_q_value")
+cluster_specific.metrics <- c("mean_expression","marker_score","fraction_expressing", "specificity")
+
+shared <-  data.table::melt.data.table(data.table(subset(filtered_res, gene_id %in% select.genes)), 
+                                                    id.vars = c("gene_id","cell_group"), 
+                                                    measure.vars = shared.metrics, 
+                                                    variable.name = "metric")
+cluster_specific <-  data.table::melt.data.table(data.table(subset(filtered_res, gene_id %in% select.genes)), 
+                                                    id.vars = c("gene_id","cell_group"), 
+                                                    measure.vars = cluster.specific.metrics, 
+                                                    variable.name = "metric")
+
+
+g1 <- ggplot(shared) + 
+      geom_col(aes(x=gene_id, y=value, fill=factor(gene_id)), show.legend = F) + 
+      facet_grid(metric~.,scales = "free_y")
+
+g2 <- ggplot(cluster_specific, aes(x=gene_id, y=value, fill=factor(cell_group))) + 
+      geom_col(position = "dodge") + 
+      facet_grid(metric~.,scales = "free_y") +  scale_fill_discrete(name = "Cluster")
+cowplot::plot_grid(g1, g2, labels = c("Metrics Shared by Clusters", "Metrics Specific to Clusters")) 
 ```
 
 
 # Gene Expression Plots
 
-```{r Gene Expression Plots} 
-# Selected DEGs
+## Selected Genes
+
+```{r Selected Genes}
+# Selected Marker Genes
 m1 <- monocle3::plot_cells(cds, 
                      genes=c("COX5A", "COX7B", "NDUFA1", "MS4A4A", "PYCARD", "S100A4"), 
                      # group_cells_by = "cluster",
                      show_trajectory_graph = F)
 ggsave2("./Results/selected_DEGs.png", m1, dpi = 1000, height = 4)
-m1
+print(m1) 
 
+# COX genes
 m2 <- monocle3::plot_cells(cds, 
                      genes=c("COX5A", "COX6B1", "COX7A2", "COX7B"), 
                      # group_cells_by = "cluster",
                      show_trajectory_graph = F)
 ggsave2("./Results/COX-genes.png", m2, dpi = 1000,  height = 4, width = 6)
-m2
+print(m2)
+```
 
+## Cluster-specific Markers
 
-# Cluster-specific Markers
-marker_res <- data.table::fread("./Results/cluster_markers.csv")
-marker_res <- marker_res %>% arrange(desc(marker_score))
+```{r Cluster-specific Markers} 
+# marker_res <- data.table::fread("./Results/cluster_markers.csv")   
+
 # Cluster1 specific
 c1 <- monocle3::plot_cells(cds, 
-                     genes=subset(marker_res, cell_group==1)$gene_id[1:6], 
+                     genes=(subset(marker_res, cell_group==1)%>% arrange(desc(marker_score)))$gene_id[1:6]  , 
                      # group_cells_by = "cluster",
                      show_trajectory_graph = F)
 # Cluster2 specific
 c2 <- monocle3::plot_cells(cds, 
-                     genes=subset(marker_res, cell_group==2)$gene_id[1:6], 
+                     genes=(subset(marker_res, cell_group==2) %>% arrange(desc(marker_score)))$gene_id[1:6], 
                      # group_cells_by = "cluster",
                      show_trajectory_graph = F)
 cp <- cowplot::plot_grid(c1, c2, nrow = 2)
-cp
+print(cp)
 ggsave2("./Results/cluster_markers.png", cp, dpi = 1000, scale = 1, height = 7)
 ```
+
 
 

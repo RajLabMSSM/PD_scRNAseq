@@ -213,67 +213,23 @@ monocle3::plot_cells(cds,
 
 ## Gene Expression Plots
 
-```{r Gene Expression Plots}
-# Violin
-monocle3::plot_genes_violin(cds[c("CD14","FCGR3A"),], group_cells_by = "dx")
+### Violin
 
-# UMAP 
+```{r Gene Expression Plots - Violin}
+# Violin
+monocle3::plot_genes_violin(cds[c("CD14","FCGR3A"),], group_cells_by = "dx") 
+```
+
+## UMAP
+
+```{r Gene Expression Plots - UMAP}
+# Key Markers
 monocle3::plot_cells(cds, 
                      genes=c("CD14","FCGR3A"), 
                      group_cells_by = "cluster",
-                     show_trajectory_graph = F)
-monocle3::plot_cells(cds, 
-                     genes=unique(top_specific_markers$gene_id), 
-                     group_cells_by = "cluster",
-                     show_trajectory_graph = F)
-# monocle3::plot_cells_3d(cds, genes="FCGR3A", show_trajectory_graph = F)
+                     show_trajectory_graph = F) 
 ```
 
-
-
-# Graph-autocorrelation Analysis 
-
-Find genes of interest through graph-autocorrelation analysis.
-
-```{r Graph-autocorrelation Analysis}
-# pr_graph_test_res = monocle3::graph_test(cds, neighbor_graph="knn", cores=nCores)
-# pr_deg_ids = row.names(subset(pr_graph_test_res, q_value < 0.05))
-```
-
-# Gene Modules
-
-- Identify co-expression modules.<br>
-`find_gene_modules` essentially runs UMAP on the genes (as opposed to the cells) and then groups them into modules using Louvain community analysis.
-- **Advantages**: Much faster than other alogrithms like WGCNA.  
-- **Disadvantages**: Seems to be limited of ~1000 genes.
-
-```{r Gene Modules}
-gene_module_df = monocle3::find_gene_modules(cds_DGE[var.genes[1:1000], ], 
-                                             resolution=1e-2, 
-                                             max_components = 3,
-                                             cores=nCores)
-# Create pheatmap table
-cell_group_df = tibble::tibble(cell=row.names(colData(cds)),
-                               cell_group=clusters(cds)[colnames(cds)])
-agg_mat = aggregate_gene_expression(cds, gene_module_df, cell_group_df)
-row.names(agg_mat) = stringr::str_c("Module ", row.names(agg_mat))
-colnames(agg_mat) = stringr::str_c("Cluster ", colnames(agg_mat))
-
-pheatmap::pheatmap(agg_mat, cluster_rows=TRUE, cluster_cols=TRUE,
-                   scale="column", clustering_method="ward.D2",
-                   fontsize=6)
-# rgl::plot3d(x = gene_module_df$dim_1, y=gene_module_df$dim_2, z=gene_module_df$dim_3)
-```
-
-## Module Expression
-
-```{r Module Expression}
-monocle3::plot_cells(cds,
-                     genes=gene_module_df,
-                     group_cells_by="cluster",
-                     color_cells_by="cluster",
-                     show_trajectory_graph=F) #  rasterize = T (for super high-res figures)
-```
 
 
 # Cell Type Proportions 
@@ -344,6 +300,5 @@ Save R object and run memory-intensive DGE analyses on computing cluster.
 ```{r Save Checkpoint}
 # saveRDS(cds, file="./Data/monocle3_CDS.RData")
 save(cds, var.genes, file = "./Data/monocle3_CDS.RData")
-
 ```
 

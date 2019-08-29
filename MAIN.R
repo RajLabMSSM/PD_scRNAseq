@@ -133,6 +133,36 @@ get_biotypes <- function(gene_list, subsetGenes="protein_coding"){
 }
 
 
+
+
+ENSG_to_HGNC <- function(ensembl_ids, reference_genome="grch37", input="ensembl_gene_id"){ 
+  print("+ Converting Ensembl IDs to HGNC Gene Symbols") 
+  # Remove info after dot (numbers after dot specify the transcript)
+  ensembl_ids <- gsub("\\..*","",ensembl_ids) 
+  if(reference_genome=="grch38"){
+    host <- "www.ensembl.org"
+    } else {host <- paste0(reference_genome,".ensembl.org")}
+  # BIOMART
+  mart = biomaRt::useMart(biomart="ENSEMBL_MART_ENSEMBL", 
+                          host=host, 
+                          dataset = "hsapiens_gene_ensembl") 
+  # View(biomaRt::listFilters(mart))
+  # View(biomaRt::listAttributes(mart))
+  res <- biomaRt::getBM(filters = input, # "ensembl_transcript_id" 
+                        attributes = c("ensembl_gene_id","ensembl_transcript_id","hgnc_symbol"), 
+                        values = ensembl_ids,
+                        mart = mart)
+  # Translate from feature to gene (or transcript)
+  gene_dict <- setNames(res$hgnc_symbol, nm = res$ensembl_gene_id) 
+  return(gene_dict)
+}
+
+
+
+
+
+
+
 subset_seurat <- function(DAT, genes.use){
   subset.matrix <- DAT@raw.data[genes.use, ] # Pull the raw expression matrix from the original Seurat object containing only the genes of interest
   subDAT <- CreateSeuratObject(subset.matrix) # Create a new Seurat object with just the genes of interest
@@ -280,17 +310,18 @@ top_cluster_markers <- function(cds_DGE,
   if(save_path!=F){
     data.table::fwrite(marker_test_res, save_path)
   }
-  # Filter
+  # Filter and plot top markers
+  ## Filter
   filtered_res <- marker_test_res %>%
     filter(fraction_expressing >= 0.10 & marker_test_q_value <=0.05) %>%
-    group_by(cell_group) %>% arrange(desc(specificity), desc(pseudo_R2))
-  # createDT_html(filtered_res) %>% print()
-  # Plot
-  top_specific_markers <-filtered_res$gene_id[1:min(c(10,nrow(filtered_res)))] %>% unique()
+    group_by(cell_group) %>% arrange(desc(specificity), desc(pseudo_R2)) 
+  ## Plot
+  top_specific_markers <- filtered_res$gene_id[1:min(c(10,nrow(filtered_res)))] %>% unique()
   print(paste("Plotting the top",length(top_specific_markers), "specific markers."))
   monocle3::plot_cells(cds_DGE, 
                        genes = top_specific_markers, 
                        show_trajectory_graph = F)
+  # Return full results
   return(marker_test_res)
 }
 
@@ -370,26 +401,153 @@ run_enrichr <- function(DEG_table,
 
 
 
-report_overlap <- function(genomeSize, list1, list2){  
-  go.obj <-  GeneOverlap::newGeneOverlap(listA = list1, listB = list2, genome.size = genomeSize )
-  go.obj <-  GeneOverlap::testGeneOverlap(go.obj)
-  print(go.obj) 
+report_overlap <- function(genomeSize, list1, list2, verbose=T){  
+  go.obj <-  GeneOverlap::newGeneOverlap(listA = list1, listB = list2, genome.size = genomeSize)
+  go.obj <-  GeneOverlap::testGeneOverlap(go.obj) 
   
   overlappingGenes <-  GeneOverlap::getIntersection(go.obj)
   percent_of_targetGenes <- length(overlappingGenes) / length(list2)*100
   percent_of_DEGs <- length(overlappingGenes) / length(list1)*100
   targetGenes_DEGs <- list2[overlappingGenes %in% list2]
-  
-  cat("\n",round(percent_of_targetGenes, 2),"% of the provided genes (",length(overlappingGenes),"/",length(list2),") are DEGs.")
-  
-  cat("\n",round(percent_of_DEGs, 2),"% of the DEGs (",
-      length(overlappingGenes),"/",length(list1),") are in the provided gene list.")
-  
-  cat("\n-------------------------------------------------------",
-      "\n\n++++++++++++ Enrichment p-value =",go.obj@pval,"++++++++++++\n\n")
-  return(overlappingGenes) 
+  if(verbose){
+    print(go.obj)
+    cat("\n",round(percent_of_targetGenes, 2),"% of list2 genes (",length(overlappingGenes),"/",length(list2),") are in list1.")
+    
+    cat("\n",round(percent_of_DEGs, 2),"% of the list1 genes (",
+        length(overlappingGenes),"/",length(list1),") are in list2.")
+    
+    cat("\n-------------------------------------------------------",
+        "\n\n++++++++++++ Enrichment p-value =",go.obj@pval,"++++++++++++\n\n")
+  } 
+  return(list(go.obj=go.obj,
+              overlappingGenes=overlappingGenes )) 
 } 
 
+
+module_vs_module_enrichment <- function(mod.df1, mod.df2, genomeSize, verbose=T){ 
+  mod1.unique <- length(unique(mod.df1$module))
+  mod2.unique <- length(unique(mod.df2$module))
+  print(paste("mod.df1 contains", mod1.unique, "unique modules."))
+  print(paste("mod.df2 contains", mod2.unique, "unique modules."))
+  print(paste("Conducting enrichment tests on",mod1.unique*mod2.unique,"module-module combinations..."))
+  start.mod <- Sys.time() 
+  # Level 1
+  MOD.dt <-lapply(unique(mod.df1$module), function(MOD){
+    sub.df1 <- subset(mod.df1, module==MOD)
+    # Level 2
+    mod.dt <- lapply(unique(mod.df2$module), function(mod, MOD.=MOD){
+      if(verbose){print(paste(MOD.,"(mod.df1) vs.",mod,"(mod.df2)"))}
+      sub.df2 <- subset(mod.df2, module==mod)
+       
+      res.list <- report_overlap(genomeSize = genomeSize,
+                                 list1 = sub.df1$gene.symbol, 
+                                 list2 = sub.df2$gene.symbol,  
+                                 verbose = F)
+      go.obj <- res.list$go.obj
+      # overlappingGenes <- res.list$overlappingGenes
+      summary.dt <- data.table::data.table(Module1.name = MOD, 
+                                           Module2.name = mod, 
+                                           Module1.size = length(go.obj@listA), 
+                                           Module2.size = length(go.obj@listB), 
+                                           Module1.proportion.overlap = round(length(go.obj@intersection) / length(go.obj@listA),3),
+                                           Module2.proportion.overlap = round(length(go.obj@intersection) / length(go.obj@listB),3),
+                                           intersection.size = length(go.obj@intersection), 
+                                           union.size = length(go.obj@union),
+                                           genome.size = go.obj@genome.size,
+                                           p.value = go.obj@pval, 
+                                           odds.ratio = go.obj@odds.ratio,
+                                           Jaccard.index = go.obj@Jaccard)
+    }) %>% data.table::rbindlist()
+  }) %>% data.table::rbindlist() 
+  
+  MOD.dt <- MOD.dt %>% dplyr::mutate(FDR=p.adjust(p.value, method="fdr"), 
+                                     Bonferroni=p.adjust(p.value, method="bonferroni")) %>% arrange(FDR)
+  MOD.sig <- MOD.dt %>% subset(FDR<=0.05) 
+  end.mod <- Sys.time()
+  print(paste(nrow(MOD.dt),"enrichment tests conducted in", round(end.mod-start.mod,2),"seconds."))
+  print(paste(nrow(MOD.sig),"enrichment tests were significant (at FDR ≤ 0.05)."))
+  # MOdule conservation
+  mod.df1.convervation <- length(unique(MOD.sig$Module1.name)) / length(unique(MOD.dt$Module1.name))
+  mod.df2.convervation <- length(unique(MOD.sig$Module2.name)) / length(unique(MOD.dt$Module2.name))
+  print(paste0(round(mod.df1.convervation*100,2),"% of mod.df1 modules showed enrichment for a mod.df2 module."))
+  print(paste0(round(mod.df2.convervation*100,2),"% of mod.df2 modules showed enrichment for a mod.df1 module."))
+  
+  return(MOD.dt)
+}
+
+
+module_vs_module_enrichment.terms <- function(MOD.dt, 
+                                              mod.enrich, 
+                                              top.terms=F,
+                                              row.limit=F){
+  print(paste("Comparing overlap of enrichment terms for all module-module combinations."))
+  # Set limits 
+  if(row.limit==F){row.limit <- nrow(MOD.dt) }
+  
+  
+  mm.overlap <- lapply(1:row.limit, function(i){
+    MOD.dt <- (MOD.dt %>% arrange(desc(Jaccard.index))) 
+    
+    # Module 1
+    mod1 <- MOD.dt[i,"Module1.name"]
+    mod1.terms <- (subset(mod.enrich, module==mod1) %>%  
+                     arrange(FDR, desc(precision), desc(recall)))
+    if(top.terms==F){top.terms.m1 <- nrow(mod1.terms) }else{top.terms.m1 <- top.terms}
+    mod1.terms <- mod1.terms[1:top.terms.m1,]$term_name %>% unique()
+    # Module 2
+    mod2 <- MOD.dt[i,"Module2.name"]
+    mod2.terms <- (subset(mod.enrich, module==mod2) %>%  
+                     arrange(FDR, desc(precision), desc(recall)))
+    if(top.terms==F){top.terms.m2 <- nrow(mod2.terms) }else{top.terms.m2 <- top.terms}
+    mod2.terms <- mod2.terms[1:top.terms.m2,]$term_name %>% unique()
+    
+    # Test overlap
+    union.terms <- union_all(mod1.terms, mod2.terms)
+    go.obj <-  GeneOverlap::newGeneOverlap(listA = mod1.terms, 
+                                           listB = mod2.terms, 
+                                           genome.size = length(union.terms))
+    go.obj <-  GeneOverlap::testGeneOverlap(go.obj) 
+    
+    summary.dt <- data.table::data.table(Module1.name = mod1, 
+                                         Module2.name = mod2, 
+                                         Module1.size = length(go.obj@listA),
+                                         Module2.size = length(go.obj@listB), 
+                                         Module1.top.term = go.obj@listA[1],
+                                         Module2.top.term = go.obj@listB[1],
+                                         Module1.proportion.overlap = round(length(go.obj@intersection) / length(go.obj@listA),3),
+                                         Module2.proportion.overlap = round(length(go.obj@intersection) / length(go.obj@listB),3),
+                                         intersection.size = length(go.obj@intersection), 
+                                         union.size = length(go.obj@union),
+                                         ontology.size = go.obj@genome.size,
+                                         p.value = go.obj@pval, 
+                                         odds.ratio = go.obj@odds.ratio,
+                                         Jaccard.index = go.obj@Jaccard)
+    return(summary.dt)
+  }) %>% data.table::rbindlist(fill=T)
+  return(mm.overlap)
+}
+
+
+
+gprofiler2.module_enrichment <- function(mod.df, dataset=""){
+  start.enrich <- Sys.time()
+  mod.enrich <- lapply(unique(mod.df$module), function(mod){ 
+    print(paste("gprofiler2:: Running enrichment on module:",mod))
+    gostres <- gprofiler2::gost(query = subset(mod.df, module==mod)$gene.symbol, organism = "hsapiens") 
+    if(is.null(gostres)){
+      enrich.res <- data.frame(dataset=dataset, module=mod)
+    } else{
+      enrich.res <- gostres$result
+      enrich.res <- cbind(dataset=dataset, module=mod, enrich.res)
+    } 
+    return(enrich.res)
+  }) %>% data.table::rbindlist(fill = T)
+  
+  end.enrich <- Sys.time()
+  print(paste("gprofiler2::",length(unique(mod.df$module)),
+              "tested for ontological enrichment in",round(end.enrich-start.enrich,2),"seconds"))
+  return(mod.enrich)
+}
 
 
 # HEATMAP
