@@ -1,5 +1,6 @@
 ---
-title: "Gene Modules"
+title: "Gene Co-expression Modules"
+subtitle: "Bulk vs. Single-Cell RNA-seq"
 author: "<h3>Author</h3>Brian M. Schilder, Bioinformatician II"
 date: "`r Sys.Date()`"
 output: 
@@ -12,15 +13,23 @@ output:
     smooth_scroll: true
     number_sections: false 
     self_contained: false 
+params:
+  subsetGenes: "protein_coding" #FALSE
+  subsetCells: 500 #FALSE
+  resolution: 0.6
+  resultsPath: "./Results"
+  nCores: 2
+  perplexity: 30
+editor_options: 
+  chunk_output_type: inline
 ---
 
-```{r setup, message=F, results='hide'}
-# Import functions
-library(gprofiler2) 
+```{r setup, dpi = 600, warning=F, message=F}
 library(dplyr) 
 library(ggplot2) 
 root = "./"
 source(file.path(root,"MAIN.R")) 
+import_parameters(params)
 load("./Data/monocle3_CDS.RData") 
 nCores <- 4
 ```
@@ -46,7 +55,8 @@ gene_module_df = monocle3::find_gene_modules(cds[var.genes[1:1000], ],
                                              resolution=1e-2, 
                                              reduction_method = "UMAP",
                                              max_components = 3,
-                                             cores=nCores)
+                                             cores=nCores, 
+                                             random_seed = 2019)
 data.table::fwrite(gene_module_df, "./Results/sc.modules_by_gene.txt", sep="\t")
 createDT(gene_module_df)
 ```

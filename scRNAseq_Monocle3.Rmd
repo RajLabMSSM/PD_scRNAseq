@@ -75,7 +75,8 @@ set.seed(2019)
 
 ## Seurat/2.3.4 to Monocle3
 
-Also subset to only protein-coding genes.
+- Only include protein-coding genes. Otherwise, the clusters don't map as well onto the UMAP plots.  
+- Only need to run if not using preprocessed ``cds`` object.  
 
 ```{r Seurat/2.3.4 to Monocle3, eval=F}
 biotypes <- get_biotypes(DAT)
