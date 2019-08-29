@@ -5,7 +5,7 @@ Analysis pipelines for Parkinson's Disease scRNA-seq data from CD14+ peripheral 
 
 ## Rmarkdown Results Summaries
 
-### [Dimensionality Reduction + Pseudotime + Clustering + Cell Type Identification + Gene Modules](https://rajlabmssm.github.io/PD_scRNAseq/scRNAseq_Monocle3.html)  
+### [Dimensionality Reduction + Pseudotime + Clustering + Cell Type Identification](https://rajlabmssm.github.io/PD_scRNAseq/scRNAseq_Monocle3.html)  
 
 ### [Differential Gene Expression + Top Specific Markers](https://rajlabmssm.github.io/PD_scRNAseq/scRNAseq_Monocle3_DGE.html)  
 - Only top 1000 DGEs displayed in tables (page gets too slow otherwise). See **Full DGE Results Tables** link below for full results.  
