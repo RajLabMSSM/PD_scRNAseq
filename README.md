@@ -10,10 +10,13 @@ Analysis pipelines for Parkinson's Disease scRNA-seq data from CD14+ peripheral 
 ### [Differential Gene Expression + Top Specific Markers](https://rajlabmssm.github.io/PD_scRNAseq/scRNAseq_Monocle3_DGE.html)  
 - Only top 1000 DGEs displayed in tables (page gets too slow otherwise). See **Full DGE Results Tables** link below for full results.  
 
-### [Full DGE Results Tables](https://github.com/RajLabMSSM/PD_scRNAseq/tree/master/Results)  
+#### [Full DGE Results Tables](https://github.com/RajLabMSSM/PD_scRNAseq/tree/master/Results)  
  
  
-### [Enrichment Results](https://rajlabmssm.github.io/PD_scRNAseq/scRNAseq_Monocle3_Enrich.html)  
+### [DGE List Enrichment](https://rajlabmssm.github.io/PD_scRNAseq/scRNAseq_Monocle3_Enrich.html)  
+
+### [Bulk vs. Single-cell Co-expression Modules](https://rajlabmssm.github.io/PD_scRNAseq/scRNAseq_Monocle3_Modules.html)  
+
 
 ---
 ### Created by:  
