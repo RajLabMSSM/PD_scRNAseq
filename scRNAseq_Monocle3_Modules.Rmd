@@ -3,7 +3,7 @@ title: "Gene Modules"
 author: "<h3>Author</h3>Brian M. Schilder, Bioinformatician II"
 date: "`r Sys.Date()`"
 output: 
-  rmarkdown::html_document: 
+  html_document: 
     theme: spacelab
     highlight: zenburn 
     code_folding: show 
@@ -159,8 +159,7 @@ hm <- heatmaply::heatmaply(mod.cast,
                             xlab = "scRNA-seq Louvain Modules",
                             ylab = "bulk RNA-seq WGCNA Modules", 
                             cexRow = .7,
-                            key.title = "Jaccard Index", 
-                            file = "module-module.heatmap.html")
+                            key.title = "Jaccard Index") # file = "module-module.heatmap.html"
 # shiny::includeHTML("module-module.heatmap.html")
 htmltools::tagList(setNames(list(hm), NULL)) 
 ```
