@@ -3,7 +3,7 @@ title: "Gene Modules"
 author: "<h3>Author</h3>Brian M. Schilder, Bioinformatician II"
 date: "`r Sys.Date()`"
 output: 
-  html_document: 
+  rmarkdown::html_document: 
     theme: spacelab
     highlight: zenburn 
     code_folding: show 
