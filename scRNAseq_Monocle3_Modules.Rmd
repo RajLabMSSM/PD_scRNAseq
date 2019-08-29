@@ -72,7 +72,7 @@ pheatmap::pheatmap(agg_mat, cluster_rows=TRUE, cluster_cols=TRUE,
 
 ## 3D Scatter
 
-```{r Gene Modules - 3D Scatter, results="asis"}
+```{r Gene Modules - 3D Scatter}
 # plotly R documentation: https://plot.ly/r/
 # rgl::plot3d(x = gene_module_df$dim_1, y=gene_module_df$dim_2, z=gene_module_df$dim_3, ) 
 p.3d <- plotly::plot_ly(gene_module_df, 
@@ -147,7 +147,7 @@ createDT(MOD.dt)
 
 ### Plot Module-Module Overlap
 
-```{r Modules - Plot Overlap, fig.height=10, results="asis"}   
+```{r Modules - Plot Overlap, fig.height=10}   
 # library(heatmaply)
 mod.cast <- reshape2::acast(MOD.dt, 
                             Module1.name~Module2.name, 
