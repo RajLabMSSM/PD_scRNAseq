@@ -424,7 +424,12 @@ report_overlap <- function(genomeSize, list1, list2, verbose=T){
 } 
 
 
-module_vs_module_enrichment <- function(mod.df1, mod.df2, genomeSize, verbose=T){ 
+module_vs_module_enrichment <- function(mod.df1, 
+                                        mod.df2, 
+                                        genomeSize, 
+                                        verbose=T,
+                                        save_file="./Results/bulk.modules_vs_sc.modules.txt"
+                                        ){ 
   mod1.unique <- length(unique(mod.df1$module))
   mod2.unique <- length(unique(mod.df2$module))
   print(paste("mod.df1 contains", mod1.unique, "unique modules."))
@@ -471,6 +476,10 @@ module_vs_module_enrichment <- function(mod.df1, mod.df2, genomeSize, verbose=T)
   mod.df2.convervation <- length(unique(MOD.sig$Module2.name)) / length(unique(MOD.dt$Module2.name))
   print(paste0(round(mod.df1.convervation*100,2),"% of mod.df1 modules showed enrichment for a mod.df2 module."))
   print(paste0(round(mod.df2.convervation*100,2),"% of mod.df2 modules showed enrichment for a mod.df1 module."))
+  
+  if(save_file!=F){
+    data.table::fwrite(MOD.dt, save_file)
+  }
   
   return(MOD.dt)
 }

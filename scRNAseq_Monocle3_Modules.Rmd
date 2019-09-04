@@ -12,7 +12,7 @@ output:
     toc_float: true
     smooth_scroll: true
     number_sections: false 
-    self_contained: true 
+    self_contained: true ### !IMPORTANT!: Must == true in order to create GitHub page.
 params:
   subsetGenes: "protein_coding" #FALSE
   subsetCells: 500 #FALSE
@@ -52,10 +52,11 @@ Find genes of interest through graph-autocorrelation analysis.
 
 ```{r Gene Modules}
 gene_module_df = monocle3::find_gene_modules(cds[var.genes[1:1000], ], 
-                                             resolution=1e-2, 
+                                             # resolution=1e-2, 
                                              reduction_method = "UMAP",
                                              max_components = 3,
-                                             cores=nCores, 
+                                             cores=nCores,
+                                             umap.fast_sgd = F, # Slower but determinstic results
                                              random_seed = 2019)
 data.table::fwrite(gene_module_df, "./Results/sc.modules_by_gene.txt", sep="\t")
 createDT(gene_module_df)
@@ -72,13 +73,21 @@ cell_group_df = tibble::tibble(cell=row.names(SummarizedExperiment::colData(cds)
 agg_mat = monocle3::aggregate_gene_expression(cds, gene_module_df, cell_group_df)
 row.names(agg_mat) = stringr::str_c("Module ", row.names(agg_mat))
 colnames(agg_mat) = stringr::str_c("Cluster ", colnames(agg_mat))
-data.table::fwrite(data.table::data.table(data.frame(as.matrix(agg_mat)), keep.rownames = "Module"),
+module_cluster_exp <- data.frame(as.matrix(agg_mat))
+data.table::fwrite(data.table::data.table(module_cluster_exp, keep.rownames = "Module"),
                    "./Results/sc.modules_by_cluster.txt", sep="\t" )
 # Plot
-pheatmap::pheatmap(agg_mat, cluster_rows=TRUE, cluster_cols=TRUE,
+pheatmap::pheatmap(agg_mat, cluster_rows=T, cluster_cols=F,
                    scale="column", clustering_method="ward.D2",
                    fontsize=6) 
 ```
+
+### Differential Module Expression
+
+```{r}
+# module_cluster_exp
+```
+
 
 ## 3D Scatter
 
@@ -151,6 +160,7 @@ genomeSize <- length(union(unique(bulk.modules$gene.symbol), monocle3::fData(cds
 MOD.dt <- module_vs_module_enrichment(mod.df1 = bulk.modules, 
                                       mod.df2 = sc.modules, 
                                       genomeSize = genomeSize, 
+                                      save_file="./Results/bulk.modules_vs_sc.modules.txt",
                                       verbose = F) 
 createDT(MOD.dt)  
 ```
@@ -268,3 +278,24 @@ htmltools::tagList(list(ggp))
 ```
 
 
+# Plot Bulk Hubs on Single-Cell Data
+
+```{r Plot Bulk Hubs on Single-Cell Data}
+# module-module comparisons
+MOD.dt <- data.table::fread("./Results/bulk.modules_vs_sc.modules.txt") %>% 
+  arrange(FDR)
+top.bulk.mods <- head(MOD.dt, 10)$Module1.name %>% unique()
+# One hub per module
+bulk.hubs <- data.table::fread("./Data/Katia_Modules/hubs_gencode30.tbl.txt")
+top.bulk.hubs <- subset(bulk.hubs, module %in% top.bulk.mods) 
+# Plot hub expression in sc data
+monocle3::plot_cells(cds,
+                     genes=top.bulk.hubs$symbol,
+                     group_cells_by="cluster",
+                     color_cells_by="cluster",
+                     show_trajectory_graph=F) #  rasterize = T (for super high-res figures) 
+```
+
+ 
+ 
+ 
