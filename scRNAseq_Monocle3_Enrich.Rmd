@@ -46,10 +46,17 @@ load("./Data/monocle3_CDS.RData")
 - **dge.dx**: DGE results of dx/disease status (PD vs Controls) across all clusters.  
 - **dge.clust**: DGE results of cluster (Cluster1/Canonical Monocytes vs. Cluster2/Intermediate Monocytes) across all indivdiuals (regardless of disease status).  
 
-```{r Import: DEGs} 
-# DEGs
+```{r Import: DEGs}
+# ----- Across Clusters
 dge.dx <- read.csv("Results/across_PD.vs.Ctrl.csv")  
-dge.clust <- read.csv("Results/across_Clust1.vs.Clust2.csv")  
+# dge.mut <- read.csv("Results/across_PD.vs.GBA.csv") #No DEGs to check!
+dge.clust <- read.csv("Results/across_Clust1.vs.Clust2.csv")
+
+# ----- Within Clusters
+dge.within.clust1.dx <- read.csv("./Results/within.Clust1_PD.vs.Ctrl.csv")
+dge.within.clust2.dx <- read.csv("./Results/within.Clust2_PD.vs.Ctrl.csv")
+dge.within.clust1.mut <- read.csv("./Results/within.Clust1_PD.vs.GBA.csv")
+dge.within.clust2.mut <- read.csv("./Results/within.Clust2_PD.vs.GBA.csv") 
 ```
 
 # AD and PD-associated Genes
@@ -81,8 +88,8 @@ createDT(rbind(ADgenes, PDgenes))
 AD_overlap <- report_overlap(genomeSize=dim(cds)[1], 
                             list1=subset(dge.dx, q_value<=0.05)$gene_short_name, 
                             list2=ADgenes$Gene)
-overlap_expression_plot(dge.dx, 
-                        geneList = AD_overlap, 
+overlap_expression_plot(DEG_table = dge.dx, 
+                        geneList = AD_overlap$overlappingGenes, 
                         title="Overlapping AD-associated Genes w/ dx DGEs")
 ```
 
@@ -93,7 +100,7 @@ AD_overlap <- report_overlap(genomeSize=dim(cds)[1],
                             list1=subset(dge.clust, q_value<=0.05)$gene_short_name, 
                             list2=ADgenes$Gene)
 overlap_expression_plot(dge.clust, 
-                        geneList = AD_overlap, 
+                        geneList = AD_overlap$overlappingGenes, 
                         title="Overlapping AD-associated Genes w/ Cluster DGEs")
 ```
 
@@ -109,7 +116,7 @@ PD_overlap <- report_overlap(genomeSize=dim(cds)[1],
                             list1=subset(dge.dx, q_value<=0.05)$gene_short_name, 
                             list2=PDgenes$Gene)
 overlap_expression_plot(dge.dx, 
-                        geneList = PD_overlap, 
+                        geneList = PD_overlap$overlappingGenes, 
                         title="Overlapping PD-associated Genes w/ dx DGEs")
 ```
 
@@ -120,34 +127,84 @@ PD_overlap <- report_overlap(genomeSize=dim(cds)[1],
                             list1=subset(dge.clust, q_value<=0.05)$gene_short_name, 
                             list2=PDgenes$Gene)
 overlap_expression_plot(dge.clust, 
-                        geneList = PD_overlap, 
+                        geneList = PD_overlap$overlappingGenes, 
                         title="Overlapping PD-associated Genes / Cluster DGEs")
 ```
 
   
  
 
+# GO Enrichment  
 
+- [gprofiler2](https://biit.cs.ut.ee/gprofiler/page/r)  
+- [Enrichr](https://amp.pharm.mssm.edu/Enrichr/)
+    + enrichR R package not currently working (8.14.2019). Providing the [link to the online results here](https://amp.pharm.mssm.edu/Enrichr/enrich?dataset=d634d1a5b290e873498f65676c894b33) for now. 
 
-# gprofiler2
+## Across Clusters  
 
-[gprofiler2](https://biit.cs.ut.ee/gprofiler/page/r)  
+### dx DGEs
 
-## Disease DGEs
-
-```{r gprofiler2 - Disease}
+```{r Across Clusters - dx}
 query <- subset(dge.dx, q_value<0.05)$gene_short_name %>% as.character()
 gostres <- gprofiler2::gost(query = query, organism = "hsapiens")
 gprofiler2::gostplot(gostres)
 createDT(gostres$result)
 ```
 
-## Cluster DGEs
+### mut DGEs
 
-- enrichR R package not currently working (8.14.2019). Providing the [link to the online results here](https://amp.pharm.mssm.edu/Enrichr/enrich?dataset=d634d1a5b290e873498f65676c894b33) for now. 
+```{r Across Clusters - mut}
+print("No DEGs were identified from this comparison!")
+```
 
-```{r gprofiler2 - Cluster}
+### Cluster DGE
+
+- DGE from Cluster 1 (canonical) vs. Cluster 2 (intermediate) comparison.
+
+```{r Across Clusters - cluster}
 query <- subset(dge.clust, q_value<0.05)$gene_short_name %>% as.character()
+gostres <- gprofiler2::gost(query = query, organism = "hsapiens")
+gprofiler2::gostplot(gostres)
+createDT(gostres$result)
+```
+
+## Within Clusters
+
+### dx DGEs
+
+#### Cluster 1
+
+```{r Within Cluster1 - dx}
+query <- subset(dge.within.clust1.dx, q_value<0.05)$gene_short_name %>% as.character()
+gostres <- gprofiler2::gost(query = query, organism = "hsapiens")
+gprofiler2::gostplot(gostres)
+createDT(gostres$result)
+```
+
+#### Cluster 2
+
+```{r Within Cluster2 - dx}
+query <- subset(dge.within.clust2.dx, q_value<0.05)$gene_short_name %>% as.character()
+gostres <- gprofiler2::gost(query = query, organism = "hsapiens")
+gprofiler2::gostplot(gostres)
+createDT(gostres$result) 
+```
+
+### mut DGEs
+
+#### Cluster 1
+
+```{r Within Cluster1 - mut}
+query <- subset(dge.within.clust1.mut, q_value<0.05)$gene_short_name %>% as.character()
+gostres <- gprofiler2::gost(query = query, organism = "hsapiens")
+gprofiler2::gostplot(gostres)
+createDT(gostres$result)  
+```
+
+#### Cluster 2
+
+```{r Within Cluster2 - mut}
+query <- subset(dge.within.clust2.mut, q_value<0.05)$gene_short_name %>% as.character()
 gostres <- gprofiler2::gost(query = query, organism = "hsapiens")
 gprofiler2::gostplot(gostres)
 createDT(gostres$result)

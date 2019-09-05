@@ -582,7 +582,6 @@ overlap_expression_plot <- function(DEG_table, geneList, title=""){
   
   p <- ggplot(dat.sub, aes(x=gene_short_name, y=estimate, fill=estimate)) + 
     geom_col(show.legend = F) + labs(title=title) + 
-    theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_text(angle = 45, hjust = 1)) +  
-    ylim(-2,2)
+    theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_text(angle = 45, hjust = 1)) #+  ylim(-2,2)
   plot(p)
 }

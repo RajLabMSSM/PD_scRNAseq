@@ -1,3 +1,4 @@
+./Manuscripts/
 ./*.RData
 Results/**/*.rds
 Results/**/*.RData
