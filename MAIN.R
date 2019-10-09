@@ -585,3 +585,36 @@ overlap_expression_plot <- function(DEG_table, geneList, title=""){
     theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_text(angle = 45, hjust = 1)) #+  ylim(-2,2)
   plot(p)
 }
+
+
+
+
+# ^^^^^^^^^^^^ 3D Volcano Plot ^^^^^^^^^^^^ 
+volcano_3d <- function(dge_path="./Results/across_Clust1.vs.Clust2.csv"){
+  library(plotly)
+  dge = data.table::fread("./Results/across_Clust1.vs.Clust2.csv")
+  norm <- function(x) {(x - min(x)) / (max(x) - min(x))}
+  # dge$estimate.norm <-  norm(dge$estimate)
+  # dge$q_value.norm <-  norm(-log10(dge$q_value))
+  # dge$colorscale <- dge$estimate.norm + dge$q_value.norm
+  # dge[is.na(dge)] <-0
+  # dge$cone <-  pi*dge$estimate#((dge$estimate)^2)*(-log10(dge$q_value)/3) 
+  # dge$cone.surface = pi*dge$estimate*(dge$estimate+sqrt(dge$q_value^2+dge$estimate^2))
+  p <- plot_ly(dge, 
+               x = ~test_val, 
+               y = ~estimate, 
+               z = ~-log10(q_value),
+               text = ~ gene_short_name,
+               marker = list( color = colorRampPalette(RColorBrewer::brewer.pal(11,"Spectral"))(200), showscale = T)) %>%
+    add_markers() %>%
+    layout(scene = list(xaxis = list(title = 'Normalized Effect'),
+                        yaxis = list(title = 'Effect'),
+                        zaxis = list(title = '-log(q-value)'))) 
+  p 
+  
+}
+
+
+
+
+

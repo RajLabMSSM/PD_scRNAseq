@@ -211,4 +211,41 @@ createDT(gostres$result)
 ```
 
 
+UpSetR Plots
+
+```{r UpSetR}
+all.genes <- rownames(fData(cds))
+genes.binary <- data.frame(row.names = all.genes,
+           dge.dx = ifelse(arrange(dge.dx, gene_short_name)$q_value<0.5, 1,0),
+           dge.clust = ifelse(arrange(dge.clust, gene_short_name)$q_value<0.5, 1,0),
+           dge.within.clust1.dx = ifelse(arrange(dge.within.clust1.dx, gene_short_name)$q_value<0.5, 1,0),
+            dge.within.clust2.dx = ifelse(arrange(dge.within.clust2.dx, gene_short_name)$q_value<0.5, 1,0),
+            ADgenes = ifelse(all.genes %in% ADgenes$Gene, 1,0),
+            PDgenes = ifelse(all.genes %in% PDgenes$Gene, 1,0) 
+           ) 
+## Heatmap
+# heat.mat <- as.matrix(genes.binary)
+# heat.mat <- heat.mat[rowSums(heat.mat)!=0,] 
+# corr.mat <- cor(heat.mat)
+# heatmaply::heatmaply(corr.mat)
+
+# library(UpSetR)# install.packages("UpSetR") 
+UpSetR::upset(genes.binary,  
+      sets = colnames(genes.binary),
+      keep.order = T, 
+      nintersects = NA, 
+      # empty.intersections = T,
+      matrix.color = "blue",
+      main.bar.color = "magenta2", 
+      shade.color = "blue",
+      sets.bar.color = "cyan2",  
+      matrix.dot.alpha = .5,
+      order.by = "freq", 
+      group.by = "sets",  
+      # boxplot.summary = c("AvgRating", "ReleaseDate")
+       # empty.intersections = "on",
+      mainbar.y.label = "Overlapping Genes", 
+      sets.x.label = "Gene Set Size")
+```
+
 

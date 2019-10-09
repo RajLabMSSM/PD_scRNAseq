@@ -252,8 +252,19 @@ print(prop.dx)
 clust.key <- list("1"="Canonical Monocytes", "2"="Intermediate Monocytes")
 for(clust in 1:2){ 
 clust1.diff <- (subset(cell_proportions, Cluster==clust & dx=="PD")$Proportion - subset(cell_proportions, Cluster==clust & dx=="control")$Proportion)*100
-print(paste("There is a",round(clust1.diff, 2),"% difference in the number of Cluster",clust,"cells (",clust.key[[as.character(clust)]], ") in Controls compared to PD."))
+# print(paste("There is a",round(clust1.diff, 2),"% difference in the number of Cluster",clust,"cells (",clust.key[[as.character(clust)]], ") in Controls compared to PD."))
 } 
+
+subset(meta, dx=="control")
+avg.cells.per.ID <- meta %>% dplyr::group_by(ID, dx, Cluster) %>% 
+  tally() %>% 
+  dplyr::group_by(dx, Cluster) %>% 
+  summarise(N = mean(n))
+avg.cell.filt <- avg.cells.per.ID[avg.cells.per.ID$Cluster %in% c(1,2),] %>% droplevels()
+
+
+avg.table <- xtabs(N ~ dx+Cluster, data=avg.cell.filt)
+chisq.test(avg.table)
 ```
 
 ## mut
@@ -289,6 +300,10 @@ prop.ID <- ggplot(cell_proportions, aes(x=ID, y=Proportion, fill = Cluster)) +
               theme(axis.text.x = element_text(angle = 45))
 print(prop.ID) 
 ```
+
+
+
+
 
 # Save Checkpoint
 

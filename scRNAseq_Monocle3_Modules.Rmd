@@ -81,12 +81,7 @@ pheatmap::pheatmap(agg_mat, cluster_rows=T, cluster_cols=F,
                    scale="column", clustering_method="ward.D2",
                    fontsize=6) 
 ```
-
-### Differential Module Expression
-
-```{r}
-# module_cluster_exp
-```
+ 
 
 
 ## 3D Scatter
@@ -114,12 +109,24 @@ htmltools::tagList(setNames(list(p.3d), NULL))
 ## Module Expression
 
 ```{r Module Expression}
+# gene_module_df <-data.table::fread("./Results/sc.modules_by_gene.txt")
 monocle3::plot_cells(cds,
                      genes=gene_module_df,
                      group_cells_by="cluster",
                      color_cells_by="cluster",
                      show_trajectory_graph=F) #  rasterize = T (for super high-res figures)
+
+p2 <- monocle3::plot_cells(cds,
+                           # sc.module 9 correponds to sc.module 5 in the old analyses
+                           genes=subset(gene_module_df, module==9),
+                           group_cells_by="cluster",
+                           color_cells_by="cluster",
+                           show_trajectory_graph=F)
+print(p2)
+ggsave("./Results/sc.module9.png", plot=p2, dpi=400, width=5, height=3.5)
 ```
+
+
 
 
 
@@ -147,6 +154,71 @@ createDT(bulk.modules)
 # Prepare sc modules
 sc.modules <- data.table::fread("./Results/sc.modules_by_gene.txt") %>% dplyr::rename(gene.symbol=id)
 createDT(sc.modules)
+```
+
+## Project Bulk Modules to Single-cell Data
+
+- Replace the discrete gene module assignments from sc.modules (UMAP+Louvain) to bulk.modules (WGNCA) from [here](https://rajlabmssm.github.io/WGCNA_MyND/2nd_batch_Analysis/protein_coding/04_sva/deepSplit_4/signed/04_page_sva_deep4_signed_PC.html#boxplot_mergedmes).  
+- The "NA" module simply represents a collection of genes that were present in the sc dataset but not in the bulk dataset.
+
+### PD vs. Control DGE Modules 
+
+- Plot only the module that were differentially expressed (Wilcoxon nominal P-value < 0.05) between PD and controls in the bulk data.
+- Also plot **darkmagenta**, which is of interest due to its enrichemnt in mitochondrial GO terms.
+
+**Results Summary**  
+- Bulk.modules differentially expressed between PD-Controls   
+  + *Preferentially expressed in canonical monocytes*
+    + darkmagenta (particularly the cells furthest from intermediate monocytes, suggesting these cells are the least activated)
+    + pink  
+    + honeydew1  
+  + *Preferentially expressed in intermediate monocytes*  
+    + purple (not clear separation but trending)
+
+```{r Project Bulk Modules to Single-cell Data - PD.vs.Ctrl, fig.width=10, fig.height=7}  
+merged.mods <- data.table:::merge.data.table(bulk.modules %>% dplyr::select(bulk.module=module, gene.symbol), 
+                                             sc.modules, 
+                                             by= "gene.symbol",
+                                             all.y = T) %>%
+  dplyr::select(gene.symbol, module=bulk.module, supermodule, dim_1, dim_2, dim_3) %>% unique() 
+
+
+
+# Selected
+select.modules <- c("lavenderblush3","darkturquoise","midnightblue","salmon4",
+                    "honeydew1","pink","darkmagenta","green","blue","brown",
+                    "darkolivegreen","darkorange2","purple","skyblue3",
+                    "thistle1","thistle2") # sort(unique(merged.mods$module))[1:15]
+p <- monocle3::plot_cells(cds,
+                     genes=subset(merged.mods, module %in% select.modules),
+                     group_cells_by="cluster",
+                     color_cells_by="cluster",
+                     show_trajectory_graph=F)
+print(p)
+ggsave("./Results/sc_to_bulk.png", plot=p, dpi=400, width=10, height=7) 
+```
+
+### All Modules  
+
+I also plotted all 60+ of the bulk.modules (ordered alphabetically) to see if any of them were preferentially expressed in a a given monocyte subtype. Darkmagenta remains one of the most striking examples, but there are other as well.
+
+- Preferentially expressed in canonical monocytes  
+  + grey80
+  + ivory
+- Preferentially expressed in intermediate monocytes  
+  + firebrick4
+  + orangered4
+  + navajowhite2
+  + red (trending)
+
+```{r Project Bulk Modules to Single-cell Data - All, fig.width=20, fig.height=14}
+p2 <- monocle3::plot_cells(cds,
+                     genes=merged.mods,
+                     group_cells_by="cluster",
+                     color_cells_by="cluster",
+                     show_trajectory_graph=F)
+print(p2)
+ggsave("./Results/sc_to_bulk.all.png", plot=p2, dpi=400, width=20, height=14)
 ```
 
 ## Module-Module Overlap
