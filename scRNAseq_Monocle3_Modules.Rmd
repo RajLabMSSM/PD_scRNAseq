@@ -128,8 +128,6 @@ ggsave("./Results/sc.module9.png", plot=p2, dpi=400, width=5, height=3.5)
 
 
 
-
-
 # Bulk RNAseq Modules vs. scRNAseq Modules
 
 - Co-expression modules were identified through the [WGCNA analysis of bulk monocyte RNA-seq data](https://github.com/RajLabMSSM/WGCNA_MyND/tree/master/2nd_batch_Analysis/protein_coding/04_sva/deepSplit_4/signed), conducte by Katia Lopes.  
@@ -154,6 +152,18 @@ createDT(bulk.modules)
 # Prepare sc modules
 sc.modules <- data.table::fread("./Results/sc.modules_by_gene.txt") %>% dplyr::rename(gene.symbol=id)
 createDT(sc.modules)
+```
+
+
+## gprofiler Enrichment: sc.modules
+
+```{r gprofiler Enrichment: sc.modules}
+mod.enrich <- gprofiler2.module_enrichment(mod.df = sc.modules)
+mod.enrich %>% 
+  dplyr::mutate(neg.log.p=-log10(p_value)) %>% 
+  dplyr::group_by(module) %>% 
+  top_n(n=3, wt=neg.log.p) %>% 
+  createDT()
 ```
 
 ## Project Bulk Modules to Single-cell Data
