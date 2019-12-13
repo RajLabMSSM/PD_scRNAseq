@@ -35,7 +35,9 @@ start_time <- Sys.time()
 root = "./"
 source(file.path(root,"MAIN.R"))
 import_parameters(params)
-# load("Results/Current_Pipeline/scRNAseq_results.RData")
+
+load("Results/scRNAseq_results.RData")
+# load("Data/seurat_object_add_HTO_ids.Rdata")
 # load(file.path(resultsPath, "3-11-2019/scRNAseq_results.RData"))
 load(file.path("Data", "monocle3_CDS.RData"))
 ######################################################
@@ -125,18 +127,30 @@ cds <- monocle3::reduce_dimension(cds, reduction_method = "UMAP",
 # variable.genes <- cds@preprocess_aux@listData$gene_loadings[,1:3] %>%
 #   abs() %>% rowSums() %>% base::sort(decreasing = T)
 # head(variable.genes) 
-varDAT <- Seurat::FindVariableGenes(object = protDAT, 
-                             mean.function = ExpMean, 
-                             dispersion.function = LogVMR, 
-                             selection.method ="dispersion", do.plot = T, 
-                             top.genes = 2000)
-var.genes <- varDAT@var.genes
+# Seurat v2 function
+# varDAT <- Seurat::FindVariableGenes(object = protDAT, 
+#                              mean.function = ExpMean, 
+#                              dispersion.function = LogVMR, 
+#                              selection.method ="dispersion", do.plot = T, 
+#                              top.genes = 2000)
+# var.genes <- varDAT@var.genes
+
+# Seurat v3 function
+protNEW <- UpdateSeuratObject(protDAT)  
+varDAT <- Seurat:::FindVariableFeatures(object = protNEW,
+                                        selection.method = "vst",
+                                        mean.function = "FastExpMean", 
+                                        dispersion.function = "FastLogVMR",
+                                        nfeatures = 2000)
+var.genes <- varDAT@assays$RNA@var.features
 head(var.genes)
 ```
 
 ## Louvain Clustering
 
-```{r Louvain Clustering, webgl=TRUE}
+*NOTE*: In the new version of **cluster_cells**, you can now leave the **resolution** parameter blank and it will automatically optimize the resolution. The default used to be **1e-4**.
+```{r Louvain Clustering, webgl=TRUE} 
+
 cds <- monocle3::cluster_cells(cds,
                                resolution = 1e-4,#c(10^seq(-6,-1)), # Do NOT set to high number 
                                reduction_method = "UMAP", 
@@ -309,7 +323,7 @@ print(prop.ID)
 
 Save R object and run memory-intensive DGE analyses on computing cluster.
 
-```{r Save Checkpoint}
+```{r Save Checkpoint} 
 # saveRDS(cds, file="./Data/monocle3_CDS.RData")
 save(cds, var.genes, file = "./Data/monocle3_CDS.RData")
 ```

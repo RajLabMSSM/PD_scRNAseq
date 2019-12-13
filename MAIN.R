@@ -201,11 +201,11 @@ monocle3_DGE <- function(cds_DGE,
   }else{ 
     # With regression:
     print("Initiating DGE analysis...")
-    gene_fits <- fit_models(cds_dge, 
-                            model_formula_str = paste0("~",variable), 
-                            expression_family = "quasipoisson",
-                            cores = nCores, 
-                            verbose = T)
+    gene_fits <- monocle3::fit_models(cds_dge, 
+                                      model_formula_str = paste0("~",variable), 
+                                      expression_family = "quasipoisson",
+                                      cores = nCores, 
+                                      verbose = T)
     fit_coefs <- coefficient_table(gene_fits) 
     res <- fit_coefs %>% filter(term != "(Intercept)") %>% arrange(q_value, desc(abs(estimate)))  
     # Save
