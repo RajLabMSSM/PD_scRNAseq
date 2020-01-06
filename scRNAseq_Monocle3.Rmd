@@ -36,7 +36,7 @@ root = "./"
 source(file.path(root,"MAIN.R"))
 import_parameters(params)
 
-load("Results/scRNAseq_results.RData")
+# load("Results/scRNAseq_results.RData")
 # load("Data/seurat_object_add_HTO_ids.Rdata")
 # load(file.path(resultsPath, "3-11-2019/scRNAseq_results.RData"))
 load(file.path("Data", "monocle3_CDS.RData"))

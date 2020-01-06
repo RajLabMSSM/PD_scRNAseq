@@ -32,6 +32,13 @@ source(file.path(root,"MAIN.R"))
 import_parameters(params)
 load("./Data/monocle3_CDS.RData") 
 nCores <- 4
+
+
+
+
+fp <- monocle3::plot_cells(cds = cds, 
+                     genes = c("NDUFB1", "UQCR11", "COX7B", "CTSB", "BST1", "GRN"), 
+                     show_trajectory_graph = F)
 ```
 
 # Graph-autocorrelation Analysis 
