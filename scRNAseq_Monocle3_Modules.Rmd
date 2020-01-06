@@ -36,9 +36,10 @@ nCores <- 4
 
 
 
-fp <- monocle3::plot_cells(cds = cds, 
-                     genes = c("NDUFB1", "UQCR11", "COX7B", "CTSB", "BST1", "GRN"), 
-                     show_trajectory_graph = F)
+# fp <- monocle3::plot_cells(cds = cds, 
+#                      genes = c("NDUFB1", "UQCR11", "COX7B", "CTSB", "BST1", "GRN"), 
+#                      show_trajectory_graph = F)
+# ggsave("./Results/Elisa_selected_genes.png", plot = fp, dpi = 400, height=5, width = 8)
 ```
 
 # Graph-autocorrelation Analysis 
