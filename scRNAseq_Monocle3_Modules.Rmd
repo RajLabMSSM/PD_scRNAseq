@@ -33,9 +33,6 @@ import_parameters(params)
 load("./Data/monocle3_CDS.RData") 
 nCores <- 4
 
-
-
-
 # fp <- monocle3::plot_cells(cds = cds, 
 #                      genes = c("NDUFB1", "UQCR11", "COX7B", "CTSB", "BST1", "GRN"), 
 #                      show_trajectory_graph = F)
@@ -56,15 +53,17 @@ Find genes of interest through graph-autocorrelation analysis.
 - Identify co-expression modules.<br>
 `find_gene_modules` essentially runs UMAP on the genes (as opposed to the cells) and then groups them into modules using Louvain community analysis.
 - **Advantages**: Much faster than other alogrithms like WGCNA.  
-- **Disadvantages**: Seems to be limited of ~1000 genes.
+- **Disadvantages**: In order to increase the number of genes you can include in the module creation, you have to both of the following (see [this forum](https://github.com/cole-trapnell-lab/monocle3/issues/191) for more details):
+  1. Go back to the `preprocess_cds()` step and set the parameter ` return.only.var.genes=F`.
+  2. Take your custom gene lists that you manually want to use as modules, and remove any genes that do not appear in the `row.names(cds@preprocess_aux$gene_loadings)`. This is because `find_gene_modules()` uses the per-gene loadings from the PCA to make modules.
 
-```{r Gene Modules}
-gene_module_df = monocle3::find_gene_modules(cds[var.genes[1:1000], ], 
+```{r Gene Modules} 
+gene_module_df = monocle3::find_gene_modules(cds[var.genes,], # cds[var.genes, ]
                                              # resolution=1e-2, 
                                              reduction_method = "UMAP",
                                              max_components = 3,
                                              cores=nCores,
-                                             umap.fast_sgd = F, # Slower but determinstic results
+                                             umap.fast_sgd = F, # Slower but deterministic results
                                              random_seed = 2019)
 data.table::fwrite(gene_module_df, "./Results/sc.modules_by_gene.txt", sep="\t")
 createDT(gene_module_df)
@@ -174,7 +173,7 @@ mod.enrich %>%
   createDT()
 ```
 
-## Project Bulk Modules to Single-cell Data
+## Project Bulk Modules onto Single-cell Data
 
 - Replace the discrete gene module assignments from sc.modules (UMAP+Louvain) to bulk.modules (WGNCA) from [here](https://rajlabmssm.github.io/WGCNA_MyND/2nd_batch_Analysis/protein_coding/04_sva/deepSplit_4/signed/04_page_sva_deep4_signed_PC.html#boxplot_mergedmes).  
 - The "NA" module simply represents a collection of genes that were present in the sc dataset but not in the bulk dataset.
@@ -215,6 +214,27 @@ p <- monocle3::plot_cells(cds,
 print(p)
 ggsave("./Results/sc_to_bulk.png", plot=p, dpi=400, width=10, height=7) 
 ```
+
+
+## Project Curated Gene Lists onto Single-cell Data
+
+```{r Project Curated Gene Lists onto Single-cell Data}
+gene.lists <- subset(gene.lists, gene.symbol %in% var.genes) 
+
+for(mod in unique(gene.lists$module)){
+  print(mod)
+  p <- monocle3::plot_cells(cds,
+                     genes=subset(gene.lists, module==mod) %>% unique(),
+                     show_trajectory_graph=F, alpha = .75)
+  print(p)
+  ggsave(file.path("./Results",paste0("customModules_",mod,".png")), 
+         plot=p, dpi=300, width=7, height=4) 
+} 
+```
+
+
+
+
 
 ### All Modules  
 

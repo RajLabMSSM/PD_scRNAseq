@@ -36,9 +36,7 @@ root = "./"
 source(file.path(root,"MAIN.R"))
 import_parameters(params)
 
-# load("Results/scRNAseq_results.RData")
 # load("Data/seurat_object_add_HTO_ids.Rdata")
-# load(file.path(resultsPath, "3-11-2019/scRNAseq_results.RData"))
 load(file.path("Data", "monocle3_CDS.RData"))
 ######################################################
 #### #### PACKAGES #### #### 
@@ -81,6 +79,7 @@ set.seed(2019)
 - Only need to run if not using preprocessed ``cds`` object.  
 
 ```{r Seurat/2.3.4 to Monocle3, eval=F}
+load(file.path(resultsPath, "3-11-2019/scRNAseq_results.RData"))
 biotypes <- get_biotypes(DAT)
 proteins <- biotypes[biotypes$gene_biotype=="protein_coding",]$hgnc_symbol %>% droplevels()
 protDAT <- subset_seurat(DAT, genes.use = proteins)
@@ -91,9 +90,31 @@ cds <- cds[levels(proteins),]
  
 ## Normalization & PCA
 
-```{r Normalize Data}    
+### Curated genes lists
+
+Import curated gene lists from Elisa Navarro.
+Feed these into the `use_genes` parameter of the `preprocess_cds()` function.
+This will be necessary to be able to create gene modules with them later on.
+
+```{r Curated Gene Lists}
+lists_path <-"./Results/Mito_lists_for_the_single_cell_analysis"
+gene.lists <- lapply(list.files(lists_path, full.names = T), function(x){
+  group.name <- gsub(".csv$","",basename(x))
+  dat <- data.table::fread(x)
+  dat <- dat %>% dplyr::mutate(module = group.name)
+  colnames(dat)[1] <- "gene.symbol"
+  return(data.table::data.table(dat))
+}) %>% data.table::rbindlist()
+
+gene.lists <- subset(gene.lists, gene.symbol %in% row.names(fData(cds)))
+use_genes <- unique(gene.lists$gene.symbol)
+```
+
+
+```{r Normalize Data}
 cds <- monocle3::preprocess_cds(cds, 
-                                num_dim = 20, #100 by default
+                                num_dim = 30, #100 by default 
+                                return.only.var.genes=F,
                                 residual_model_formula_str = "~ nUMI + percent.mito")
 monocle3::plot_pc_variance_explained(cds)
 ```
@@ -106,7 +127,7 @@ Using UMAP.
 ```{r Dimensionality Reduction}
 # c("UMAP", "tSNE", "PCA", "LSI")
 cds <- monocle3::reduce_dimension(cds, reduction_method = "UMAP", 
-                                  max_components = 3
+                                  max_components = 3, 
                                   # umap.fast_sgd = T,
                                   # cores=nCores
                                   ) 
@@ -135,27 +156,33 @@ cds <- monocle3::reduce_dimension(cds, reduction_method = "UMAP",
 #                              top.genes = 2000)
 # var.genes <- varDAT@var.genes
 
+
 # Seurat v3 function
-protNEW <- UpdateSeuratObject(protDAT)  
-varDAT <- Seurat:::FindVariableFeatures(object = protNEW,
-                                        selection.method = "vst",
-                                        mean.function = "FastExpMean", 
-                                        dispersion.function = "FastLogVMR",
-                                        nfeatures = 2000)
-var.genes <- varDAT@assays$RNA@var.features
-head(var.genes)
+# protNEW <- UpdateSeuratObject(protDAT)  
+# varDAT <- Seurat:::FindVariableFeatures(object = protNEW,
+#                                         selection.method = "vst",
+#                                         mean.function = "FastExpMean", 
+#                                         dispersion.function = "FastLogVMR",
+#                                         nfeatures = 2000)
+# var.genes <- varDAT@assays$RNA@var.features
+# head(var.genes)
+# 
+
+# Using only monocle3 
+length(unique(row.names(cds@preprocess_aux$gene_loadings[,1:10])))
+var.genes <- names(sort(rowSums(abs(cds@preprocess_aux$gene_loadings[,1:10]), na.rm = T), T))[1:2000] 
 ```
 
 ## Louvain Clustering
 
 *NOTE*: In the new version of **cluster_cells**, you can now leave the **resolution** parameter blank and it will automatically optimize the resolution. The default used to be **1e-4**.
 ```{r Louvain Clustering, webgl=TRUE} 
-
 cds <- monocle3::cluster_cells(cds,
-                               resolution = 1e-4,#c(10^seq(-6,-1)), # Do NOT set to high number 
+                               resolution = 1e-4,#c(10^seq(-6,-1)), # Do NOT set to high number
                                reduction_method = "UMAP", 
                                cores = nCores,
-                               clustering_genes = var.genes)
+                               clustering_genes = var.genes
+                               )
 # Add cluster info to metadata (for easier DGE analysis)
 pData(cds)$Cluster <- monocle3::clusters(cds)
 pData(cds)$Partition <- monocle3::partitions(cds)
