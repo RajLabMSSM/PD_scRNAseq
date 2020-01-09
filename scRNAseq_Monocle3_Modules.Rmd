@@ -227,7 +227,8 @@ for(mod in unique(gene.lists$module)){
                      genes=subset(gene.lists, module==mod) %>% unique(),
                      show_trajectory_graph=F, alpha = .75)
   print(p)
-  ggsave(file.path("./Results",paste0("customModules_",mod,".png")), 
+  ggsave(file.path("./Results/Mito_lists_for_the_single_cell_analysis",
+                   paste0("customModules_",mod,".png")), 
          plot=p, dpi=300, width=7, height=4) 
 } 
 ```
