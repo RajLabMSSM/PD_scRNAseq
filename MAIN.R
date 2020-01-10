@@ -43,6 +43,13 @@ import_parameters <- function(params){
 }
 
 
+firstup <- function(x) {
+  substr(x, 1, 1) <- toupper(substr(x, 1, 1))
+  return(x)
+}
+
+
+
 save_3D_clusters <- function(cds, output_path="./3D_objects"){
   dir.create(output_path, showWarnings = F, recursive = T)
   for(clust in levels(clusters(cds)) ){ 
@@ -613,6 +620,51 @@ volcano_3d <- function(dge_path="./Results/across_Clust1.vs.Clust2.csv"){
   p 
   
 }
+
+
+
+
+grouped_module_expression <- function(cds,
+                                       gene_module_df,
+                                       group_variable="cluster",
+                                       subtitle="",
+                                       show_plot=T, 
+                                       save_table=F){
+  # Create table
+  if(group_variable=="cluster"){
+    cell_group_df = tibble::tibble(cell=row.names(SummarizedExperiment::colData(cds)),
+                                   cell_group=monocle3::clusters(cds)[colnames(cds)])
+  } else { 
+    cell_group_df = tibble::tibble(cell=row.names(SummarizedExperiment::colData(cds)),
+                                   cell_group= setNames(pData(cds)[[group_variable]],
+                                                        colnames(cds)) )
+  } 
+  agg_mat = monocle3::aggregate_gene_expression(cds, gene_module_df, cell_group_df)
+  row.names(agg_mat) = stringr::str_c("Module:  ", row.names(agg_mat))
+  colnames(agg_mat) = stringr::str_c(paste0(group_variable,":  "), colnames(agg_mat))
+  module_cluster_exp <- data.frame(as.matrix(agg_mat))
+  
+  # Create pheatmap
+  if(show_plot){
+    pheatmap::pheatmap(agg_mat, cluster_rows=T, cluster_cols=F,
+                       scale="column", clustering_method="ward.D2",
+                       fontsize=6, 
+                       angle_col = 0, 
+                       fontsize_col = 10, 
+                       main = paste0("Co-expression modules x ",firstup(group_variable),
+                                     "\n",subtitle))
+  } 
+  if(save_table!=F){
+    print(paste("+ Saving summary table ==>",save_table)) 
+    data.table::fwrite(data.table::data.table(module_cluster_exp, keep.rownames = "Module"),
+                       save_table)
+  }
+  return(module_cluster_exp)
+}
+
+
+
+
 
 
 

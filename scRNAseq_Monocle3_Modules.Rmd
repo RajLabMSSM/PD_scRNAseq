@@ -66,7 +66,7 @@ gene_module_df = monocle3::find_gene_modules(cds[var.genes,], # cds[var.genes, ]
                                              umap.fast_sgd = F, # Slower but deterministic results
                                              random_seed = 2019)
 data.table::fwrite(gene_module_df, "./Results/sc.modules_by_gene.txt", sep="\t")
-createDT(gene_module_df)
+createDT(head(gene_module_df,100))
 ```
 
 ## Pheatmap
@@ -74,21 +74,12 @@ createDT(gene_module_df)
 - Plot the eigengene expression of each gene co-expression module (y-axis) within each cell cluster (x-axis).
 
 ```{r Gene Modules - pheatmap}
-# Create pheatmap table
-cell_group_df = tibble::tibble(cell=row.names(SummarizedExperiment::colData(cds)),
-                               cell_group=monocle3::clusters(cds)[colnames(cds)])
-agg_mat = monocle3::aggregate_gene_expression(cds, gene_module_df, cell_group_df)
-row.names(agg_mat) = stringr::str_c("Module ", row.names(agg_mat))
-colnames(agg_mat) = stringr::str_c("Cluster ", colnames(agg_mat))
-module_cluster_exp <- data.frame(as.matrix(agg_mat))
-data.table::fwrite(data.table::data.table(module_cluster_exp, keep.rownames = "Module"),
-                   "./Results/sc.modules_by_cluster.txt", sep="\t" )
-# Plot
-pheatmap::pheatmap(agg_mat, cluster_rows=T, cluster_cols=F,
-                   scale="column", clustering_method="ward.D2",
-                   fontsize=6) 
+module_cluster_exp <- grouped_module_expression(cds,
+                                                 gene_module_df,
+                                                 group_variable="cluster",
+                                                 show_plot=T, 
+                                                 save_table=F)
 ```
- 
 
 
 ## 3D Scatter
@@ -117,20 +108,18 @@ htmltools::tagList(setNames(list(p.3d), NULL))
 
 ```{r Module Expression}
 # gene_module_df <-data.table::fread("./Results/sc.modules_by_gene.txt")
-monocle3::plot_cells(cds,
+p_all <- monocle3::plot_cells(cds,
                      genes=gene_module_df,
                      group_cells_by="cluster",
                      color_cells_by="cluster",
                      show_trajectory_graph=F) #  rasterize = T (for super high-res figures)
+ggsave("./Results/sc.modules_all.png", plot=p_all, dpi=300, width=10, height=7)
 
-p2 <- monocle3::plot_cells(cds,
+p2 <- monocle3::plot_cells_3d(cds,
                            # sc.module 9 correponds to sc.module 5 in the old analyses
-                           genes=subset(gene_module_df, module==9),
-                           group_cells_by="cluster",
-                           color_cells_by="cluster",
+                           genes=subset(gene_module_df, module==8), 
                            show_trajectory_graph=F)
-print(p2)
-ggsave("./Results/sc.module9.png", plot=p2, dpi=400, width=5, height=3.5)
+p2
 ```
 
 
@@ -158,20 +147,131 @@ createDT(bulk.modules)
 
 # Prepare sc modules
 sc.modules <- data.table::fread("./Results/sc.modules_by_gene.txt") %>% dplyr::rename(gene.symbol=id)
-createDT(sc.modules)
+createDT(head(sc.modules,100))
+```
+
+# Curated Modules
+
+## Expression: UMAP
+
+```{r Expression: UMAP}
+gene.lists <- subset(gene.lists, gene.symbol %in% var.genes) 
+
+
+p.list <- lapply(unique(gene.lists$module), function(mod){
+   print(mod)
+   p <- monocle3::plot_cells(cds,
+                       genes=subset(gene.lists, module==mod) %>% unique(),
+                       show_trajectory_graph=F, alpha = .75)
+   return(p)
+})
+cp <- cowplot::plot_grid(plotlist = p.list)
+ggsave(file.path("./Results/Mito_lists_for_the_single_cell_analysis",
+                 paste0("curatedModule_exprs.png")), 
+       plot=cp, dpi=300, width=10, height=6)  
 ```
 
 
-## gprofiler Enrichment: sc.modules
+### Enrichment: sc.modules vs. curated.modules
 
-```{r gprofiler Enrichment: sc.modules}
+```{r EEnrichment: sc.modules vs. curated.modules}
+# unique(subset(mito.df, module==27)$id)
+genomeSize <- length(union(unique(gene.lists$gene.symbol),
+                           monocle3::fData(cds)$gene_short_name))
+
+MOD.dt <- module_vs_module_enrichment(mod.df1 = gene.lists, 
+                                      mod.df2 = sc.modules, 
+                                      genomeSize = genomeSize, 
+                                      save_file="./Results/custom.modules_vs_sc.modules.txt",
+                                      verbose = F) 
+createDT(MOD.dt)  
+```
+
+## Enrichment: gprofiler w/ sc.modules
+
+```{r Enrichment: gprofiler w/ sc.modules}
 mod.enrich <- gprofiler2.module_enrichment(mod.df = sc.modules)
+mod.enrich$p_adjust <- p.adjust(mod.enrich$p_value, method = "fdr")
+
 mod.enrich %>% 
   dplyr::mutate(neg.log.p=-log10(p_value)) %>% 
   dplyr::group_by(module) %>% 
   top_n(n=3, wt=neg.log.p) %>% 
   createDT()
+
+ 
+
+# Concatenate labels for each module
+term_search <- "mito|oxidat|oxphos|complex_I|complex I"
+mito.modules <- mod.enrich[grep(term_search,subset(mod.enrich, p_adjust<0.05)$term_name),] %>% group_by(module) %>% top_n(n = 5, wt = p_value) %>% group_by(module) %>% summarise(term=paste(unique(term_name),collapse=";\n"))
+
+
+mito.df <- subset(gene_module_df, module %in% unique(mito.modules$module)) %>% merge(mito.modules[,c("module","term")], by="module", all.x=T) %>% mutate(label=paste0("(",module,")","\n",term))
+# NOTE: plot_cells assumes the first column is gene name (for some weird reason...)
+mito.df <- cbind(gene.symbol=mito.df$id, mito.df)
+
+# 1. UMAP plot
+mp <- monocle3::plot_cells(cds,
+                     genes=mito.df,  
+                     show_trajectory_graph=F) + 
+  labs(title = paste0("Co-expression modules w/ enrichment for gprofiler terms containing:\n'",term_search,"'"))
+# 2. Table
+library(gridExtra)
+library(grid) 
+ref.table <- unique(mito.df[,c("module","term")])
+gt <- tableGrob(ref.table, rows = NULL, 
+                theme = ttheme_default(base_size = 7,
+                                       core=list(padding=unit(c(.5,.5,.5,.5),"mm"))))
+# 3.Arrange plots and table into one figure
+ga <- grid.arrange(mp,
+                   gt, ncol = 1, heights=c(4,3))
+## Save
+ggsave(file="Results/Mito_lists_for_the_single_cell_analysis/mitochondrial_modules.png", 
+       plot=ga, width=10, height=8)
 ```
+
+
+## Differential Module Expression
+
+### Heatmaps
+
+```{r Heatmaps} 
+customModule.cluster <- grouped_module_expression(cds,
+                                                 gene.lists,#gene_module_df,
+                                                 group_variable="cluster",
+                                                 show_plot=T, 
+                                                 subtitle = "Cluster 1 = Canonical Monocytes; Cluster 2 = Intermediate Monocytes",
+                                                 save_table=F)
+
+customModule.dx <- grouped_module_expression(cds,
+                                             gene.lists,#gene_module_df,
+                                             group_variable="dx",
+                                             show_plot=T, 
+                                             subtitle = "All cells",
+                                             save_table=F) 
+
+customModule.mut <- grouped_module_expression(cds,
+                                             gene.lists,#gene_module_df,
+                                             group_variable="mut",
+                                             show_plot=T, 
+                                             subtitle = "All cells",
+                                             save_table=F) 
+# customModule.dx_canonical <- grouped_module_expression(cds[,monocle3::clusters(cds)==1],
+#                                                      gene.lists,#gene_module_df,
+#                                                      group_variable="dx",
+#                                                      show_plot=T, 
+#                                                      subtitle = "Canonical monocytes only",
+#                                                      save_table=F)
+# 
+# customModule.dx_intermediate <- grouped_module_expression(cds[,monocle3::clusters(cds)==2],
+#                                                        gene.lists,#gene_module_df,
+#                                                        group_variable="dx",
+#                                                        show_plot=T, 
+#                                                        subtitle = "Intermediate monocytes only",
+#                                                        save_table=F)
+
+```
+
 
 ## Project Bulk Modules onto Single-cell Data
 
@@ -216,27 +316,6 @@ ggsave("./Results/sc_to_bulk.png", plot=p, dpi=400, width=10, height=7)
 ```
 
 
-## Project Curated Gene Lists onto Single-cell Data
-
-```{r Project Curated Gene Lists onto Single-cell Data}
-gene.lists <- subset(gene.lists, gene.symbol %in% var.genes) 
-
-for(mod in unique(gene.lists$module)){
-  print(mod)
-  p <- monocle3::plot_cells(cds,
-                     genes=subset(gene.lists, module==mod) %>% unique(),
-                     show_trajectory_graph=F, alpha = .75)
-  print(p)
-  ggsave(file.path("./Results/Mito_lists_for_the_single_cell_analysis",
-                   paste0("customModules_",mod,".png")), 
-         plot=p, dpi=300, width=7, height=4) 
-} 
-```
-
-
-
-
-
 ### All Modules  
 
 I also plotted all 60+ of the bulk.modules (ordered alphabetically) to see if any of them were preferentially expressed in a a given monocyte subtype. Darkmagenta remains one of the most striking examples, but there are other as well.
@@ -266,7 +345,8 @@ ggsave("./Results/sc_to_bulk.all.png", plot=p2, dpi=400, width=20, height=14)
 - This tells you whether some modules are detectable in both datasets.  
 
 ```{r Modules - Module-Module Overlap} 
-genomeSize <- length(union(unique(bulk.modules$gene.symbol), monocle3::fData(cds)$gene_short_name))
+genomeSize <- length(union(unique(bulk.modules$gene.symbol),
+                           monocle3::fData(cds)$gene_short_name))
 
 MOD.dt <- module_vs_module_enrichment(mod.df1 = bulk.modules, 
                                       mod.df2 = sc.modules, 

@@ -98,7 +98,7 @@ This will be necessary to be able to create gene modules with them later on.
 
 ```{r Curated Gene Lists}
 lists_path <-"./Results/Mito_lists_for_the_single_cell_analysis"
-gene.lists <- lapply(list.files(lists_path, full.names = T), function(x){
+gene.lists <- lapply(list.files(lists_path, full.names = T, pattern = "*.csv$"), function(x){
   group.name <- gsub(".csv$","",basename(x))
   dat <- data.table::fread(x)
   dat <- dat %>% dplyr::mutate(module = group.name)
@@ -170,7 +170,7 @@ cds <- monocle3::reduce_dimension(cds, reduction_method = "UMAP",
 
 # Using only monocle3 
 length(unique(row.names(cds@preprocess_aux$gene_loadings[,1:10])))
-var.genes <- names(sort(rowSums(abs(cds@preprocess_aux$gene_loadings[,1:10]), na.rm = T), T))[1:2000] 
+var.genes <- names(sort(rowSums(abs(cds@preprocess_aux$gene_loadings[,1:10]), na.rm = T), T))#[1:2000] 
 ```
 
 ## Louvain Clustering
