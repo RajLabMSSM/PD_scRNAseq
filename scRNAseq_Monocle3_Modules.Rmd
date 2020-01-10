@@ -238,8 +238,7 @@ ggsave(file="Results/Mito_lists_for_the_single_cell_analysis/mitochondrial_modul
 ```{r Heatmaps} 
 customModule.cluster <- grouped_module_expression(cds,
                                                  gene.lists,#gene_module_df,
-                                                 group_variable="cluster",
-                                                 module_variable = "Curated module",
+                                                 group_variable="cluster", 
                                                  show_plot=T, 
                                                  subtitle = "Cluster 1 = Canonical Monocytes; Cluster 2 = Intermediate Monocytes",
                                                  save_table=F)
@@ -257,19 +256,28 @@ customModule.mut <- grouped_module_expression(cds,
                                              show_plot=T, 
                                              subtitle = "All cells",
                                              save_table=F) 
-# customModule.dx_canonical <- grouped_module_expression(cds[,monocle3::clusters(cds)==1],
-#                                                      gene.lists,#gene_module_df,
-#                                                      group_variable="dx",
-#                                                      show_plot=T, 
-#                                                      subtitle = "Canonical monocytes only",
-#                                                      save_table=F)
-# 
-# customModule.dx_intermediate <- grouped_module_expression(cds[,monocle3::clusters(cds)==2],
-#                                                        gene.lists,#gene_module_df,
-#                                                        group_variable="dx",
-#                                                        show_plot=T, 
-#                                                        subtitle = "Intermediate monocytes only",
-#                                                        save_table=F)
+
+
+
+# Get just the module x cell table for statistical tests
+customModule.barcode <- grouped_module_expression(cds,
+                                             gene.lists,#gene_module_df,
+                                             group_variable="barcode",
+                                             show_plot=F, 
+                                             subtitle = "All cells",
+                                             save_table=F) 
+customModule.barcode <- data.frame(t(customModule.barcode))
+row.names(customModule.barcode) <- gsub("barcode...","",row.names(customModule.barcode))
+colnames(customModule.barcode) <- gsub("Module:  ","",colnames(customModule.barcode))
+customModule.barcode$barcode <- row.names(customModule.barcode)
+ 
+
+customModule.pData <- data.table:::merge.data.table(
+                              data.table(data.frame(pData(cds))[,c("barcode","dx","mut","Cluster")]), 
+                              data.table(customModule.barcode), 
+                              by="barcode")
+t.test(x=)
+ 
 
 ```
 
