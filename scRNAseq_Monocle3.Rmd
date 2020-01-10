@@ -97,7 +97,7 @@ Feed these into the `use_genes` parameter of the `preprocess_cds()` function.
 This will be necessary to be able to create gene modules with them later on.
 
 ```{r Curated Gene Lists}
-lists_path <-"./Results/Mito_lists_for_the_single_cell_analysis"
+lists_path <-"./Results/curated_modules/"
 gene.lists <- lapply(list.files(lists_path, full.names = T, pattern = "*.csv$"), function(x){
   group.name <- gsub(".csv$","",basename(x))
   dat <- data.table::fread(x)
@@ -109,7 +109,7 @@ gene.lists <- lapply(list.files(lists_path, full.names = T, pattern = "*.csv$"),
 
 # Separate MT-XXX genes from mito
 ## (separate from other modules too?)
-mtx <- readxl::read_excel("./Results/Mito_lists_for_the_single_cell_analysis/MT-XXX_genes.xlsx")
+mtx <- readxl::read_excel("./Results/curated_modules//MT-XXX_genes.xlsx")
 gene.lists[gene.lists$module=="mito" & (gene.lists$gene.symbol %in% mtx$gene.symbol),"module"] <- "MT-XXX"  
 if(sum(!(mtx$gene.symbol %in% gene.lists$gene.symbol)) >0){
   print("All MT-XXX already in dataframe.")
@@ -117,8 +117,7 @@ if(sum(!(mtx$gene.symbol %in% gene.lists$gene.symbol)) >0){
 gene.lists <- unique(subset(gene.lists, gene.symbol %in% row.names(fData(cds))))
 use_genes <- unique(gene.lists$gene.symbol)
 
- 
-data.table::fwrite(gene.lists, "./Results/Mito_lists_for_the_single_cell_analysis/curatedModules_genelists.tsv",sep="\t")
+data.table::fwrite(gene.lists, "./Results/curated_modules//curatedModules_genelists.tsv",sep="\t")
 ```
 
 

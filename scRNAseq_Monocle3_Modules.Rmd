@@ -174,7 +174,7 @@ p.list <- lapply(unique(gene.lists$module), function(mod){
 })
 cp <- cowplot::plot_grid(plotlist = p.list)
 print(cp)
-ggsave(file.path("./Results/Mito_lists_for_the_single_cell_analysis",
+ggsave(file.path("./Results/curated_modules/",
                  paste0("curatedModules_UMAP.png")), 
        plot=cp, dpi=300, width=13, height=6)  
 ```
@@ -190,7 +190,7 @@ genomeSize <- length(union(unique(gene.lists$gene.symbol),
 MOD.dt <- module_vs_module_enrichment(mod.df1 = gene.lists, 
                                       mod.df2 = sc.modules, 
                                       genomeSize = genomeSize, 
-                                      save_file="./Results/custom.modules_vs_sc.modules.txt",
+                                      save_file="./Results/curated_modules/curatedModules_vs_scModules.txt",
                                       verbose = F) 
 createDT(MOD.dt)  
 ```
@@ -234,7 +234,7 @@ gt <- tableGrob(ref.table, rows = NULL,
 ga <- grid.arrange(mp,
                    gt, ncol = 1, heights=c(4,3))
 ## Save
-ggsave(file="Results/Mito_lists_for_the_single_cell_analysis/mitochondrial_modules.png", 
+ggsave(file="Results/curated_modules//mitochondrial_modules.png", 
        plot=ga, width=10, height=8)
 ```
 
