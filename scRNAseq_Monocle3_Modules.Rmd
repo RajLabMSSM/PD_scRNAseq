@@ -150,7 +150,13 @@ sc.modules <- data.table::fread("./Results/sc.modules_by_gene.txt") %>% dplyr::r
 createDT(head(sc.modules,100))
 ```
 
+
+
+
+
 # Curated Modules
+
+Treat gene lists provided by ELisa Navarro and Towfique Raj as "curated modules".
 
 ## Expression: UMAP
 
@@ -162,13 +168,15 @@ p.list <- lapply(unique(gene.lists$module), function(mod){
    print(mod)
    p <- monocle3::plot_cells(cds,
                        genes=subset(gene.lists, module==mod) %>% unique(),
-                       show_trajectory_graph=F, alpha = .75)
+                       show_trajectory_graph=F, alpha = .75) + 
+      theme(legend.title=element_text(size=6))
    return(p)
 })
 cp <- cowplot::plot_grid(plotlist = p.list)
+print(cp)
 ggsave(file.path("./Results/Mito_lists_for_the_single_cell_analysis",
-                 paste0("curatedModule_exprs.png")), 
-       plot=cp, dpi=300, width=10, height=6)  
+                 paste0("curatedModules_UMAP.png")), 
+       plot=cp, dpi=300, width=13, height=6)  
 ```
 
 
@@ -257,8 +265,26 @@ customModule.mut <- grouped_module_expression(cds,
                                              subtitle = "All cells",
                                              save_table=F) 
 
+# break down by cell type
+## Canonical
+customModule.dx_canonical <- grouped_module_expression(cds[,monocle3::clusters(cds)==1],
+                                             gene.lists,#gene_module_df,
+                                             group_variable="dx",
+                                             show_plot=T, 
+                                             subtitle = "Canonical monocytes only",
+                                             save_table=F) 
+# Intermediate
+customModule.dx_intermediate <- grouped_module_expression(cds[,monocle3::clusters(cds)==2],
+                                             gene.lists,#gene_module_df,
+                                             group_variable="dx",
+                                             show_plot=T, 
+                                             subtitle = "Intermediate monocytes only",
+                                             save_table=F) 
+```
 
+## Violin plots
 
+```{r Violin plots}
 # Get just the module x cell table for statistical tests
 customModule.barcode <- grouped_module_expression(cds,
                                              gene.lists,#gene_module_df,
@@ -268,17 +294,45 @@ customModule.barcode <- grouped_module_expression(cds,
                                              save_table=F) 
 customModule.barcode <- data.frame(t(customModule.barcode))
 row.names(customModule.barcode) <- gsub("barcode...","",row.names(customModule.barcode))
-colnames(customModule.barcode) <- gsub("Module:  ","",colnames(customModule.barcode))
+colnames(customModule.barcode) <- gsub("Module...","",colnames(customModule.barcode))
 customModule.barcode$barcode <- row.names(customModule.barcode)
- 
-
 customModule.pData <- data.table:::merge.data.table(
-                              data.table(data.frame(pData(cds))[,c("barcode","dx","mut","Cluster")]), 
+  data.table(data.frame(pData(cds))[,c("barcode","dx","mut","Cluster")]), 
                               data.table(customModule.barcode), 
                               by="barcode")
-t.test(x=)
- 
 
+# t.test
+customModule.melt <- reshape2::melt(customModule.pData,
+                                    id.vars=c("barcode","dx","mut","Cluster"), 
+                                    variable.name="Module", value.name="Expression")
+
+
+multi.tests <- function(fun = t.test, df, vars, group.var, ...) {
+  # https://rpubs.com/kaz_yos/1204
+    sapply(simplify = FALSE, # sapply(simplify=T) better, elements named
+           vars,  # loop on vector of outcome variable names
+           function(var) {
+               formula <- as.formula(paste(var, "~", group.var))# create a formula with outcome and grouping var.
+               fun(data = df, formula, ...) # perform test with a given fun, default t.test
+           }
+           )
+}
+multi.tests(df=customModule.melt, 
+            vars=c("Expression"), 
+            group.var = "dx") 
+
+vp <- monocle3::plot_genes_violin(cds[subset(gene.lists, module=="MT-XXX")$gene.symbol,], 
+                            group_cells_by = "dx", ncol=3) + 
+  geom_dotplot(binaxis='y', stackdir='center', alpha=.1, stackratio=.01, dotsize = .5)  
+print(vp)
+ggsave("./Results/curated_modules/MT-XXX_violin.png",plot = vp, width = 10)
+
+
+vp2 <- monocle3::plot_genes_violin(cds[subset(gene.lists, module=="mito_sig")$gene.symbol,], 
+                            group_cells_by = "dx", ncol=3) + 
+  geom_dotplot(binaxis='y', stackdir='center', alpha=.1, stackratio=.01, dotsize = .5)  
+print(vp2)
+ggsave("./Results/curated_modules/mitoSig_violin.png",plot = vp2, width = 10) 
 ```
 
 

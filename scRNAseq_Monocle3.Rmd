@@ -106,9 +106,19 @@ gene.lists <- lapply(list.files(lists_path, full.names = T, pattern = "*.csv$"),
   return(data.table::data.table(dat))
 }) %>% data.table::rbindlist()
 
-data.table::fwrite(gene.lists, "./Results/Mito_lists_for_the_single_cell_analysis/curatedModules_genelists.csv")
-gene.lists <- subset(gene.lists, gene.symbol %in% row.names(fData(cds)))
+
+# Separate MT-XXX genes from mito
+## (separate from other modules too?)
+mtx <- readxl::read_excel("./Results/Mito_lists_for_the_single_cell_analysis/MT-XXX_genes.xlsx")
+gene.lists[gene.lists$module=="mito" & (gene.lists$gene.symbol %in% mtx$gene.symbol),"module"] <- "MT-XXX"  
+if(sum(!(mtx$gene.symbol %in% gene.lists$gene.symbol)) >0){
+  print("All MT-XXX already in dataframe.")
+}
+gene.lists <- unique(subset(gene.lists, gene.symbol %in% row.names(fData(cds))))
 use_genes <- unique(gene.lists$gene.symbol)
+
+ 
+data.table::fwrite(gene.lists, "./Results/Mito_lists_for_the_single_cell_analysis/curatedModules_genelists.tsv",sep="\t")
 ```
 
 
