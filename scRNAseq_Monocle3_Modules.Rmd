@@ -239,6 +239,7 @@ ggsave(file="Results/Mito_lists_for_the_single_cell_analysis/mitochondrial_modul
 customModule.cluster <- grouped_module_expression(cds,
                                                  gene.lists,#gene_module_df,
                                                  group_variable="cluster",
+                                                 module_variable = "Curated module",
                                                  show_plot=T, 
                                                  subtitle = "Cluster 1 = Canonical Monocytes; Cluster 2 = Intermediate Monocytes",
                                                  save_table=F)

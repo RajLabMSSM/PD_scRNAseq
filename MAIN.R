@@ -627,6 +627,7 @@ volcano_3d <- function(dge_path="./Results/across_Clust1.vs.Clust2.csv"){
 grouped_module_expression <- function(cds,
                                        gene_module_df,
                                        group_variable="cluster",
+                                       module_variable="Module",
                                        subtitle="",
                                        show_plot=T, 
                                        save_table=F){
@@ -640,7 +641,7 @@ grouped_module_expression <- function(cds,
                                                         colnames(cds)) )
   } 
   agg_mat = monocle3::aggregate_gene_expression(cds, gene_module_df, cell_group_df)
-  row.names(agg_mat) = stringr::str_c("Module:  ", row.names(agg_mat))
+  row.names(agg_mat) = stringr::str_c(paste0(module_variable,":  "), row.names(agg_mat))
   colnames(agg_mat) = stringr::str_c(paste0(group_variable,":  "), colnames(agg_mat))
   module_cluster_exp <- data.frame(as.matrix(agg_mat))
   
@@ -651,7 +652,7 @@ grouped_module_expression <- function(cds,
                        fontsize=6, 
                        angle_col = 0, 
                        fontsize_col = 10, 
-                       main = paste0("Co-expression modules x ",firstup(group_variable),
+                       main = paste0(module_variable," x ",firstup(group_variable),
                                      "\n",subtitle))
   } 
   if(save_table!=F){
