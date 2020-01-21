@@ -46,6 +46,11 @@ Find genes of interest through graph-autocorrelation analysis.
 ```{r Graph-autocorrelation Analysis}
 # pr_graph_test_res = monocle3::graph_test(cds, neighbor_graph="knn", cores=nCores)
 # pr_deg_ids = row.names(subset(pr_graph_test_res, q_value < 0.05))
+
+towfique_genes = c("MS4A4A", "MYL6", "NDUFB1","PGK1","RPL35A","RPL39",
+                   "S100A4","S100A6","SH2D3C","TAGLN")
+tp <- plot_cells(cds, genes = towfique_genes, show_trajectory_graph = F)
+ggsave("./Results/curated_modules/towfique_genes.png", width = 10)
 ```
 
 # Louvain Modules
