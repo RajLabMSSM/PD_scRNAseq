@@ -9,6 +9,8 @@ The key difference with this set of analyses compared to Monocle2 below is that 
 
 ### [Dimensionality Reduction + Clustering + Differential Gene Expression](https://rajlabmssm.github.io/PD_scRNAseq/scRNAseq_Seurat.html)
 
+<hr><br>
+
 ## Monocle3 Results
 
 ### [Dimensionality Reduction + Pseudotime + Clustering + Cell Type Identification](https://rajlabmssm.github.io/PD_scRNAseq/scRNAseq_Monocle3.html)  
