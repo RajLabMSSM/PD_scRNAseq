@@ -86,6 +86,48 @@ within_clusters <- c(1,2)
 DT_max <- 1000
 ```
 
+## Alternative DGE Methods
+
+```{r} 
+library(Seurat)
+library(future)
+plan(strategy = "multicore", workers = 4) 
+
+load("Results/3-11-2019/scRNAseq_results.RData")
+Seurat::as.Seurat(mDAT)
+mDAT <- Seurat::UpdateSeuratObject(mDAT)
+markers <- FindMarkers(mDAT, 
+                       ident.1 = "CD14+ Mono", 
+                       ident.2 = "FCGR3A+ Mono", )
+
+
+
+# degs <- read.csv("~/Downloads/PD_scRNAseq Monocle3.csv", row.names = 1)
+# towfique_genes = c("MS4A4A", "MYL6", "NDUFB1","PGK1","RPL35A","RPL39",
+#                    "S100A4","S100A6","SH2D3C","TAGLN")
+# tp <- plot_cells(cds, genes = towfique_genes,#degs$gene_short_name[1:10], 
+#                  show_trajectory_graph = F, alpha = .001, cell_size = .5)
+# tp
+# ggsave("./Results/curated_modules/towfique_genes.png", width = 10)
+ 
+# MEDIANS
+all_genes <- colnames(t(exprs(cds)))#row.names(exprs(cds))
+all_res <- lapply(row.names(exprs(cds)), function(gene){
+    print(gene)
+    cds_gene <- cds[gene,]
+    gene_df <- data.frame(t(exprs(cds_gene)), pData(cds))
+    colnames(gene_df)[1] <- "expression"
+    gene_medians <- aggregate(expression ~ ID + dx + Cluster, gene_df, median, na.rm=T) 
+    res <- stats::wilcox.test(expression ~ dx, data=gene_medians)
+    res_df <- data.frame(stat=res$statistic, pval=res$p.value, row.names = gene)
+    return(res_df)
+}) %>% data.table::rbindlist()
+
+```
+
+
+
+
 ## Across Clusters
 
 ### PD vs. Control

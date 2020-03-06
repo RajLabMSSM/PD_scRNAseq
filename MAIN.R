@@ -210,7 +210,7 @@ monocle3_DGE <- function(cds_DGE,
     print("Initiating DGE analysis...")
     gene_fits <- monocle3::fit_models(cds_dge, 
                                       model_formula_str = paste0("~",variable), 
-                                      expression_family = "quasipoisson",
+                                      expression_family = expression_family,
                                       cores = nCores, 
                                       verbose = T)
     fit_coefs <- coefficient_table(gene_fits) 
@@ -621,8 +621,7 @@ volcano_3d <- function(dge_path="./Results/across_Clust1.vs.Clust2.csv"){
   
 }
 
-
-
+ 
 
 grouped_module_expression <- function(cds,
                                        gene_module_df,

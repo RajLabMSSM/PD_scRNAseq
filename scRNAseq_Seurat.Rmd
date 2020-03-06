@@ -1,0 +1,1182 @@
+---  
+title: "Parkinson's Disease scRNA-seq: CD14++ Cells" 
+author: |
+  | Brian M. Schilder, Bioinformatician II
+  | Raj Lab
+  | Department of Neuroscience
+  | Icahn School of Medicine at Mount Sinai
+  | NYC, New York
+date: "`r Sys.Date()`"
+output: 
+  rmarkdown::html_document: 
+    theme: spacelab
+    highlight: zenburn 
+    code_folding: show 
+    toc: true 
+    toc_float: true
+    smooth_scroll: true
+    number_sections: false 
+    self_contained: true  
+params:
+  subsetGenes: "protein_coding" #FALSE
+  subsetCells: 500 #FALSE
+  resolution: 0.6
+  resultsPath: "./"
+  nCores: 2
+  perplexity: 30
+---
+ 
+
+# Setup 
+
+```{r setup, dpi = 600}
+# Gather parameters from command line
+resultsPath <- params$resultsPath # resultsPath = file.path(getwd(),"Results")
+nCores <- params$nCores #parallel::detectCores()
+subsetGenes <- params$subsetGenes 
+subsetCells <- params$subsetCells 
+resolution <-  as.numeric(params$resolution)
+interactive <- params$interactive
+perplexity <- params$perplexity 
+
+root <- "~/Desktop/PD_scRNAseq/"#getwd()
+# Have to setwd via knitr
+# knitr::opts_knit$set(root.dir=resultsPath, child.path = resultsPath)
+knitr::opts_chunk$set(echo=T, error=T, root.dir = resultsPath 
+                      # cache=T, cache.lazy=T
+                      ) 
+# Utilize parallel processing later on
+cat(paste("**** __Utilized Cores__ **** =", nCores))   
+params
+```
+
+__`r params$resultsPath`__
+ 
+ 
+## Load Libraries
+
+**NOTE**:: When Seurat updated from v2 to v3, they made a lot of problematic changes to the function names and arguments that cause a ton of errors.
+
+```{r Load Libraries & Report Versions, message=F, warning=F}
+library(Seurat)
+library(dplyr)
+library(gridExtra)
+library(knitr) 
+library(plotly)
+library(ggplot2)
+library(viridis)
+library(reshape2)
+library(shiny) 
+# library(ggrepel)
+library(DT) 
+library(ComplexHeatmap); #BiocManager::install("ComplexHeatmap") 
+library(EnhancedVolcano); #BiocManager::install('EnhancedVolcano')
+
+## Install Bioconductor
+#  if (!requireNamespace("BiocManager"))
+#     install.packages("BiocManager") 
+library(biomaRt) # BiocManager::install(c("biomaRt"))
+library(DESeq2) # BiocManager::install(c("DESeq2"))
+# library(enrichR) #BiocManager::install("enrichR")
+
+library(monocle) #BiocManager::install("monocle")
+# BiocManager::install("DelayedMatrixStats")
+# BiocManager::install("org.Mm.eg.db") 
+# library(org.Hs.eg.db)
+library(garnett) # devtools::install_github("cole-trapnell-lab/garnett")
+
+# Useful Seurat functions 
+## Seurat::MultiModal_CCA() # Integrates data from disparate datasets (CIA version too) 
+
+sessionInfo()
+print(paste("Seurat ", packageVersion("Seurat")))
+```
+
+## Helper Functions 
+```{r Helper Functions, results='asis'}
+createDT <- function(DF, caption="", scrollY=500){
+  data <- DT::datatable(DF, caption=caption,
+    extensions =  'Buttons',
+    options = list( dom = 'Bfrtip', 
+                    buttons = c('copy', 'csv', 'excel', 'pdf', 'print'), 
+                    scrollY = scrollY, scrollX=T, scrollCollapse = T, paging = F,  
+                      columnDefs = list(list(className = 'dt-center', targets = "_all"))
+    )
+  ) 
+   return(data)
+}
+# Need to wrap inside tagList when rendering DTs within a for loop
+createDT_html <- function(DF, caption="", scrollY=400){
+  print( htmltools::tagList( createDT(DF, caption, scrollY)) ) 
+}
+```
+
+
+## Raise Memory Limit
+
+Rstudio has a default memory limit of only 1GB. To override this, detect the true memory available and set a new limit.
+```{r Raise Memory Limit, eval=F}
+library(ulimit) # devtools::install_github("krlmlr/ulimit")
+library(benchmarkme)
+
+RAM <- print(benchmarkme::get_ram())
+## Convert GB to Mib
+RAM_Mib <- strsplit(RAM, " ")[[1]][1] %>% as.numeric() * 953.67431640625
+cat(paste("Available RAM:",RAM))
+## Set new memory limit 
+ulimit::memory_limit(RAM_Mib) 
+```
+
+
+## Load Data
+
+Since the original Seurat object was made with an older version of Seurat, it has to be converted to the updated Seurat V3 object.
+```{r Load Data }   
+## ! IMPORTANT! Must not setwd to local path when launching on cluster
+# setwd("~/Desktop/PD_scRNAseq/")
+dir.create("./Data", showWarnings=F) 
+load(file.path(root,"Data/seurat_object_add_HTO_ids.Rdata"))
+DAT <- seurat.obj  
+DAT <- Seurat::UpdateSeuratObject(DAT)
+rm(seurat.obj)
+```
+
+### Pre-filtered Dimensions
+
+```{r Pre-filtered Dimensions}
+DAT
+```
+
+
+## Clean Metadata
+
+```{r Clean Metadata, include=F, eval=F}
+library(readxl)
+
+## Update dx and mut fields
+### Import updated  dx, mut info
+subjectInfo <- read_excel(file.path(root,"Data/scRNAseq_meta.xlsx")) 
+### Import metadata
+meta <- read.table(file.path(root,"Data/meta.data3.tsv"), header=T )
+### Remove last 2 cols (contain incorrect values) and duplicate HTO col
+sum(meta$HTO != meta$HTO.1) # double check they're identical
+
+meta["barcode"] = row.names(meta)
+unique(meta["HTO"])
+# Map incorrect subject IDs to CORRECT subject IDs (typos occurred at NYGC during processing)
+map = setNames( # Incorrect (from NYGC)
+               c("NYUMD0011", "BIMD0076", "MSMD0067", "BIMD0077", "BIMD0007",
+                 "BIMD0075", "NYUMD0015", "MSMD0035","MSMD0207", "BIMD0010"), 
+               # Correct (from Evan)
+              c("NYUMD0011", "BID0076", "MSMD0067", "BID0077", "BIMD0007",
+                 "BID00075","NYUMD0015", "MSMD0035", "MSMD0207", "BIMD0010")
+              )
+meta["ID"] <- map[unlist(meta["HTO"])]
+meta <- subset(meta, select = -c(dx, mut, HTO, HTO.1)) 
+### Merge new cols
+metadata <- merge(meta, subjectInfo, by="ID", all.x=T) 
+row.names(metadata) <- metadata$barcode
+colnames(metadata)[colnames(metadata)=="Ethnitcity"] <- "Ethnicity" 
+# Remove "CellType" (these were just clusters identified previously with an old pipeline, no longer being used)
+metadata <- subset(metadata, select = -CellType)
+
+dim(meta)
+dim(metadata)
+head(metadata)
+paste("singlet.or.not.binary =",unique(DAT@meta.data$singlet.or.not.binary))
+# Correct misspelling
+### Export updated Metadata
+write.table(metadata, file.path(root,"Data/meta.data4.tsv"))
+# Add metadata to seurat object
+DAT <- AddMetaData(object = DAT, metadata =  metadata )  
+
+rm(list = c("meta", "metadata", "map", "subjectInfo"))
+## % Mitochondrial genes metadata
+#mito.genes <- grep(pattern = "^MT-", x = rownames(x = DAT@data), value = TRUE)
+#percent.mito <- Matrix::colSums(DAT@raw.data[mito.genes, ])/Matrix::colSums(DAT@raw.data)
+#DAT <- AddMetaData(object = DAT, metadata = percent.mito, col.name = "percent.mito")
+```
+
+
+## Add Metadata
+
+```{r Subset for Testing, results="asis"}  
+metadata <- read.table(file.path(root,"Data/meta.data4.tsv"))
+createDT( head(metadata), caption = "Metadata")  
+
+# Make AgeGroups
+makeAgeGroups <- function(){
+  dim(metadata)
+  getMaxRound <- function(vals=metadata$Age, unit=10)unit*ceiling((max(vals)/unit))
+  getMinRound <- function(vals=metadata$Age, unit=10)unit*floor((min(vals)/unit)) 
+   
+  ageBreaks = c(seq(getMinRound(), getMaxRound(), by = 10), getMaxRound()+10)
+  AgeGroupsUniq <- c()
+  for (i in 1:(length(ageBreaks)-1)){ 
+    AgeGroupsUniq <- append(AgeGroupsUniq, paste(ageBreaks[i],ageBreaks[i+1], sep="-")) 
+  } 
+  data.table::setDT(metadata,keep.rownames = T,check.names = F)[, AgeGroups := cut(Age, 
+                                  breaks = ageBreaks, 
+                                  right = F, 
+                                  labels = AgeGroupsUniq,
+                                  nclude.lowest=T)]
+  metadata <- data.frame(metadata)
+  unique(metadata$AgeGroups)
+  head(metadata)
+  dim(metadata)
+  return(metadata)
+}
+# metadata <- makeAgeGroups  
+DAT <- AddMetaData(object = DAT, metadata = metadata)  
+# Get rid of any NAs (cells that don't match up with the metadata) 
+if(subsetCells==F){
+  DAT <- subset(DAT , nGene > 0 )  
+} else {
+  subset(DAT, nGene >0)[,colnames(DAT)[0:subsetCells]] 
+}  
+```
+
+
+
+
+## Filter & Normalize Data
+
+### Subset Genes by Biotype
+
+Include only subsets of genes by type.
+Biotypes from: https://useast.ensembl.org/info/genome/genebuild/biotypes.html
+
+```{r Subset Genes by Biotype}
+subsetBiotypes <- function(DAT, subsetGenes){
+  if( subsetGenes!=F ){
+    cat(paste("Subsetting genes:",subsetGenes, "\n"))
+    # If the gene_biotypes file exists, import csv. Otherwise, get from biomaRt
+    if(file_test("-f", file.path(root,"Data/gene_biotypes.csv"))){
+      biotypes <- read.csv(file.path(root,"Data/gene_biotypes.csv"))
+    }
+    else {
+      ensembl <- useMart(biomart="ENSEMBL_MART_ENSEMBL", host="grch37.ensembl.org",
+                       dataset="hsapiens_gene_ensembl") 
+      ensembl <- useDataset(mart = ensembl, dataset = "hsapiens_gene_ensembl")
+      listFilters(ensembl)
+      listAttributes(ensembl)   
+      biotypes <- getBM(attributes=c("hgnc_symbol", "gene_biotype"), filters="hgnc_symbol",
+            values=row.names(DAT), mart=ensembl) 
+      write.csv(biotypes, file.path(root,"Data/gene_biotypes.csv"), quote=F, row.names=F)
+    } 
+    # Subset data by creating new Seurat object (annoying but necessary)
+    geneSubset <- biotypes[biotypes$gene_biotype==subsetGenes,"hgnc_symbol"]
+    
+    cat(paste(dim(DAT[geneSubset, ])[1],"/", dim(DAT)[1],"genes are", subsetGenes))
+    # Add back into DAT 
+    DAT <- DAT[geneSubset,]
+  } 
+  return(DAT)
+}
+
+DAT <- subsetBiotypes(DAT, subsetGenes = subsetGenes)
+```
+
+### Subset Cells
+
+Filter by cells, normalize , filter by gene variability.  
+
+```{r Subset Cells }
+cat("Total Cells:", ncol(DAT), "\n")
+DAT <- subset(DAT, nGene < 2500 & nGene > 200 & percent.mito < .05)
+cat("Filtered Cells:", ncol(DAT))
+DAT <- NormalizeData(object = DAT, normalization.method = "LogNormalize", 
+                     scale.factor = 10000)
+```
+
+### Subset Genes by Variance
+
+__Important!__:
+* In ScaleData...
+  + Specify do.par = F (unless you have parallel processing set up properly, this will cause your script to crash)
+  + Specify num.cores = nCores (to use all available cores, determined by parallel::detectCores())
+
+Regress out: number of unique transcripts (nUMI), % mitochondrial transcripts (percent.mito) 
+```{r Subset Genes by Variance}  
+# Store the top most variable genes in @var.genes
+DAT <- FindVariableFeatures(object = DAT, 
+                            mean.function = ExpMean, 
+                            dispersion.function = LogVMR,
+                            x.low.cutoff = 0.0125, 
+                            x.high.cutoff = 3, 
+                            y.cutoff = 0.5)
+cat("Total Genes:", nrow(DAT))
+var.genes <- Seurat::VariableFeatures(DAT)
+cat("Highly Variable Genes:", length(var.genes))
+
+# IMPORTANT!: Must set do.par=T and num.cors = n for large datasets being processed on computing clusters
+# IMPORTANT!: Use only the var.genes identified by 'FindVariableGenes' as the 'gene.use' arg in 'ScaleData'
+## This will greatly reduced the computational load.
+
+# Ensure CD14 and CD16 are included
+appendedGenes <- c(var.genes, "CD14", "FCGR3A")
+DAT <- ScaleData(object = DAT,  
+                 vars.to.regress = c("nUMI", "percent.mito"))
+```
+
+
+
+### Filtered Dimensions
+
+```{r Filtered Dimensions}
+DAT
+```
+
+
+
+# Diagnostic Plots
+
+You can mix genes and metadata variables in these plots just by listing them all in the `features` argument.
+
+```{r  Diagnostic Plots, echo = T, results = 'hide', fig.show='hide'} 
+Seurat::VlnPlot(object = DAT, features = c("CD14","FCGR3A","nUMI","nGene","percent.mito"), 
+                pt.size = .01, group.by = "dx")  
+```
+
+
+# Dimensionality Reduction
+
+## PCA {.tabset .tabset-fade .tabset-pills}
+
+ProjectPCA scores each gene in the dataset (including genes not included
+in the PCA) based on their correlation with the calculated components.
+Though we don't use this further here, it can be used to identify markers
+that are strongly correlated with cellular heterogeneity, but may not have
+passed through variable gene selection.  The results of the projected PCA
+can be explored by setting use.full=T in the functions above
+
+* Other Dim Reduction Methods in Seurat
+  + RunCCA()
+  + RunMultiCCA()
+  + RunDiffusion()
+  + RunPHATE() 
+  + RunICA()
+  
+```{r PCA }
+# Run PCA with only the top most variables genes
+DAT <- RunPCA(object = DAT, 
+              pc.genes = appendedGenes, 
+              do.print=F, verbose=F) #, pcs.print = 1:5,  genes.print = 5
+PCAPlot(object = DAT, group.by=c("dx","mut","ID"), dims=c(1,2), ncol=2)
+```
+ 
+### PCHeatmaps
+
+```{r PCHeatmap, message=F, warning=F}  
+# 'PCHeatmap' is a wrapper for heatmap.2  
+Seurat::PCHeatmap(DAT, nfeatures=30, dims=1:2, ncol=2)
+```
+
+
+### Significant PCs
+
+Determine statistically significant PCs for further analysis.
+NOTE: This process can take a long time for big datasets, comment out for
+expediency.  More approximate techniques such as those implemented in
+PCElbowPlot() can be used to reduce computation time
+
+```{r Significant PCs } 
+# DAT <- Seurat::JackStraw(DAT)
+Seurat::ElbowPlot(object = DAT, ndims = 20)
+```
+
+## t-SNE
+
+`do.fast` speeds up t-SNE but makes gives you slightly differnt results each time (unless you set the seed).
+
+```{r t-SNE}
+DAT <- RunTSNE(object=DAT,  reduction.use = "pca", 
+               dims.use = 1:10, 
+               do.fast = T,
+               perplexity = perplexity, 
+               tsne.method = "Rtsne", 
+               num_threads=nCores, 
+               seed.use = 2019,
+               verbose=F) #   FItSNE 
+DimPlot(object = DAT, reduction = 'tsne', group.by = c("dx","mut","ID"), ncol=2)
+```
+
+## UMAP
+
+Additional UMAP arguments detailed here: https://umap-learn.readthedocs.io/en/latest/api.html#module-umap.umap_ 
+
+NOTE: Specifying `n.components = <large_number>` take a little more time but helps clustering later on.
+
+```{r UMAP, results = 'asis'} 
+# cat(print(mem_used()))
+DAT <- RunUMAP(object = DAT, 
+               reduction = "pca", 
+               dims = 1:10, 
+               verbose=T, 
+               num_threads=nCores,
+               n.components=10)
+# Plot results
+DimPlot(object = DAT, reduction = 'umap', group.by = c("dx","mut","ID"), pt.size = .01, ncol=2)
+```
+
+
+## Find Cell Clusters
+- Seurat v3 applies a graph-based clustering approach, building upon initial strategies in (Macosko et al). Importantly, the distance metric which drives the clustering analysis (based on previously identified PCs) remains the same. However, our approach to partioning the cellular distance matrix into clusters has dramatically improved. Our approach was heavily inspired by recent manuscripts which applied graph-based clustering approaches to scRNA-seq data [SNN-Cliq, Xu and Su, Bioinformatics, 2015] and CyTOF data [PhenoGraph, Levine et al., Cell, 2015]. Briefly, these methods embed cells in a graph structure - for example a K-nearest neighbor (KNN) graph, with edges drawn between cells with similar feature expression patterns, and then attempt to partition this graph into highly interconnected ‘quasi-cliques’ or ‘communities’.
+
+- As in PhenoGraph, we first construct a KNN graph based on the euclidean distance in PCA space, and refine the edge weights between any two cells based on the shared overlap in their local neighborhoods (Jaccard similarity). This step is performed using the FindNeighbors function, and takes as input the previously defined dimensionality of the dataset (first 10 PCs).
+
+- To cluster the cells, we next apply modularity optimization techniques such as the Louvain algorithm (default) or SLM [SLM, Blondel et al., Journal of Statistical Mechanics], to iteratively group cells together, with the goal of optimizing the standard modularity function. The FindClusters function implements this procedure, and contains a resolution parameter that sets the ‘granularity’ of the downstream clustering, with increased values leading to a greater number of clusters. We find that setting this parameter between 0.4-1.2 typically returns good results for single-cell datasets of around 3K cells. Optimal resolution often increases for larger datasets. The clusters can be found using the Idents function.
+
+
+__IMPORTANT__: Only use the most variable genes for the graph construction step of clustering for much better clustering
+
+```{r Cluster Cells} 
+# Stash old identity
+DAT[["pre_clustering"]] <- Idents(object = DAT)
+# DAT <- SetAllIdent(object = DAT, id = "pre_clustering") 
+
+# Cluster
+DAT <- FindNeighbors(DAT, 
+                     dims = 1:10, 
+                     reduction = "umap", # can cluster using UMAP or PCA dims (or even directly on the genes)
+                     features = appendedGenes,
+                     force.recalc = T)
+DAT <- FindClusters(DAT, resolution = .05,
+                    random.seed = 2019) 
+# Stash new identity
+DAT[["post_clustering"]] <- Idents(object = DAT)
+# Plot clusters
+DimPlot(object = DAT, label = T)#, do.hover=do.hover, data.hover="mut")
+```
+ 
+# Cluster Biomarkers
+
+Seurat has several tests for differential expression which can be set with the test.use parameter (see the DE vignette for details). For example, the ROC test returns the ‘classification power’ for any individual marker (ranging from 0 - random, to 1 - perfect).
+
+Shown here: Biomarkers of each cluster vs. all other clusters.
+
+## Biomarkers Data {.tabset .tabset-fade .tabset-pills}
+
+### All Biomarkers
+
+```{r All Biomarkers} 
+# Limit to only top variable genes?: 
+# Set arg 'only.pos=F' to capture negative biomarkers
+# DAT <- SetIdent(DAT, ident.use = "post_clustering") 
+DAT.markers <- FindAllMarkers(object = DAT, min.pct = 0.25, 
+                              thresh.use = 0.25,  only.pos = F,  
+                              test.use = "wilcox")
+DAT.markers <- DAT.markers %>% mutate(FC = 2^avg_logFC)
+
+DAT.markers.sig <- DAT.markers %>% subset(p_val_adj<=0.05) 
+markers.summary <- DAT.markers.sig %>% group_by(cluster) %>% tally()
+# markers.summary <- base::merge(DAT.markers.sig %>% group_by(cluster) %>% tally(),
+#       DAT.markers %>% group_by(cluster) %>% summarise(mean(avg_logFC)), 
+#       by="cluster" )
+
+createDT(markers.summary, caption = "Number of DEGs and Mean logFC per Cluster")
+
+createDT(DAT.markers, caption = paste("All Biomarkers: All Clusters"))
+```
+
+### Top Biomarkers
+
+```{r Top Biomarkers} 
+topNum = 5
+topBiomarkers <- DAT.markers %>% group_by(cluster) %>% top_n(topNum, avg_logFC)
+createDT(DAT.markers, caption = paste("All Biomarkers: All Clusters"))
+```
+
+
+## Cluster Biomarker: Violin Plots {.tabset .tabset-fade .tabset-pills}
+
+```{r cluster biomarker plots, results='asis'}
+VlnPlot(object = DAT, features = topBiomarkers$gene, 
+        group.by = "post_clustering", log = T, pt.size = .1)  + 
+  ggplot2::aes(alpha=0.5) + xlab( "Cluster") + ylab( "Expression")
+```
+ 
+## Cluster Biomarker: Volcano Plots {.tabset .tabset-fade .tabset-pills}
+
+Uses the `EnhancedVolcano` library. [Tutorial.](https://www.bioconductor.org/packages/release/bioc/vignettes/EnhancedVolcano/inst/doc/EnhancedVolcano.html) .
+
+```{r Volcano Plots, fig.height=5, fig.width=5, results='asis'}
+##Construct the plot object
+volcanoPlot <- function(DEG_df, caption="", topFC_labeled=Inf, FC_cutoff=1, Q_cutoff=.05){
+  DEG_df$sig<-  ifelse( DEG_df$p_val_adj<0.05 & DEG_df$avg_logFC<1.5, "p_val_adj<0.05",
+            ifelse( DEG_df$p_val_adj<0.05  & DEG_df$avg_logFC>1.5, "p_val_adj<0.05 & avg_logFC>1.5",
+		        "p_val_adj>0.05"
+		)) 
+  DEG_df <- arrange(DEG_df, desc(sig))
+  yMax  <- max(-log10(DEG_df$p_val_adj)) + max(-log10(DEG_df$p_val_adj))/3
+  # IMPORTANT!# Must replace 0s with small numbers to avoid getting errors when taking the -log
+  DEG_df[DEG_df$p_val_adj==0,"p_val_adj"] <- .Machine$double.xmin
+  rownames(DEG_df) <- DEG_df$gene
+ 
+  labeled_genes <- subset(DEG_df, p_val_adj<Q_cutoff | avg_logFC>=FC_cutoff)
+  if(nrow(labeled_genes)>topFC_labeled){
+     labeled_genes <- arrange(labeled_genes, p_val_adj, desc(avg_logFC))[1:topFC_labeled,]
+  }
+  
+  xlimit <- max(abs(DEG_df$avg_logFC))*1.1
+  
+  # EnhancedVolcano library
+  vol <- EnhancedVolcano::EnhancedVolcano(toptable = DEG_df,
+                                   x="avg_logFC",
+                                   y="p_val_adj",
+                                   transcriptPointSize = 3,
+                                   pCutoff = Q_cutoff, 
+                                   FCcutoff = FC_cutoff,
+                                   lab=rownames(DEG_df),
+                                   cutoffLineCol = 'grey30',
+                                   col = c("grey30", "forestgreen", "royalblue", "red2"), 
+                                   legend = c("NA",
+                                              paste("log2(FC) ≥", FC_cutoff),
+                                              paste("q-value <",Q_cutoff),
+                                              paste("q-value <",Q_cutoff,"& log2(FC) ≥", FC_cutoff)
+                                              ),
+                                   xlab = "log2(FC)",
+                                   ylab = "-log10(q-value)",
+                                   # legend = c("Bonferonni < .05",),
+                                   # col = c("black","purple","turquoise"),
+                                   title=caption,
+                                   subtitle = "") + 
+    xlim(c(-xlimit,xlimit)) + 
+    labs(legend="DGE Group") +
+    theme_bw()
+  print(vol)
+  # # Custom
+  # vol <- ggplot(data=DEG_df, aes(x=avg_logFC, y= -log10(p_val_adj))) +
+  #   geom_point(alpha=0.5, size=3, aes(col=sig)) +
+  #   scale_color_manual(values=list("p_val_adj<0.05"="turquoise3",
+  #                                  "p_val_adj<0.05 & avg_logFC>1.5"="purple",
+  #                                  "p_val_adj>0.05" = "darkgray")) +
+  #   theme(legend.position = "none") +
+  #   xlab(expression(paste("Average ",log^{2},"(fold change)"))) +
+  #   ylab(expression(paste(-log^{10},"(p-value)"))) +
+  #   xlim(-2,2) + ylim(0, yMax) +
+  #   ## ggrepl labels
+  #   ggrepel::geom_text_repel(data=labeled_genes, 
+  #                             aes(label=gene, x=avg_logFC, y= -log10(p_val_adj)),
+  #                             color="black", alpha=.5,
+  #                             segment.color="black", segment.alpha=.5
+  #                   ) +
+  #   # Lines
+  #   geom_vline(xintercept= -1.5,lty=4, lwd=.3, alpha=.5) +
+  #   geom_vline(xintercept= 1.5,lty=4, lwd=.3, alpha=.5) +
+  #   geom_hline(yintercept= -log10(0.05),lty=4, lwd=.3, alpha=.5) +
+  #   ggtitle(caption)
+  # print(vol)
+}
+
+```
+
+### Cluster Volcano Plots
+
+```{r Cluster Volcano Plots}
+# Run plots
+for (clust in unique(DAT.markers$cluster)){
+   cat('\n')   
+   cat("### Cluster ",clust,": Volcano","\n") 
+   cap <- paste("Cluster",clust,"DEG Table") 
+   DEG_df <- subset(DAT.markers, cluster==as.character(clust)) %>% arrange(desc(avg_logFC))  
+   volcanoPlot(DEG_df = DEG_df, caption = cap)
+   createDT_html(DEG_df, caption = cap)
+   cat('\n')   
+} 
+```
+
+
+## Top Biomarker Plot
+
+### Biomarkers GO {.tabset .tabset-fade}
+
+```{r Biomarkers GO, results='asis'}
+top1 <- DAT.markers %>% group_by(cluster) %>% top_n(topNum, avg_logFC)
+# top1 <- Seurat::
+for (clust in unique(top1$cluster)){ 
+  subClust <- subset(top1, cluster==clust)
+  cat('\n')
+  cat("### Cluster",clust,"\n")
+  cat( "Biomarker\n",subClust$gene) 
+  # try({
+    query <- subset(subClust, p_val_adj<0.05)$gene %>% as.character()
+    gostres <- gprofiler2::gost(query = query, organism = "hsapiens", significant = F)
+    gprofiler2::gostplot(gostres)
+    sig.results <- gostres$result %>% 
+      dplyr::mutate(q_value =  p.adjust(p = gostres$result$p_value, method = "bonferroni")) %>%
+      subset(q_value<0.05) 
+    if(nrow(sig.results)>0){
+        createDT_html(sig.results)
+    } else {print("No significant GO terms at Bonferonni-corrected p-value < 0.05.")}
+  # }) 
+  # results <- Seurat::FindGeneTerms(QueryGene = subClust$gene) # defunct in SeuratV3
+  # print(results) #parse_html_notebook(results)
+  cat('\n')
+}
+```
+
+
+###  Biomarkers tSNE
+
+```{r Biomarkers tSNE, out.height="300%", fig.height=10, fig.width=10} 
+Seurat::FeaturePlot(object = DAT, features = top1$gene, cols = c("grey", "purple"), reduction = "umap")
+```
+
+
+### Biomarkers Heatmap
+
+```{r Biomarkers Heatmap}
+top5 <- DAT.markers %>% group_by(cluster) %>% top_n(5, avg_logFC)
+Seurat::DoHeatmap(object = DAT, features = top5$gene, angle = 0)
+```
+
+### Biomarkers Ridgeplot
+
+```{r Biomarkers RidgePlot, fig.height=7, fig.width=8}
+Seurat::RidgePlot(object = DAT, features = top1$gene, sort = F)
+```
+
+### Biomarkers Split Dot Plot
+
+Visualize biomarker expression for each cluster, by disease
+
+```{r Biomarkers Split Dot Plot} 
+top2 <- DAT.markers %>% group_by(cluster) %>% top_n(2, avg_logFC)
+sdp <- Seurat::DotPlot(object = DAT, features = top5$gene, cols = c("blue","red"), group.by = c("mut")) +
+  theme(axis.text.x = element_text(angle=45, hjust = 1)) 
+print(sdp)
+```
+
+
+# Map Clusters to Known Biomarkers
+
+- Known Monocytes Biomarkers
+    + Classical: CD14++ / CD16--
+    + Intermediate: CD14++ / CD16+
+    + Nonclassical: CD14+ / CD16++ (not captured in this data)
+ 
+The following plots show the absolute expression of each biomarker, 
+as opposed to avg_logFC which is dependent on the expression patterns of other cell types being compared.
+  
+## Markers Dataframe
+
+```{r Markers Dataframe}
+markerList <- c("CD14", "FCGR3A") 
+ 
+get_markerDF <- function(DAT, 
+                         markerList, 
+                         meta_vars =c("barcode", "dx", "mut","post_clustering", 
+                                      "percent.mito","nGene", "nUMI")){
+  exp <- DAT@assays$RNA@scale.data %>% data.frame() 
+  marker.matrix <- exp[row.names(exp) %in% markerList, ] 
+  marker.matrix$Gene <- row.names(marker.matrix)
+  markerMelt <- reshape2:::melt.data.frame(marker.matrix, id.vars = "Gene", variable.name = "Cell",value.name = "Expression") 
+  metaSelect <-  DAT@meta.data[,meta_vars] 
+  markerDF <- merge(markerMelt,metaSelect, by.x="Cell", by.y="barcode") 
+  return(markerDF)
+}
+markerDF <- get_markerDF(DAT, markerList)
+createDT(head(markerDF), caption = "Known Marker Expression")
+```
+
+## Marker ANOVAs + Boxplots 
+
+```{r Marker ANOVAs + Boxplots, eval=F} 
+# # Explore expression differences between groups
+# marker_vs_metadata <- function(markerDF, meta_var){ 
+#   # Create title from ANOVA summary
+#   ANOVAtitle <- function(markerDF, marker){
+#       nTests <- length(unique(markerDF$Gene))
+#       res <- anova(lm(data = subset(markerDF, Gene==marker), 
+#                       formula = Expression ~ eval(parse(text=meta_var))))
+#       
+#       title <-paste(paste("ANOVA (",marker, " x ",meta_var, ")", sep=""), 
+#                     ": p=",round(res$`Pr(>F)`,3), 
+#                     ", F=",round(res$`F value`,3), 
+#         ifelse(res$`Pr(>F)`<.05/nTests,"(Significant**)",
+#                "(Non-significant)") ) 
+#   }
+#   
+#   title = ""
+#   for (marker in unique(markerDF$Gene) ){
+#     cat(marker)
+#     title <- paste(title, "\n", ANOVAtitle(markerDF, marker))
+#   } 
+#    
+#  
+#   ggplot(markerDF, aes(x=Gene, y=Expression, fill=eval(parse(text=meta_var)))) + 
+#     geom_violin() + 
+#     # Beeswarm not great for lots of data
+#     # ggbeeswarm::geom_beeswarm(alpha=.5, color="turquoise") +
+#     geom_point( position=position_jitterdodge(jitter.width = .2, dodge.width = .9 ),   alpha=0.6, color="turquoise3") +
+#     labs(title = title, x=meta_var, fill=meta_var) +
+#     theme(plot.title = element_text( size=10)) +
+#     scale_fill_manual(values=c("brown", "slategray")) + 
+#     theme_classic()
+# }
+```
+
+### ANOVA: dx
+
+```{r ANOVA: dx, eval=F} 
+# marker_vs_metadata(markerDF, meta_var = "dx")
+```
+
+### ANOVA: mut
+
+```{r ANOVA: mut, eval=F}
+# marker_vs_metadata(markerDF, "mut")
+```
+
+
+
+ 
+# Identify Cell Types (*under construction*)
+ 
+## Garnett
+
+Garnett works with the Monocle library so you need to convert the Seurat object to CDS format (which Monocle uses) first.
+__NOTE__: You must install the version of Garnett that is compatible with your version of Monocle. E.g. `devtools::install_github("cole-trapnell-lab/garnett", ref="monocle3")`
+
+
+```{r Identify Cell Types, eval=F} 
+# Convert Seurat object to CDS object
+load(file.path(root,"Data/seurat_object_add_HTO_ids.Rdata"), )
+mDAT <- monocle::importCDS(seurat.obj,  import_all = F) 
+remove(seurat.obj)
+
+# generate size factors for normalization later
+mDAT <- estimateSizeFactors(mDAT)
+
+# Get pre-trained PBMC classifer 
+# Download from: https://cole-trapnell-lab.github.io/garnett/classifiers
+classifier_file <- "./Data/hsPBMC_20191017.RDS"
+if(!file.exists(classifier_file)){
+  download.file(url="https://cole-trapnell-lab.github.io/garnett/classifiers/hsPBMC_20191017.RDS", 
+              destfile = "./Data/hsPBMC_20191017.RDS")
+}
+hsPBMC <- readRDS("./Data/hsPBMC_20191017.RDS") 
+# Get feature genes for each cell type
+feature_genes <- get_feature_genes(hsPBMC,
+                                   node = "root",
+                                   db = org.Hs.eg.db, 
+                                   convert_ids = T)
+head(feature_genes)
+library(org.Hs.eg.db)
+mDAT <- classify_cells(cds = mDAT, 
+                       classifier = hsPBMC,
+                        db = org.Hs.eg.db,
+                         cluster_extend = TRUE,
+                         cds_gene_id_type = "SYMBOL")
+head(pData(mDAT))
+table(pData(mDAT)$cell_type)
+table(pData(mDAT)$cluster_ext_type) 
+
+
+
+# Run tSNE: Plot Clusters and Cell Types 
+mDAT <- reduceDimension(mDAT, max_components = 3, reduction_method = "tSNE") 
+commonGeoms <- labs(x="tSNE1",y="tSNE2")
+
+plot_grid(nrow = 2,
+  qplot(data = pData(mDAT), mDAT@reducedDimA[1,], mDAT@reducedDimA[2,], color = cell_type) + theme_bw() + commonGeoms,
+  qplot(data = pData(mDAT), mDAT@reducedDimA[1,], mDAT@reducedDimA[2,], color = cluster_ext_type) + theme_bw() + commonGeoms
+)
+
+
+# Unsupervised Clustering
+mDAT <- clusterCells(mDAT, num_clusters = 5)
+pData(mDAT)
+plot_cell_clusters(mDAT, 1, 2, color = "Cluster",  markers = c("CD14", "FCGR3A"))
+plot_cell_clusters(mDAT, 1, 2, color = "Cluster") + facet_wrap(~dx)
+plot_cell_clusters(mDAT, 1, 2, color = "Cluster") + facet_wrap(~mut)
+plot_cell_clusters(mDAT, 1, 2, color = "Cluster") + facet_wrap(~cell_type) 
+
+DAT <- Seurat::AddMetaData(DAT, pData(mDAT)[c("garnett_cluster","cell_type","cluster_ext_type","Cluster")])
+ 
+```
+ 
+
+# Pseudo-time
+
+WARNING: _Very_ computationally expensive!
+```{r Pseudo-time, eval=F}
+mDAT <- reduceDimension(mDAT, max_components = 2, method = 'DDRTree')
+mDAT <- orderCells(mDAT)
+plot_cell_trajectory(mDAT, color_by = "dx")
+plot_cell_trajectory(mDAT, color_by = "cell_type")
+plot_cell_trajectory(HSMM_myo, color_by = "cell_type") +
+    facet_wrap(~mut, nrow = 2)
+```
+
+
+
+
+
+
+## Known Biomarkers: Heatmaps {.tabset .tabset-fade .tabset-pills}
+
+### Cells Separated
+
+```{r Cells Separated} 
+markerDF <- get_markerDF(DAT, markerList, 
+             meta_vars =c("barcode", "dx", "mut","ID","post_clustering", "percent.mito","nGene", "nUMI"))
+Spectral <- grDevices::colorRampPalette(RColorBrewer::brewer.pal(length(unique(DAT@meta.data$mut)), "Spectral"))
+
+# DAT <- DoKMeans(DAT, k.genes = 3) 
+# KMeansHeatmap(DAT)
+
+if (T==F){
+  # Spectral <- heatmaply::Spectral(length(unique(DAT@meta.data$mut)))
+  markerMelt <- reshape2::acast(markerDF, Cell~Gene, value.var="Expression", fun.aggregate = mean, drop = F, fill = 0) 
+  heatmaply::heatmaply(markerMelt,  key.title="Expression",#plot_method= "ggplot",
+        k_row = dim(markerMelt)[2], dendrogram = "row",
+        showticklabels = c(T, F), xlab = "Known Markers", ylab = "Cells", column_text_angle = 45, 
+        row_side_colors =  DAT@meta.data[,c("dx","mut", "cell_type")], row_side_palette = Spectral
+        )  %>%  colorbar(tickfont = list(size = 12), titlefont = list(size = 14), which = 2)  %>% 
+        colorbar(tickfont = list(size = 12), titlefont = list(size = 14), which = 1)
+ }else{ 
+  # markerDF_sub <-subset(markerDF, Gene==markerList[1])  
+  # var_to_colors(markerDF_sub, "post_clustering")  
+  # library(pheatmap)
+  # pheatmap(markerMelt, annotation_row = markerDF_sub[c("dx","mut","cell_type")])
+  # pheatmap(markerMelt, kmeans_k = NA, annotation_row = markerDF_sub[c("dx","mut","cell_type")],
+  #         cluster_cols = F, cutree_rows = length(unique(markerDF$post_clustering)),  angle_col=45 )
+  library(RColorBrewer) 
+  var_to_colors <- function(markerDF, metaVar){
+    colors <- brewer.pal(length(unique(markerDF[metaVar]) ), "Dark2")
+     sample(colors, length(unique(markerDF[metaVar])), replace = TRUE, prob = NULL)
+    # metaColors <- colors[ subset(markerDF, Gene==markerList[1])[metaVar][,1] %>% as.factor() ]
+    return(metaColors)
+  }  
+  # library(GMD)
+  # myCols = cbind(var_to_colors(markerDF, "dx"), var_to_colors(markerDF, "mut")) 
+  # rlab=t(cbind(
+  #   var_to_colors(markerDF, "post_clustering"),
+  #   var_to_colors(markerDF, "dx")
+  #   ))
+  #   heatmap.2(marker.matrix, key.title="Expression",  col = viridis(300), trace="none",Colv = F, Rowv = F,
+  #             labRow = F, xlab = "Biomarker", ylab="Cell", cexCol=1, RowSideColors = var_to_colors(markerDF, "post_clustering")
+  #             )
+  # heatmap.3(markerMelt, dendrogram = 'row', kr = length(unique(markerDF)), labRow = F, 
+  #           xlab = "Biomarker", ylab = "Cell", RowSideColors = rlab, RowSideColorsSize=2 )
+   
+  
+  
+  markerDF <- markerDF %>%    
+    mutate_at(vars(post_clustering, dx, mut, ID), as.factor) %>% 
+    mutate(Cluster = post_clustering) %>%
+    arrange(post_clustering) 
+  # markerMelt <- reshape2::acast(markerDF, Cell~Gene, value.var="Expression", fun.aggregate = mean, drop = F, fill = 0) 
+  markerMelt <- dcast(markerDF,  Cell + post_clustering + dx + mut + ID ~ Gene,
+                      fun.aggregate = mean, value.var = "Expression") %>% arrange(post_clustering)
+  marker.matrix <- markerMelt[markerList] %>%as.matrix()
+  row.names(marker.matrix) <- markerMelt$Cell
+  
+  ha = HeatmapAnnotation(df = markerDF[c("dx","mut","ID","post_clustering")], which = "row") 
+  
+  ComplexHeatmap::Heatmap(marker.matrix, col=viridis(300), column_title = "Biomarker", row_title = "Cell",  
+                          row_dend_reorder = F,show_row_names = F, show_column_dend = F,show_row_dend =T,
+                          cluster_rows = T, column_title_side = "bottom",km = length(unique(markerMelt$post_clustering))) + ha
+  print(ha)
+} 
+```
+
+### Average Expression: By Clusters
+
+```{r Clusters Averaged}
+markerDF <- markerDF %>% mutate(Cluster = post_clustering)
+# Show mean exp for each marker
+avgMarker <- markerDF %>% group_by(Gene, Cluster) %>% summarise(meanExp = mean(Expression)) 
+
+p <- ggplot(data = avgMarker, aes(x=Gene, y=Cluster, fill=meanExp)) %>% + geom_tile() + scale_fill_viridis()
+print(p)
+# ifelse(interactive, p %>% ggplotly() %>% toWebGL() %>% print(), print(p))
+```
+
+### Average Expression: By Disease
+
+```{r Average Expression: By Disease}
+# Show mean exp for each marker
+avgMarker <- markerDF %>% group_by(Gene, dx, Cluster) %>% summarise(meanExp = mean(Expression)) 
+p <- ggplot(data = avgMarker, aes(x=Gene, y=dx, fill=meanExp)) %>% + geom_tile() + scale_fill_viridis()
+print(p)
+# ifelse(interactive, p %>% ggplotly() %>% toWebGL() %>% print(), print(p))
+```
+
+
+## Known Biomarkers: Boxplot
+
+```{r Known Biomarkers: Boxplot} 
+ggplot(data = markerDF, aes(x=Cluster, y=Expression, fill=Gene)) %>% 
+  + geom_boxplot(alpha=0.5) %>% + scale_fill_manual(values=c("purple", "turquoise"))  
+```
+
+
+
+
+# DGE: All Cells {.tabset .tabset-fade .tabset-pills}
+
+DGE methods available in Seurat include:  
+  - "wilcox" : Identifies differentially expressed genes between two groups of cells using a Wilcoxon Rank Sum test (default)  
+
+  - "bimod" : Likelihood-ratio test for single cell gene expression, (McDavid et al., Bioinformatics, 2013)  
+
+  - "roc" : Identifies 'markers' of gene expression using ROC analysis. For each gene, evaluates (using AUC) a classifier built on that gene alone, to classify between two groups of cells. An AUC value of 1 means that expression values for this gene alone can perfectly classify the two groupings (i.e. Each of the cells in cells.1 exhibit a higher level than each of the cells in cells.2). An AUC value of 0 also means there is perfect classification, but in the other direction. A value of 0.5 implies that the gene has no predictive power to classify the two groups. Returns a 'predictive power' (abs(AUC-0.5) * 2) ranked matrix of putative differentially expressed genes.  
+
+  - "t" : Identify differentially expressed genes between two groups of cells using the Student's t-test.
+
+  - "negbinom" : Identifies differentially expressed genes between two groups of cells using a negative binomial generalized linear model. Use only for UMI-based datasets  
+
+  - "poisson" : Identifies differentially expressed genes between two groups of cells using a poisson generalized linear model. Use only for UMI-based datasets  
+
+  - "LR" : Uses a logistic regression framework to determine differentially expressed genes. Constructs a logistic regression model predicting group membership based on each feature individually and compares this to a null model with a likelihood ratio test.  
+
+  - "MAST" : Identifies differentially expressed genes between two groups of cells using a hurdle model tailored to scRNA-seq data. Utilizes the MAST package to run the DE testing.  
+
+  - "DESeq2" : Identifies differentially expressed genes between two groups of cells based on a model using DESeq2 which uses a negative binomial distribution (Love et al, Genome Biology, 2014).This test does not support pre-filtering of genes based on average difference (or percent detection rate) between cell groups. However, genes may be pre-filtered based on their minimum detection rate (min.pct) across both cell groups. To use this method, please install DESeq2, using the instructions at https://bioconductor.org/packages/release/bioc/html/DESeq2.html  
+
+ 
+```{r All Cells: function} 
+# Available DGE methods:
+## "wilcox", "bimod", "roc", "t", "tobit", "poisson", "negbinom", "MAST", "DESeq2"
+runDGE <- function(DAT, 
+                   meta_var, 
+                   group1, group2, 
+                   test.use="MAST", 
+                   show_plot=T,
+                   show_table=T,
+                   save_path="./Results/Seurat", 
+                   cluster="allClusters"){
+  #print(paste("DGE_allCells",meta_var,sep="_")) 
+  # DAT <- SetAllIdent(DAT, id = meta_var)
+  # DAT <- StashIdent(DAT, save.name = meta_var)
+  # DAT[[meta_var]] <- Idents(object = DAT)
+  DAT <- SetIdent(DAT, value=meta_var)  
+  DEGs <- FindMarkers(DAT, 
+                      ident.1=group1, 
+                      ident.2=group2, 
+                      test.use=test.use, 
+                      min.pct = 0.1,
+                      logfc.threshold = 0.25,
+                      min.cells.feature = 3,
+                      min.cells.group = 3,
+                      only.pos = F, 
+                      verbose = F)
+  DEGs$gene <- row.names(DEGs)
+  DAT <- SetIdent(DAT, value="post_clustering") 
+  cap <- paste("DEGs:\n",group1, "vs.", group2) 
+  
+  if(show_table){
+    createDT(DEGs, caption = cap)
+  }
+  if(show_plot){ 
+    volcanoPlot(DEGs, caption = cap)  
+  }
+  
+  if(save_path!=F){
+    res_path <- file.path(save_path, paste0("DGE.results_",meta_var,"_",cluster,".tsv.gz"))
+    message("Saving DGE results ==>",res_path)
+    dir.create(dirname(res_path), showWarnings = F, recursive = T)
+    data.table::fwrite(DEGs,
+                       file = res_path,
+                       sep="\t",
+                       nThread = 4)
+  }
+  return(DEGs)
+}
+```
+
+## PD vs. Controls
+
+```{r All Cells: PD vs. Controls}
+DEG_df <- runDGE(DAT, meta_var = "dx", group1 = "PD", group2 = "control", test.use = "MAST")
+```
+
+## LRRK vs. PD
+
+```{r All Cells: LRRK2 vs. PD} 
+DEG_df <- runDGE(DAT, meta_var = "mut", group1 = "LRRK2", group2 = "PD",  test.use = "MAST")
+```
+
+
+
+# DGE: Within Clusters {.tabset .tabset-fade .tabset-pills}
+
+```{r Within Clusters: function} 
+DGE_within_clusters <- function(DAT, meta_var, group1, group2){ 
+  for (clust in unique(DAT@meta.data$post_clustering)){
+    # Subset cells by cluster  
+   cat('\n')   
+   cat("### ",paste("Cluster ",clust,": ",group1," vs. ", group2, sep="") , "\n")
+   DAT_clustSub <- subset(DAT, seurat_clusters==clust)  
+   DEG_df <-runDGE(DAT_clustSub, 
+                   meta_var = meta_var, 
+                   group1 = group1, group2 = group2, 
+                   test.use = "MAST", 
+                   cluster = clust, 
+                   show_table = F) 
+   createDT_html(DEG_df)
+   cat('\n')   
+  } 
+}
+```
+
+
+## Between Disease Groups {.tabset .tabset-fade .tabset-pills}
+
+```{r Within Clusters: Between Disease Groups, results='asis'}   
+DGE_within_clusters(DAT, meta_var = "dx", group1 = "PD", group2 = "control")
+```
+
+## Between Mutation Groups {.tabset .tabset-fade .tabset-pills}
+
+```{r Within Clusters: Between Mutation Groups, results='asis'}
+DGE_within_clusters(DAT,meta_var = "mut", group1 = "LRRK2", group2 = "PD")
+```
+
+
+# Enrichment
+
+```{r Enrichment}
+enrichr_dbs <- c("KEGG_2018", "Reactome_2016",
+                 "GO_Biological_Process_2018", "GO_Molecular_Function_2018", "GO_Cellular_Component_2018", 
+                 "Rare_Diseases_AutoRIF_ARCHS4_Predictions", "Human_Gene_Atlas")
+createDT(enrichR::listEnrichrDbs(), "Enrichr Databases")
+```
+
+
+## Enrichr on Clusters {.tabset .tabset-fade .tabset-pills}
+
+```{r Enrichr on Clusters, results='asis'} 
+for (clust in unique(DAT.markers.sig$cluster)){
+  cat('\n')
+  cat("### Cluster ",clust,"{.tabset .tabset-fade}\n")
+  geneList <- subset(DAT.markers.sig, cluster==clust)$gene  %>% as.character()
+  results <- enrichr(genes = geneList, databases = enrichr_dbs )
+  for (db in enrichr_dbs){
+    cat('\n')
+    cat("#### ",db,"\n")  
+    createDT_html(subset(results[[db]], Adjusted.P.value<=0.05), paste("Enrichr Results: ",db,"Cluster ", clust))
+    cat('\n')
+  } 
+  cat('\n')
+} 
+```
+
+## Enrichr on WGCNA Modules {.tabset .tabset-fade .tabset-pills}
+
+* __Background__: Bulk RNA-seq was conducted on monocytes extracted from the blood of controls and PD patients. Katia Lopes conducted Weighted Correlation Network Analysis (WGCNA) on these sameples and identified co-expression modules.
+* __Objective__: Determine whether any of these modules are representative of cell groups in our scRNA-seq monocytes data.
+
+```{r Enrichr on WGCNA Modules, results='asis', eval=F}
+eigengenes <- read.delim("Data/bulkMonocytes_WGCNAmodules_geneMembership.txt", row.names = NULL)
+modules <- read.delim("Data/bulkMonocytes_WGCNAmodules_geneModules.txt", row.names = NULL, sep = "", 
+                      col.names = c("Ensembl","moduleColors")) 
+modules <- base::merge(eigengenes, modules,by="Ensembl" )
+
+for (mod in unique(modules$moduleColors)){
+  cat('\n')
+  cat("### Module ",mod,"{.tabset .tabset-fade}\n")
+  geneList <- subset(modules, moduleColors==mod)$symbol %>% as.character()
+  results <- enrichr(genes = geneList, databases = enrichr_dbs )
+  for (db in enrichr_dbs){
+    cat('\n')
+    cat("#### ",db,"\n")  
+    createDT_html(subset(results[[db]], Adjusted.P.value<=0.05), paste("Enrichr Results:",db,"Module", mod))
+    cat('\n')
+  } 
+  cat('\n')
+}
+```
+
+## WGCNA Eigengenes
+
+Determine whether each of the clusters in scRNA-seq data are enriched for WGCNA eigengenes (a weighted vector of all genes representing each co-expression module).
+ 
+https://ucdavis-bioinformatics-training.github.io/2017_2018-single-cell-RNA-sequencing-Workshop-UCD_UCB_UCSF/day3/scRNA_Workshop-PART6.html
+```{r WGCNA Eigengenes, eval=F}
+#Get the average expression of every gene in each cluster
+allGenes <- get_markerDF(DAT, markerList = row.names(DAT@scale.data), meta_vars = c("post_clustering", "barcode") )
+
+clusterGeneAvg <- allGenes %>% group_by(post_clustering, Gene) %>% summarise(meanExp = mean(Expression))
+eigengenes_filt <-  subset(eigengenes,symbol %in%  unique(clusterGeneAvg$Gene))
+
+
+clusts_by_mods <- base::merge(clusterGeneAvg[c("Gene","meanExp")], eigengenes_filt[c("symbol", modName)], 
+                              by.x="Gene", by.y="symbol")
+
+
+cor.test()
+corrplot()
+heatmap.2
+ 
+
+f <- function(module){
+  eigengene <-  eigengenes[paste0("MM", mod)]
+  means <- tapply(eigengenes, DAT@meta.data$post_clustering, mean, na.rm = T)
+  return(means)
+}
+modules <- c("blue", "brown", "green", "turquoise", "yellow")
+plotdat <- sapply(modules, f)
+matplot(plotdat, col = modules, type = "l", lwd = 2, xaxt = "n", xlab = "Seurat Cluster",
+        ylab = "WGCNA Module Eigengene")
+axis(1, at = 1:16, labels = 0:15)
+matpoints(plotdat, col = modules, pch = 21)
+```
+
+
+### RRHO
+
+```{r RRHO, eval=F}
+library(RRHO) #BiocManager::install("RRHO")
+
+# list.length <- 100
+#  list.names <- paste('Gene',1:list.length, sep='')
+# gene.list1<- data.frame(list.names, sample(100))
+# gene.list2<- data.frame(list.names, sample(100))
+
+
+for (clust in unique(DAT.markers.sig)){
+  # Compare each cluster
+  subClust <- subset(DAT.markers.sig, cluster==clust)  %>% arrange(desc(avg_logFC))
+  
+  for (mod in unique(modules$moduleColors)){ 
+    # Sort genes by module membership
+    modName <-paste("MM",mod,sep="")
+    subMod <- subset(modules, moduleColors==mod) %>% arrange(desc(eval(parse(text = modName))))
+    maxGenes <- min(length(subClust$gene), subMod$symbol) %>% as.numeric()
+    
+    list1 <- subClust[1:maxGenes, c("gene","FC")] %>% dplyr::rename(value=FC)
+    list2 <- subMod[1:maxGenes, c("symbol",modName)] %>% dplyr::rename(gene=symbol, value=modName)
+    
+    RRHO_path <-file.path("RRHO_results",paste(paste("Cluster",clust,sep=""),"vs",modName,sep="_"))
+    dir.create(RRHO_path,recursive = T, showWarnings = F)
+    
+    RRHO_results <- RRHO(list1=list1, list2=list2,
+         labels = c(paste("Cluster",clust,sep="_"), paste("Module",mod,sep="_")), 
+         plots = T, alternative = "enrichment", outputdir = RRHO_path, BY=TRUE
+         )
+    lattice::levelplot(RRHO_results$hypermat) 
+    # Pval testing
+    pval.testing <- pvalRRHO(RRHO_results, 50)
+    pval.testing$pval
+    xs<- seq(0, 10, length=100)
+    plot(Vectorize(pval.testing$FUN.ecdf)(xs)~xs, xlab='-log(pvalue)', ylab='ECDF', type='S')
+    lattice::levelplot(RRHO_results$hypermat.by)
+  } 
+}
+ 
+
+
+```
+  
+
+# Save Results
+
+```{r Save Results, eval=F}  
+save.image(file.path("./Results/PD_cRNAseq_Seurat_results.RData"))   
+```
+
+

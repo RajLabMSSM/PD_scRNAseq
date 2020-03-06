@@ -39,7 +39,8 @@ resolution <-  as.numeric(params$resolution)
 interactive <- params$interactive
 perplexity <- params$perplexity 
 
-root <- getwd()
+root <- "~/Desktop/PD_scRNAseq/"#getwd()
+ 
 # Have to setwd via knitr
 # knitr::opts_knit$set(root.dir=resultsPath, child.path = resultsPath)
 knitr::opts_chunk$set(echo=T, error=T, root.dir = resultsPath 
@@ -133,7 +134,7 @@ ulimit::memory_limit(RAM_Mib)
 ## ! IMPORTANT! Must not setwd to local path when launching on cluster
 # setwd("~/Desktop/PD_scRNAseq/")
 dir.create("./Data", showWarnings=F) 
-load(file.path("./Data/seurat_object_add_HTO_ids.Rdata"))
+load(file.path(root,"Data/seurat_object_add_HTO_ids.Rdata"))
 DAT <- seurat.obj  
 rm(seurat.obj)
 ```
