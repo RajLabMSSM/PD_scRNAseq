@@ -977,7 +977,7 @@ runDGE <- function(DAT,
   
   if(save_path!=F){
     res_path <- file.path(save_path, paste0("DGE.results_",meta_var,"_",cluster,".tsv.gz"))
-    message("Saving DGE results ==>",res_path)
+    message("Saving DGE results ==> ",res_path)
     dir.create(dirname(res_path), showWarnings = F, recursive = T)
     data.table::fwrite(DEGs,
                        file = res_path,

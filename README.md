@@ -3,7 +3,13 @@ Analysis pipelines for Parkinson's Disease scRNA-seq data from CD14+ peripheral 
 
 ---  
 
-## Rmarkdown Results Summaries
+## Seurat Results
+
+The key difference with this set of analyses compared to Monocle2 below is that Seurat only tests a small subset a genes that meet certain criterion (e.g. are expressed in a minimum proportion of cells from each comparison group) to reduce the multiple-testing burden. This also makes sure that the DEGs that you do get are visibly different when plotting their expression in UMAP/PCA/t-SNE space.
+
+### [Dimensionality Reduction + Clustering + Differential Gene Expression](https://rajlabmssm.github.io/PD_scRNAseq/scRNAseq_Seurat.html)
+
+## Monocle3 Results
 
 ### [Dimensionality Reduction + Pseudotime + Clustering + Cell Type Identification](https://rajlabmssm.github.io/PD_scRNAseq/scRNAseq_Monocle3.html)  
 
