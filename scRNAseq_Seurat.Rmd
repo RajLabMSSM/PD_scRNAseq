@@ -8,10 +8,10 @@ author: |
   | NYC, New York
 date: "`r Sys.Date()`"
 output: 
-  rmarkdown::html_document: 
+  html_document: 
     theme: spacelab
     highlight: zenburn 
-    code_folding: show 
+    code_folding: hide 
     toc: true 
     toc_float: true
     smooth_scroll: true
@@ -24,6 +24,8 @@ params:
   resultsPath: "./"
   nCores: 2
   perplexity: 30
+editor_options: 
+  chunk_output_type: inline
 ---
  
 
@@ -339,9 +341,9 @@ Seurat::VlnPlot(object = DAT, features = c("CD14","FCGR3A","nUMI","nGene","perce
 ```
 
 
-# Dimensionality Reduction
+# Dimensionality Reduction 
 
-## PCA {.tabset .tabset-fade .tabset-pills}
+## PCA {.tabset .tabset-fade}
 
 ProjectPCA scores each gene in the dataset (including genes not included
 in the PCA) based on their correlation with the calculated components.
@@ -357,7 +359,7 @@ can be explored by setting use.full=T in the functions above
   + RunPHATE() 
   + RunICA()
   
-```{r PCA }
+```{r PCA, results='asis'}
 # Run PCA with only the top most variables genes
 DAT <- RunPCA(object = DAT, 
               pc.genes = appendedGenes, 
@@ -367,7 +369,7 @@ PCAPlot(object = DAT, group.by=c("dx","mut","ID"), dims=c(1,2), ncol=2)
  
 ### PCHeatmaps
 
-```{r PCHeatmap, message=F, warning=F}  
+```{r PCHeatmap, message=F, warning=F, results='asis'}  
 # 'PCHeatmap' is a wrapper for heatmap.2  
 Seurat::PCHeatmap(DAT, nfeatures=30, dims=1:2, ncol=2)
 ```
@@ -380,7 +382,7 @@ NOTE: This process can take a long time for big datasets, comment out for
 expediency.  More approximate techniques such as those implemented in
 PCElbowPlot() can be used to reduce computation time
 
-```{r Significant PCs } 
+```{r Significant PCs, results='asis'} 
 # DAT <- Seurat::JackStraw(DAT)
 Seurat::ElbowPlot(object = DAT, ndims = 20)
 ```
@@ -407,7 +409,7 @@ Additional UMAP arguments detailed here: https://umap-learn.readthedocs.io/en/la
 
 NOTE: Specifying `n.components = <large_number>` take a little more time but helps clustering later on.
 
-```{r UMAP, results = 'asis'} 
+```{r UMAP} 
 # cat(print(mem_used()))
 DAT <- RunUMAP(object = DAT, 
                reduction = "pca", 
@@ -500,14 +502,14 @@ VlnPlot(object = DAT, features = topBiomarkers$gene,
 
 Uses the `EnhancedVolcano` library. [Tutorial.](https://www.bioconductor.org/packages/release/bioc/vignettes/EnhancedVolcano/inst/doc/EnhancedVolcano.html) .
 
-```{r Volcano Plots, fig.height=5, fig.width=5, results='asis'}
+```{r Volcano Plots, fig.height=5, fig.width=5}
 ##Construct the plot object
-volcanoPlot <- function(DEG_df, caption="", topFC_labeled=Inf, FC_cutoff=1, Q_cutoff=.05){
-  DEG_df$sig<-  ifelse( DEG_df$p_val_adj<0.05 & DEG_df$avg_logFC<1.5, "p_val_adj<0.05",
-            ifelse( DEG_df$p_val_adj<0.05  & DEG_df$avg_logFC>1.5, "p_val_adj<0.05 & avg_logFC>1.5",
-		        "p_val_adj>0.05"
-		)) 
-  DEG_df <- arrange(DEG_df, desc(sig))
+volcanoPlot <- function(DEG_df, 
+                        caption="", 
+                        topFC_labeled=Inf,
+                        FC_cutoff=1, 
+                        Q_cutoff=.05, 
+                        show_plot=T){
   yMax  <- max(-log10(DEG_df$p_val_adj)) + max(-log10(DEG_df$p_val_adj))/3
   # IMPORTANT!# Must replace 0s with small numbers to avoid getting errors when taking the -log
   DEG_df[DEG_df$p_val_adj==0,"p_val_adj"] <- .Machine$double.xmin
@@ -542,10 +544,16 @@ volcanoPlot <- function(DEG_df, caption="", topFC_labeled=Inf, FC_cutoff=1, Q_cu
                                    title=caption,
                                    subtitle = "") + 
     xlim(c(-xlimit,xlimit)) + 
-    labs(legend="DGE Group") +
+    labs(fill="DGE Group") +
     theme_bw()
-  print(vol)
-  # # Custom
+  if(show_plot){print(vol)}
+  return(vol)
+  # # Custom volcano plot
+  #   DEG_df$sig<-  ifelse( DEG_df$p_val_adj<0.05 & DEG_df$avg_logFC<1.5, "p_val_adj<0.05",
+  #             ifelse( DEG_df$p_val_adj<0.05  & DEG_df$avg_logFC>1.5, "p_val_adj<0.05 & avg_logFC>1.5",
+  # 		        "p_val_adj>0.05"
+  # 		)) 
+  #   DEG_df <- arrange(DEG_df, desc(sig))
   # vol <- ggplot(data=DEG_df, aes(x=avg_logFC, y= -log10(p_val_adj))) +
   #   geom_point(alpha=0.5, size=3, aes(col=sig)) +
   #   scale_color_manual(values=list("p_val_adj<0.05"="turquoise3",
@@ -568,21 +576,20 @@ volcanoPlot <- function(DEG_df, caption="", topFC_labeled=Inf, FC_cutoff=1, Q_cu
   #   ggtitle(caption)
   # print(vol)
 }
-
 ```
 
-### Cluster Volcano Plots
+### Cluster Volcano Plots {.tabset .tabset-fade}
 
-```{r Cluster Volcano Plots}
+```{r Cluster Volcano Plots, results='asis'}
 # Run plots
-for (clust in unique(DAT.markers$cluster)){
-   cat('\n')   
-   cat("### Cluster ",clust,": Volcano","\n") 
+for (clust in unique(DAT.markers$cluster)){ 
+   cat('  \n#### Cluster ',clust,': Volcano','  \n') 
    cap <- paste("Cluster",clust,"DEG Table") 
    DEG_df <- subset(DAT.markers, cluster==as.character(clust)) %>% arrange(desc(avg_logFC))  
-   volcanoPlot(DEG_df = DEG_df, caption = cap)
+   vol <- volcanoPlot(DEG_df = DEG_df, caption = cap, show_plot = F)
+   print(vol)
    createDT_html(DEG_df, caption = cap)
-   cat('\n')   
+   cat('  \n')   
 } 
 ```
 
@@ -595,10 +602,9 @@ for (clust in unique(DAT.markers$cluster)){
 top1 <- DAT.markers %>% group_by(cluster) %>% top_n(topNum, avg_logFC)
 # top1 <- Seurat::
 for (clust in unique(top1$cluster)){ 
-  subClust <- subset(top1, cluster==clust)
-  cat('\n')
-  cat("### Cluster",clust,"\n")
-  cat( "Biomarker\n",subClust$gene) 
+  subClust <- subset(top1, cluster==clust) 
+  cat('  \n#### Cluster',clust,'  \n')
+  print(paste("Biomarker:",subClust$gene)) 
   # try({
     query <- subset(subClust, p_val_adj<0.05)$gene %>% as.character()
     gostres <- gprofiler2::gost(query = query, organism = "hsapiens", significant = F)
@@ -612,7 +618,7 @@ for (clust in unique(top1$cluster)){
   # }) 
   # results <- Seurat::FindGeneTerms(QueryGene = subClust$gene) # defunct in SeuratV3
   # print(results) #parse_html_notebook(results)
-  cat('\n')
+  cat('  \n')
 }
 ```
 
@@ -918,7 +924,8 @@ ggplot(data = markerDF, aes(x=Cluster, y=Expression, fill=Gene)) %>%
 
 # DGE: All Cells {.tabset .tabset-fade .tabset-pills}
 
-DGE methods available in Seurat include:  
+DGE methods available in Seurat include:   
+
   - "wilcox" : Identifies differentially expressed genes between two groups of cells using a Wilcoxon Rank Sum test (default)  
 
   - "bimod" : Likelihood-ratio test for single cell gene expression, (McDavid et al., Bioinformatics, 2013)  
@@ -938,7 +945,7 @@ DGE methods available in Seurat include:
   - "DESeq2" : Identifies differentially expressed genes between two groups of cells based on a model using DESeq2 which uses a negative binomial distribution (Love et al, Genome Biology, 2014).This test does not support pre-filtering of genes based on average difference (or percent detection rate) between cell groups. However, genes may be pre-filtered based on their minimum detection rate (min.pct) across both cell groups. To use this method, please install DESeq2, using the instructions at https://bioconductor.org/packages/release/bioc/html/DESeq2.html  
 
  
-```{r All Cells: function} 
+```{r All Cells} 
 # Available DGE methods:
 ## "wilcox", "bimod", "roc", "t", "tobit", "poisson", "negbinom", "MAST", "DESeq2"
 runDGE <- function(DAT, 
@@ -966,17 +973,19 @@ runDGE <- function(DAT,
                       verbose = F)
   DEGs$gene <- row.names(DEGs)
   DAT <- SetIdent(DAT, value="post_clustering") 
-  cap <- paste("DEGs:\n",group1, "vs.", group2) 
+  cap <- paste("Cluster",cluster,"DEGs:",group1, "vs.", group2) 
   
   if(show_table){
     createDT(DEGs, caption = cap)
   }
   if(show_plot){ 
-    volcanoPlot(DEGs, caption = cap)  
+    vol <- volcanoPlot(DEGs, caption = cap, show_plot = F)
+    print(vol)
   }
   
   if(save_path!=F){
-    res_path <- file.path(save_path, paste0("DGE.results_",meta_var,"_",cluster,".tsv.gz"))
+    res_path <- file.path(save_path,
+                          paste0("DGE.results_",meta_var,"_cluster",cluster,".tsv.gz"))
     message("Saving DGE results ==> ",res_path)
     dir.create(dirname(res_path), showWarnings = F, recursive = T)
     data.table::fwrite(DEGs,
@@ -990,49 +999,53 @@ runDGE <- function(DAT,
 
 ## PD vs. Controls
 
-```{r All Cells: PD vs. Controls}
+```{r All Cells - PD vs. Controls, warning=F}
 DEG_df <- runDGE(DAT, meta_var = "dx", group1 = "PD", group2 = "control", test.use = "MAST")
 ```
 
 ## LRRK vs. PD
 
-```{r All Cells: LRRK2 vs. PD} 
+```{r All Cells - LRRK2 vs. PD, warning=F} 
 DEG_df <- runDGE(DAT, meta_var = "mut", group1 = "LRRK2", group2 = "PD",  test.use = "MAST")
 ```
 
 
 
-# DGE: Within Clusters {.tabset .tabset-fade .tabset-pills}
+# DGE: Within Clusters
 
-```{r Within Clusters: function} 
+```{r Within Clusters} 
 DGE_within_clusters <- function(DAT, meta_var, group1, group2){ 
   for (clust in unique(DAT@meta.data$post_clustering)){
-    # Subset cells by cluster  
-   cat('\n')   
-   cat("### ",paste("Cluster ",clust,": ",group1," vs. ", group2, sep="") , "\n")
+    # Subset cells by cluster   
+   cat('  \n###',paste('Cluster ',clust,'- ',group1,' vs. ', group2, sep='') , '  \n')
    DAT_clustSub <- subset(DAT, seurat_clusters==clust)  
    DEG_df <-runDGE(DAT_clustSub, 
                    meta_var = meta_var, 
                    group1 = group1, group2 = group2, 
                    test.use = "MAST", 
                    cluster = clust, 
+                   show_plot = F,
                    show_table = F) 
+   vol <- volcanoPlot(DEG_df = DEG_df, 
+                      caption = paste("Cluster",clust,"DEGs:",group1,"vs.",group2),
+                      show_plot = F)
+   print(vol)
    createDT_html(DEG_df)
-   cat('\n')   
+   cat('  \n')  
   } 
 }
 ```
 
 
-## Between Disease Groups {.tabset .tabset-fade .tabset-pills}
+## Between Disease Groups {.tabset .tabset-fade}
 
-```{r Within Clusters: Between Disease Groups, results='asis'}   
+```{r Within Clusters - Between Disease Groups, results='asis', warning=F}   
 DGE_within_clusters(DAT, meta_var = "dx", group1 = "PD", group2 = "control")
 ```
 
-## Between Mutation Groups {.tabset .tabset-fade .tabset-pills}
+## Between Mutation Groups {.tabset .tabset-fade}
 
-```{r Within Clusters: Between Mutation Groups, results='asis'}
+```{r Within Clusters - Between Mutation Groups, results='asis', warning=F}
 DGE_within_clusters(DAT,meta_var = "mut", group1 = "LRRK2", group2 = "PD")
 ```
 
@@ -1051,17 +1064,15 @@ createDT(enrichR::listEnrichrDbs(), "Enrichr Databases")
 
 ```{r Enrichr on Clusters, results='asis'} 
 for (clust in unique(DAT.markers.sig$cluster)){
-  cat('\n')
-  cat("### Cluster ",clust,"{.tabset .tabset-fade}\n")
+  cat('  \n###',' Cluster ',clust,'{.tabset .tabset-fade}  \n')
   geneList <- subset(DAT.markers.sig, cluster==clust)$gene  %>% as.character()
-  results <- enrichr(genes = geneList, databases = enrichr_dbs )
-  for (db in enrichr_dbs){
-    cat('\n')
-    cat("#### ",db,"\n")  
+  results <- enrichR::enrichr(genes = geneList, databases = enrichr_dbs )
+  for (db in enrichr_dbs){ 
+    cat('  \n#### ',db,'  \n')  
     createDT_html(subset(results[[db]], Adjusted.P.value<=0.05), paste("Enrichr Results: ",db,"Cluster ", clust))
-    cat('\n')
+    cat('  \n')
   } 
-  cat('\n')
+  cat('  \n')
 } 
 ```
 
@@ -1077,17 +1088,16 @@ modules <- read.delim("Data/bulkMonocytes_WGCNAmodules_geneModules.txt", row.nam
 modules <- base::merge(eigengenes, modules,by="Ensembl" )
 
 for (mod in unique(modules$moduleColors)){
-  cat('\n')
-  cat("### Module ",mod,"{.tabset .tabset-fade}\n")
+  cat('  \n###','Module ",mod,"{.tabset .tabset-fade}','  \n')
   geneList <- subset(modules, moduleColors==mod)$symbol %>% as.character()
   results <- enrichr(genes = geneList, databases = enrichr_dbs )
   for (db in enrichr_dbs){
-    cat('\n')
-    cat("#### ",db,"\n")  
+    cat('  \n')
+    cat('  \n####',db,'  \n')  
     createDT_html(subset(results[[db]], Adjusted.P.value<=0.05), paste("Enrichr Results:",db,"Module", mod))
-    cat('\n')
+    cat('  \n')
   } 
-  cat('\n')
+  cat('  \n')
 }
 ```
 
