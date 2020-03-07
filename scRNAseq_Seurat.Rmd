@@ -85,7 +85,7 @@ library(monocle) #BiocManager::install("monocle")
 # BiocManager::install("DelayedMatrixStats")
 # BiocManager::install("org.Mm.eg.db") 
 # library(org.Hs.eg.db)
-library(garnett) # devtools::install_github("cole-trapnell-lab/garnett")
+# library(garnett) # devtools::install_github("cole-trapnell-lab/garnett")
 
 # Useful Seurat functions 
 ## Seurat::MultiModal_CCA() # Integrates data from disparate datasets (CIA version too) 
@@ -141,14 +141,8 @@ load(file.path(root,"Data/seurat_object_add_HTO_ids.Rdata"))
 DAT <- seurat.obj  
 DAT <- Seurat::UpdateSeuratObject(DAT)
 rm(seurat.obj)
-```
-
-### Pre-filtered Dimensions
-
-```{r Pre-filtered Dimensions}
 DAT
 ```
-
 
 ## Clean Metadata
 
@@ -580,11 +574,13 @@ volcanoPlot <- function(DEG_df,
 
 ### Cluster Volcano Plots {.tabset .tabset-fade}
 
+A "biomarker" is a set of genes that characterize a given cluster AND differntiate it from all other clusters.
+
 ```{r Cluster Volcano Plots, results='asis'}
 # Run plots
 for (clust in unique(DAT.markers$cluster)){ 
    cat('  \n#### Cluster ',clust,': Volcano','  \n') 
-   cap <- paste("Cluster",clust,"DEG Table") 
+   cap <- paste("Cluster",clust,"Biomarkers") 
    DEG_df <- subset(DAT.markers, cluster==as.character(clust)) %>% arrange(desc(avg_logFC))  
    vol <- volcanoPlot(DEG_df = DEG_df, caption = cap, show_plot = F)
    print(vol)
@@ -596,7 +592,7 @@ for (clust in unique(DAT.markers$cluster)){
 
 ## Top Biomarker Plot
 
-### Biomarkers GO {.tabset .tabset-fade}
+### Biomarker enrichment with gprofiler {.tabset .tabset-fade}
 
 ```{r Biomarkers GO, results='asis'}
 top1 <- DAT.markers %>% group_by(cluster) %>% top_n(topNum, avg_logFC)
@@ -948,20 +944,21 @@ DGE methods available in Seurat include:
 ```{r All Cells} 
 # Available DGE methods:
 ## "wilcox", "bimod", "roc", "t", "tobit", "poisson", "negbinom", "MAST", "DESeq2"
-runDGE <- function(DAT, 
+runDGE <- function(cds, 
                    meta_var, 
                    group1, group2, 
                    test.use="MAST", 
                    show_plot=T,
                    show_table=T,
                    save_path="./Results/Seurat", 
+                   compress=F,
                    cluster="allClusters"){
   #print(paste("DGE_allCells",meta_var,sep="_")) 
   # DAT <- SetAllIdent(DAT, id = meta_var)
   # DAT <- StashIdent(DAT, save.name = meta_var)
   # DAT[[meta_var]] <- Idents(object = DAT)
-  DAT <- SetIdent(DAT, value=meta_var)  
-  DEGs <- FindMarkers(DAT, 
+  cds <- SetIdent(cds, value=meta_var)  
+  DEGs <- FindMarkers(object = cds, 
                       ident.1=group1, 
                       ident.2=group2, 
                       test.use=test.use, 
@@ -972,7 +969,7 @@ runDGE <- function(DAT,
                       only.pos = F, 
                       verbose = F)
   DEGs$gene <- row.names(DEGs)
-  DAT <- SetIdent(DAT, value="post_clustering") 
+  cds <- SetIdent(cds, value="post_clustering") 
   cap <- paste("Cluster",cluster,"DEGs:",group1, "vs.", group2) 
   
   if(show_table){
@@ -985,7 +982,8 @@ runDGE <- function(DAT,
   
   if(save_path!=F){
     res_path <- file.path(save_path,
-                          paste0("DGE.results_",meta_var,"_cluster",cluster,".tsv.gz"))
+                          paste0("DGE.results_",meta_var,"_cluster",cluster,".tsv",
+                                 ifelse(compress,".gz","")))
     message("Saving DGE results ==> ",res_path)
     dir.create(dirname(res_path), showWarnings = F, recursive = T)
     data.table::fwrite(DEGs,
@@ -1013,40 +1011,63 @@ DEG_df <- runDGE(DAT, meta_var = "mut", group1 = "LRRK2", group2 = "PD",  test.u
 
 # DGE: Within Clusters
 
-```{r Within Clusters} 
-DGE_within_clusters <- function(DAT, meta_var, group1, group2){ 
-  for (clust in unique(DAT@meta.data$post_clustering)){
+
+
+
+## Between Disease Groups {.tabset .tabset-fade}
+
+```{r Within Clusters - Between Disease Groups, results='asis'}   
+# NOTE: If you try to wrap the functions below into a function, it will just duplicate the results of the last cluster for all the others. This is totally bizarre...
+
+meta_var = "dx"; group1 = "PD"; group2 = "control";
+
+for (clust in unique(DAT@meta.data$post_clustering)){
+    DAT_clustSub<-NULL; DEGs<-NULL
     # Subset cells by cluster   
    cat('  \n###',paste('Cluster ',clust,'- ',group1,' vs. ', group2, sep='') , '  \n')
-   DAT_clustSub <- subset(DAT, seurat_clusters==clust)  
-   DEG_df <-runDGE(DAT_clustSub, 
+   DAT_clustSub <- subset(DAT, post_clustering==clust)  
+   print(DAT_clustSub)
+   DEGs <-runDGE(cds = DAT_clustSub, 
                    meta_var = meta_var, 
                    group1 = group1, group2 = group2, 
                    test.use = "MAST", 
                    cluster = clust, 
                    show_plot = F,
                    show_table = F) 
-   vol <- volcanoPlot(DEG_df = DEG_df, 
+   vol <- volcanoPlot(DEG_df = DEGs, 
                       caption = paste("Cluster",clust,"DEGs:",group1,"vs.",group2),
                       show_plot = F)
    print(vol)
-   createDT_html(DEG_df)
+   createDT_html(DEGs)
    cat('  \n')  
   } 
-}
-```
-
-
-## Between Disease Groups {.tabset .tabset-fade}
-
-```{r Within Clusters - Between Disease Groups, results='asis', warning=F}   
-DGE_within_clusters(DAT, meta_var = "dx", group1 = "PD", group2 = "control")
 ```
 
 ## Between Mutation Groups {.tabset .tabset-fade}
 
-```{r Within Clusters - Between Mutation Groups, results='asis', warning=F}
-DGE_within_clusters(DAT,meta_var = "mut", group1 = "LRRK2", group2 = "PD")
+```{r Within Clusters - Between Mutation Groups, results='asis', warning=F} 
+meta_var = "mut"; group1 = "LRRK2"; group2 = "PD";
+
+for (clust in unique(DAT@meta.data$post_clustering)){
+    DAT_clustSub<-NULL; DEGs<-NULL
+    # Subset cells by cluster   
+   cat('  \n###',paste('Cluster ',clust,'- ',group1,' vs. ', group2, sep='') , '  \n')
+   DAT_clustSub <- subset(DAT, post_clustering==clust)  
+   print(DAT_clustSub)
+   DEGs <-runDGE(cds = DAT_clustSub, 
+                   meta_var = meta_var, 
+                   group1 = group1, group2 = group2, 
+                   test.use = "MAST", 
+                   cluster = clust, 
+                   show_plot = F,
+                   show_table = F) 
+   vol <- volcanoPlot(DEG_df = DEGs, 
+                      caption = paste("Cluster",clust,"DEGs:",group1,"vs.",group2),
+                      show_plot = F)
+   print(vol)
+   createDT_html(DEGs)
+   cat('  \n')  
+  } 
 ```
 
 
