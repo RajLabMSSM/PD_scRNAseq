@@ -42,6 +42,9 @@ interactive <- params$interactive
 perplexity <- params$perplexity 
 
 root <- "~/Desktop/PD_scRNAseq/"#getwd()
+# Upload preprocessed data
+# DAT <- readRDS("../processed_seurat_obj.RDS")
+
 # Have to setwd via knitr
 # knitr::opts_knit$set(root.dir=resultsPath, child.path = resultsPath)
 knitr::opts_chunk$set(echo=T, error=T, root.dir = resultsPath 
@@ -445,6 +448,15 @@ DAT[["post_clustering"]] <- Idents(object = DAT)
 DimPlot(object = DAT, label = T)#, do.hover=do.hover, data.hover="mut")
 ```
  
+ 
+# Save processed seurat object
+
+__WARNING__: This is a very large object, and will cause errors if you try to push it to GitHub.
+
+```{r save, eval=F}
+saveRDS(DAT, file = "../processed_seurat_obj.RDS")
+```
+
 # Cluster Biomarkers
 
 Seurat has several tests for differential expression which can be set with the test.use parameter (see the DE vignette for details). For example, the ROC test returns the ‘classification power’ for any individual marker (ranging from 0 - random, to 1 - perfect).
@@ -952,13 +964,16 @@ runDGE <- function(cds,
                    show_table=T,
                    save_path="./Results/Seurat", 
                    compress=F,
-                   cluster="allClusters"){
+                   cluster="allClusters",
+                   latent.vars=NULL, 
+                   slot = "data"){
   #print(paste("DGE_allCells",meta_var,sep="_")) 
   # DAT <- SetAllIdent(DAT, id = meta_var)
   # DAT <- StashIdent(DAT, save.name = meta_var)
   # DAT[[meta_var]] <- Idents(object = DAT)
   cds <- SetIdent(cds, value=meta_var)  
-  DEGs <- FindMarkers(object = cds, 
+  DEGs <- Seurat::FindMarkers(object = cds, 
+                      slot = slot,
                       ident.1=group1, 
                       ident.2=group2, 
                       test.use=test.use, 
@@ -967,7 +982,9 @@ runDGE <- function(cds,
                       min.cells.feature = 3,
                       min.cells.group = 3,
                       only.pos = F, 
-                      verbose = F)
+                      verbose = F,
+                      latent.vars = latent.vars)
+  if("avg_diff" %in% colnames(DEGs)){DEGs$avg_logFC <- DEGs$avg_diff}
   DEGs$gene <- row.names(DEGs)
   cds <- SetIdent(cds, value="post_clustering") 
   cap <- paste("Cluster",cluster,"DEGs:",group1, "vs.", group2) 
@@ -982,7 +999,8 @@ runDGE <- function(cds,
   
   if(save_path!=F){
     res_path <- file.path(save_path,
-                          paste0("DGE.results_",meta_var,"_cluster",cluster,".tsv",
+                          paste0("DGE.results_",meta_var,"_cluster",cluster,
+                                 "_",slot,".tsv",
                                  ifelse(compress,".gz","")))
     message("Saving DGE results ==> ",res_path)
     dir.create(dirname(res_path), showWarnings = F, recursive = T)
@@ -998,20 +1016,28 @@ runDGE <- function(cds,
 ## PD vs. Controls
 
 ```{r All Cells - PD vs. Controls, warning=F}
-DEG_df <- runDGE(DAT, meta_var = "dx", group1 = "PD", group2 = "control", test.use = "MAST")
+DEG_dx <- runDGE(DAT, meta_var = "dx", group1 = "PD", group2 = "control", 
+                 test.use = "MAST") 
+# After normalizing for individual 
+DAT_id <- Seurat::ScaleData(object = DAT,
+                            vars.to.regress = c("nUMI", "percent.mito","ID"))
+DEG_dx.id <- runDGE(DAT_id, meta_var = "dx", group1 = "PD", group2 = "control", 
+                 test.use = "MAST", slot = "scale.data")
 ```
+
+
 
 ## LRRK vs. PD
 
 ```{r All Cells - LRRK2 vs. PD, warning=F} 
-DEG_df <- runDGE(DAT, meta_var = "mut", group1 = "LRRK2", group2 = "PD",  test.use = "MAST")
+DEG_mut <- runDGE(DAT, meta_var = "mut", group1 = "LRRK2", group2 = "PD",  test.use = "MAST")
+# After normalizing for individual
+DEG_mut.id <- runDGE(DAT_id, meta_var = "mut", group1 = "LRRK2", group2 = "PD", 
+                 test.use = "MAST", slot = "scale.data")
 ```
 
 
-
 # DGE: Within Clusters
-
-
 
 
 ## Between Disease Groups {.tabset .tabset-fade}
@@ -1033,7 +1059,8 @@ for (clust in unique(DAT@meta.data$post_clustering)){
                    test.use = "MAST", 
                    cluster = clust, 
                    show_plot = F,
-                   show_table = F) 
+                   show_table = F, 
+                   slot = "data") 
    vol <- volcanoPlot(DEG_df = DEGs, 
                       caption = paste("Cluster",clust,"DEGs:",group1,"vs.",group2),
                       show_plot = F)
@@ -1068,6 +1095,90 @@ for (clust in unique(DAT@meta.data$post_clustering)){
    createDT_html(DEGs)
    cat('  \n')  
   } 
+```
+
+
+
+```{r}
+library(dplyr)
+# DAT <- readRDS("../processed_seurat_obj.RDS") 
+id_key <- DAT$ID
+exp_raw<- data.table::data.table(ID=DAT$ID,
+                              dx=DAT$dx,
+                              mut=DAT$mut,
+                              clust=DAT$post_clustering,
+                              t(DAT@assays$RNA@scale.data))
+exp_median <- exp_raw %>% 
+  dplyr::select(-ID) %>%
+  dplyr::group_by(dx, clust, mut) %>% 
+  dplyr::summarise_all(.funs = median)
+
+medianDGE.test <- function(exp_median, 
+                           cluster="all", 
+                           metavar="dx", 
+                           nThreads=4){
+  # pbmcapply::pbmclapply
+  res_DT <- parallel::mclapply(colnames(exp_median)[-c(1:3)], function(gene){
+    print(gene)
+    if(cluster!="all"){
+      dat <- subset(exp_median, clust==cluster)
+    } else {dat <- exp_median}
+    res_dt <- NULL
+    res <- NULL
+    try({
+        res <- stats::wilcox.test(formula(paste(gene,"~",metavar)), 
+                                  data=dat)
+        res_dt <- data.table::data.table(metavar=metavar,
+                                         cluster=cluster,
+                                         gene=gene,
+                                         statistic=res$statistic,
+                                         p.value=res$p.value)
+    }) 
+    return(res_dt) 
+  }, mc.cores = nThreads) %>% data.table::rbindlist(fill=T)
+  res_DT$FDR <- p.adjust(p = res_DT$p.value, method = "fdr")
+  return(res_DT)
+}
+ 
+  medianDGE.within_clusters <- function(exp_median,
+                                        metavar="dx", 
+                                        return_data=T){
+    res_data <- lapply(unique(exp_median$clust), function(cluster){
+     print(paste("Cluster",cluster))
+      clust_dge <- medianDGE.test(exp_median=exp_median,
+                                  cluster=cluster,
+                                  metavar=metavar,
+                                  nThreads=4)
+      res_path <- paste0("./Results/Median/dge_",metavar,"_cluster",cluster,".tsv")
+      data.table::fwrite(clust_dge, res_path)
+      if(return_data){
+        clust_dge
+      } else {return(res_path)} 
+    }) %>% data.table::rbindlist(fill=T)
+    return(res_data)
+  }
+   
+
+
+
+```
+```{r}
+# Across Clusters 
+dx_dge <- medianDGE.test(exp_median = exp_median, 
+                         metavar = "dx", nThreads = 4)  
+data.table::fwrite(dx_dge, "./Results/Median/dge_dx_allCluster.tsv")
+
+mut_dge <- medianDGE.test(exp_median = subset(exp_median, mut %in% c("PD","LRRK2")),
+                          metavar = "mut") 
+data.table::fwrite(mut_dge, "./Results/Median/dge_mut_allCluster.tsv")
+
+  
+# Within clusters
+withinClust_dx <- medianDGE.within_clusters(exp_median, metavar="dx")
+subset(withinClust_dx, FDR<0.05)
+
+withinClust_mut <- medianDGE.within_clusters(subset(exp_median, mut %in% c("PD","LRRK2")), metavar="mut")
+subset(withinClust_mut, FDR<0.05)
 ```
 
 
