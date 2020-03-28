@@ -36,22 +36,25 @@ root = "./"
 source(file.path(root,"MAIN.R"))
 import_parameters(params)
 
-# load("Data/seurat_object_add_HTO_ids.Rdata")
-load(file.path("Data", "monocle3_CDS.RData"))
+
 ######################################################
 #### #### PACKAGES #### #### 
 ######################################################
+
 print("Written using: Seurat version* 2.3.4 2018-07-17")
 # https://satijalab.org/seurat/install.html
 # source("http://bit.ly/archived-seurat")
 library(Seurat) 
 paste("Seurat", packageVersion("Seurat")) 
+
 # library(monocle) # BiocManager::install("monocle")   
 # paste("monocle", packageVersion("monocle")) 
-library(monocle3)
+## WARNING! There's currently bugs in the Bioconductor installation of Monocle3, so install the dev version from GitHub instead (see https://github.com/cole-trapnell-lab/monocle3/issues/272)
+library(monocle3); # devtools::install_github('cole-trapnell-lab/monocle3', ref="develop")
 paste("monocle3", packageVersion("monocle3")) 
-library(garnett) # devtools::install_github("cole-trapnell-lab/garnett")
-paste("garnett", packageVersion("garnett"))
+
+# library(garnett) # devtools::install_github("cole-trapnell-lab/garnett")
+# paste("garnett", packageVersion("garnett"))
  
 library(cowplot) 
 library(ggplot2)
@@ -71,6 +74,17 @@ nCores <- 4#parallel::detectCores()
 set.seed(2019)
 ```
 
+
+# Preprocessed Data
+
++ A cds object with 14k+ protein-coding genes and 19k+ cells (after filtering with Seurat::FilterCells()).  
++ Normalization, PCA, UMAP, clustering and pseudotime have already been done on this object.
+
+```{r}
+# load("Data/seurat_object_add_HTO_ids.Rdata")
+load(file.path("Data", "monocle3_CDS.RData"))
+```
+
 # Preprocessing
 
 ## Seurat/2.3.4 to Monocle3
@@ -80,12 +94,30 @@ set.seed(2019)
 
 ```{r Seurat/2.3.4 to Monocle3, eval=F}
 load(file.path(resultsPath, "3-11-2019/scRNAseq_results.RData"))
+# load("./Data/seurat_object_add_HTO_ids.Rdata")
+DAT <- Seurat::UpdateSeuratObject(DAT)
+# remove(seurat.obj)
+
+# DAT <- readRDS("./Data/processed_seurat_obj.RDS")
+# Find variable genes
+# DAT <- FindVariableFeatures(object = DAT, 
+#                             mean.function = ExpMean, 
+#                             dispersion.function = LogVMR,
+#                             x.low.cutoff = 0.0125, 
+#                             x.high.cutoff = 3, 
+#                             y.cutoff = 0.5)
+var.genes <- Seurat::VariableFeatures(object = DAT)
+var.genes <- unique(c(var.genes, "CD14", "FCGR3A"))
+
 biotypes <- get_biotypes(DAT)
 proteins <- biotypes[biotypes$gene_biotype=="protein_coding",]$hgnc_symbol %>% droplevels()
-protDAT <- subset_seurat(DAT, genes.use = proteins)
-
-cds <- seurat_to_monocle(seurat_object = DAT, monocle_version = 3)
+# protDAT <-  subset_seurat(DAT, genes.use = proteins) 
+ 
+cds <- seurat_to_monocle(seurat_object = DAT, 
+                         seurat_version = 3,
+                         monocle_version = 3)
 cds <- cds[levels(proteins),]
+var.genes <- var.genes[var.genes %in% row.names(cds)]
 ```
  
 ## Normalization & PCA
@@ -123,8 +155,9 @@ data.table::fwrite(gene.lists, "./Results/curated_modules//curatedModules_geneli
 
 ```{r Normalize Data}
 cds <- monocle3::preprocess_cds(cds, 
-                                num_dim = 30, #100 by default 
+                                # num_dim = 30, #100 by default
                                 return.only.var.genes=F,
+                                use_genes = var.genes,
                                 residual_model_formula_str = "~ nUMI + percent.mito")
 monocle3::plot_pc_variance_explained(cds)
 ```
@@ -136,11 +169,14 @@ Using UMAP.
 
 ```{r Dimensionality Reduction}
 # c("UMAP", "tSNE", "PCA", "LSI")
-cds <- monocle3::reduce_dimension(cds, reduction_method = "UMAP", 
+cds <- monocle3::reduce_dimension(cds,
+                                  preprocess_method = "PCA", 
+                                  reduction_method = "UMAP", 
                                   max_components = 3, 
                                   # umap.fast_sgd = T,
                                   # cores=nCores
                                   ) 
+monocle3::plot_cells(cds, genes = c("CD14","FCGR3A"))
 ```
 
 
@@ -188,14 +224,31 @@ var.genes <- names(sort(rowSums(abs(cds@preprocess_aux$gene_loadings[,1:10]), na
 *NOTE*: In the new version of **cluster_cells**, you can now leave the **resolution** parameter blank and it will automatically optimize the resolution. The default used to be **1e-4**.
 ```{r Louvain Clustering, webgl=TRUE} 
 cds <- monocle3::cluster_cells(cds,
-                               resolution = 1e-4,#c(10^seq(-6,-1)), # Do NOT set to high number
+                               resolution = 2e-5,#c(10^seq(-6,-1)), # Do NOT set to high number
                                reduction_method = "UMAP", 
                                cores = nCores,
-                               clustering_genes = var.genes
+                               # clustering_genes = var.genes
                                )
 # Add cluster info to metadata (for easier DGE analysis)
 pData(cds)$Cluster <- monocle3::clusters(cds)
 pData(cds)$Partition <- monocle3::partitions(cds)
+
+p2d <- plot_cells(cds,
+                  # x = 1, y = 1,  
+                  color_cells_by = "cluster", 
+                  show_trajectory_graph = F, 
+                  group_label_size = 5, 
+                  cell_size = .75, 
+                  alpha = .5, 
+                  rasterize = T)
+p2d
+ggsave(plot = p2d, filename = "./Results/Monocle3/UMAP_clusters.pdf", dpi = 600)
+
+```
+
+### 3D UMAP Clusters
+
+```{r 3D Plot}
 # 3D plot
 p3d <- plot_cells_3d(cds, color_cells_by = "cluster", show_trajectory_graph = F)
 p3d
@@ -204,7 +257,6 @@ p3d
 # imported into a 3D modeling platform (e.g. Blender, Meshlab) for more advanced visualization
 ## save_3D_clusters(cds)
 ```
-
 
 # Pseudotime
 
@@ -222,6 +274,13 @@ monocle3::plot_genes_in_pseudotime(cds[c("CD14","FCGR3A"), ] )
 ### UMAP Plots {.tabset .tabset-fade .tabset-pills}
 
 Disease status (dx), mutation status (mut), and individual ID (ID) show good mixture across clusters.
+```{r}
+p <- monocle3::plot_cells(cds, label_cell_groups=F, show_trajectory_graph = F)
+p
+
+```
+
+
 
 ```{r UMAP Plots, results="asis"}
 for(v in c("dx","mut","ID")){

@@ -71,11 +71,11 @@ plt_umap <- monocle3::plot_cells(cds, show_trajectory_graph = F, group_cells_by 
                                  alpha = .8, group_label_size = 5) 
 
 # NOTE! Need to run this outside of code chunk in order to work
-pdf("./Results/UMAP_clusters_plot.pdf", width=5, height=5, pointsize = 400)
+pdf("./Results/UMAP_clusters_plot.pdf", width=5, height=5, pointsize = 600)
 print(plt_umap)
 dev.off()
 
-ggsave("./Results/UMAP_clusters_plot.pdf", width=5, height=5, dpi=400)  
+ggsave("./Results/UMAP_clusters_plot.pdf", width=5, height=5, dpi=600)  
 
 ```
 

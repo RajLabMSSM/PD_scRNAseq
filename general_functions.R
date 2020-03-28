@@ -200,11 +200,18 @@ DGE_within_clusters <- function(DAT, meta_var, group1, group2, clusterList, allC
 
  
 
-seurat_to_monocle <- function(seurat_object, monocle_version=3){ 
+seurat_to_monocle <- function(seurat_object, 
+                              seurat_version=3,
+                              monocle_version=3){ 
   # From: https://github.com/cole-trapnell-lab/monocle-release/issues/262
   print("Processing...")
   print("+ Expression data")
-  data <- as(as.matrix(seurat_object@assays$RNA@data), 'sparseMatrix')
+  if(seurat_version==3){
+    data <- as(as.matrix(seurat_object@assays$RNA@data), 'sparseMatrix')
+  } else {
+    data <- as(as.matrix(seurat_object@data), 'sparseMatrix')
+  }
+ 
   
   print("+ Phenotype data")
   pd <- new('AnnotatedDataFrame', data = seurat_object@meta.data) 

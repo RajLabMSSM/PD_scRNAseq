@@ -306,6 +306,7 @@ DAT <- FindVariableFeatures(object = DAT,
                             y.cutoff = 0.5)
 cat("Total Genes:", nrow(DAT))
 var.genes <- Seurat::VariableFeatures(DAT)
+appendedGenes <- c(var.genes, "CD14", "FCGR3A")
 cat("Highly Variable Genes:", length(var.genes))
 
 # IMPORTANT!: Must set do.par=T and num.cors = n for large datasets being processed on computing clusters
@@ -313,7 +314,6 @@ cat("Highly Variable Genes:", length(var.genes))
 ## This will greatly reduced the computational load.
 
 # Ensure CD14 and CD16 are included
-appendedGenes <- c(var.genes, "CD14", "FCGR3A")
 DAT <- ScaleData(object = DAT,  
                  vars.to.regress = c("nUMI", "percent.mito"))
 ```
