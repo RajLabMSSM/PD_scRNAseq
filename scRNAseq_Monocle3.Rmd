@@ -80,9 +80,12 @@ set.seed(2019)
 + A cds object with 14k+ protein-coding genes and 19k+ cells (after filtering with Seurat::FilterCells()).  
 + Normalization, PCA, UMAP, clustering and pseudotime have already been done on this object.
 
-```{r}
+```{r Preprocessed Data}
 # load("Data/seurat_object_add_HTO_ids.Rdata")
 load(file.path("Data", "monocle3_CDS.RData"))
+
+# write.csv(pData(cds), file="Results/Monocle3/processed_metadata.csv")
+# R.utils::gzip("Results/Monocle3/processed_metadata.csv")
 ```
 
 # Preprocessing
@@ -159,7 +162,9 @@ cds <- monocle3::preprocess_cds(cds,
                                 return.only.var.genes=F,
                                 use_genes = var.genes,
                                 residual_model_formula_str = "~ nUMI + percent.mito")
-monocle3::plot_pc_variance_explained(cds)
+pc_var <- monocle3::plot_pc_variance_explained(cds)
+print(pc_var)
+ggsave("Results/Monocle3/PCA_variance_explained.pdf",plot = pc_var, dpi = 400, height=5)
 ```
 
 
@@ -176,7 +181,10 @@ cds <- monocle3::reduce_dimension(cds,
                                   # umap.fast_sgd = T,
                                   # cores=nCores
                                   ) 
-monocle3::plot_cells(cds, genes = c("CD14","FCGR3A"))
+gg_markers <- monocle3::plot_cells(cds, genes = c("CD14","FCGR3A"),
+                                   show_trajectory_graph = F, alpha = .8, cell_size = .75)
+print(gg_markers)
+ggsave("Results/Monocle3/UMAP_CD14_FCGR3A.pdf", plot = gg_markers, dpi = 400, width = 12)
 ```
 
 
@@ -251,8 +259,7 @@ ggsave(plot = p2d, filename = "./Results/Monocle3/UMAP_clusters.pdf", dpi = 600)
 ```{r 3D Plot}
 # 3D plot
 p3d <- plot_cells_3d(cds, color_cells_by = "cluster", show_trajectory_graph = F)
-p3d
-
+p3d 
 # Save each cluster as a separate OBJ file that can later be 
 # imported into a 3D modeling platform (e.g. Blender, Meshlab) for more advanced visualization
 ## save_3D_clusters(cds)
@@ -277,6 +284,12 @@ Disease status (dx), mutation status (mut), and individual ID (ID) show good mix
 ```{r}
 p <- monocle3::plot_cells(cds, label_cell_groups=F, show_trajectory_graph = F)
 p
+
+p_dx <- monocle3::plot_cells(cds,color_cells_by = "dx", label_cell_groups = F,
+                             show_trajectory_graph = F, cell_size = .75, alpha = .8)
+print(p_dx)
+ggsave(plot = p_dx, filename = "./Results/Monocle3/UMAP_dx.pdf", dpi = 600)
+
 
 ```
 
@@ -322,9 +335,30 @@ monocle3::plot_cells(cds,
 
 ### Violin
 
+```{r QC violin}
+pdata <- data.frame(pData(cds))
+pdata$dx <- factor(pdata$dx, levels=c("PD","control"), ordered = T)
+p_viol_qc <- ggplot(pdata, aes(x=nGene, fill=dx)) + 
+  geom_histogram(alpha=.75, position = 'identity') +
+  theme_bw() +
+  labs(y="Frequency")
+print(p_viol_qc)
+ggsave("Results/Monocle3/histogram_dx.pdf", p_viol_qc, dpi=400, height=5)
+
+
+mito_dx_clust  <- ggplot(pdata, aes(x=dx, y=percent.mito, fill=Cluster)) + 
+  geom_boxplot() +
+  theme_bw()
+mito_dx_clust
+ggsave("Results/Monocle3/percentMito_dx_cluster_boxplot.pdf", mito_dx_clust, 
+       dpi=400, height=5)
+
+```
+
+
 ```{r Gene Expression Plots - Violin}
 # Violin
-monocle3::plot_genes_violin(cds[c("CD14","FCGR3A"),], group_cells_by = "dx") 
+p_viol_markers <- monocle3::plot_genes_violin(cds[c("CD14","FCGR3A"),], group_cells_by = "dx")
 ```
 
 ## UMAP
@@ -356,8 +390,12 @@ cell_proportions <- meta %>%
 createDT(cell_proportions)
 prop.dx <- ggplot(cell_proportions, aes(x=dx, y=Proportion, fill = Cluster)) + 
               geom_col() + # position="dodge"
-              ylab("Proportion of Cells") 
+              ylab("Proportion of Cells") + 
+  theme_bw()
 print(prop.dx)
+ggsave("Results/Monocle3/cell_proportions.pdf",plot = prop.dx, dpi = 400, height=6, width=5)
+
+
 
 clust.key <- list("1"="Canonical Monocytes", "2"="Intermediate Monocytes")
 for(clust in 1:2){ 
