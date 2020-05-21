@@ -91,7 +91,7 @@ load(file.path("Data", "monocle3_CDS.RData"))
 # Preprocessing
 
 ## Seurat/2.3.4 to Monocle3
-
+- Below is the pre-processed data, and the pipeline to get it to the same stage as "monocle3_CDS.RData".  
 - Only include protein-coding genes. Otherwise, the clusters don't map as well onto the UMAP plots.  
 - Only need to run if not using preprocessed ``cds`` object.  
 
@@ -259,7 +259,29 @@ ggsave(plot = p2d, filename = "./Results/Monocle3/UMAP_clusters.pdf", dpi = 600)
 ```{r 3D Plot}
 # 3D plot
 p3d <- plot_cells_3d(cds, color_cells_by = "cluster", show_trajectory_graph = F)
-p3d 
+p3d
+
+# for(i in seq(0,6.3,by=0.1)){
+#   cam.zoom = 2
+#   ver.angle = 0
+#   graph <- p3d %>% plotly::layout(
+#   camera = list(eye = list(x = cos(i)*cam.zoom,y = sin(i)*cam.zoom, z=0.2),
+#                                             center = list(x = 0,
+#                                                           y = 0,
+#                                                           z = 0
+#                                                           )
+#                                             )
+#   )
+# cat("Now rendering iteration:", i,"\n")
+# plotly_IMAGE(graph,
+#          width = 1200,
+#          height = 1050,
+#          format = "png",
+#          username="bschilder",
+#          key="vCq0X23Hws3tIHhJpU9I",
+#          scale = 1,
+#          out_file = paste("./plotly_test","png", sep="."))
+# }
 # Save each cluster as a separate OBJ file that can later be 
 # imported into a 3D modeling platform (e.g. Blender, Meshlab) for more advanced visualization
 ## save_3D_clusters(cds)
